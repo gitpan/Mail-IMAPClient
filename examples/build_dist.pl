@@ -107,5 +107,20 @@ $imap->append($opt_f,$append) or warn "Couldn't append the message.";
 
 $imap->logout;
 
-# $Id$
-# $Log$
+# $Id: build_dist.pl,v 19991216.5 1999/12/16 17:19:09 dkernen Exp $
+# $Log: build_dist.pl,v $
+# Revision 19991216.5  1999/12/16 17:19:09  dkernen
+# Bring up to same level
+#
+# Revision 19991124.3  1999/12/16 17:14:22  dkernen
+# Incorporate changes for exists method performance enhancement
+#
+# Revision 19991124.02  1999/11/24 17:46:16  dkernen
+# More fixes to t/basic.t
+#
+# Revision 19991124.01  1999/11/24 16:51:46  dkernen
+# Changed t/basic.t to test for UIDPLUS before trying UID cmds
+#
+# Revision 1.8  1999/11/23 17:51:05  dkernen
+# Committing version 1.06 distribution copy
+#

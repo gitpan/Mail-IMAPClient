@@ -1,7 +1,8 @@
-#!/home/dkernen/usr/local/bin/perl
+#!/usr/local/bin/perl
 
 use Mail::IMAPClient;
 use MIME::Lite;
+use Data::Dumper;
 
 =head1 DESCRIPTION
 
@@ -43,7 +44,7 @@ B<NOTE:> You can supply defaults for the above options by updating the script.
 
 use Getopt::Std;
 
-getopts('s:u:p:f:d');
+getopts('hs:u:p:f:d');
 
 # Update the following to supply defaults:
 
@@ -117,7 +118,26 @@ $msg->attach(	Type     =>'text/ldif',
 );
 print $text;
 $imap->append($opt_f, $msg->as_string);
+print Dumper($imap) if $opt_d;
 $imap->logout;
 
-# $Id$
-# $Log$
+# $Id: build_ldif.pl,v 19991216.6 1999/12/28 13:56:59 dkernen Exp $
+# $Log: build_ldif.pl,v $
+# Revision 19991216.6  1999/12/28 13:56:59  dkernen
+# Fixed -h option (help).
+#
+# Revision 19991216.5  1999/12/16 17:19:10  dkernen
+# Bring up to same level
+#
+# Revision 19991124.3  1999/12/16 17:14:24  dkernen
+# Incorporate changes for exists method performance enhancement
+#
+# Revision 19991124.02  1999/11/24 17:46:18  dkernen
+# More fixes to t/basic.t
+#
+# Revision 19991124.01  1999/11/24 16:51:48  dkernen
+# Changed t/basic.t to test for UIDPLUS before trying UID cmds
+#
+# Revision 1.8  1999/11/23 17:51:05  dkernen
+# Committing version 1.06 distribution copy
+#

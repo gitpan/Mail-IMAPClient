@@ -1,5 +1,46 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.08
+-----------------------
+Added a new parameter, Fast_io, which, if set to a true value, will attempt to implement a faster
+I/O engine. USE THIS AT YOUR OWN RISK. It is alpha code. I don't even know yet if it even helps.
+
+Added support for spaces in folder names for the autoloaded subscribe method.
+
+Added new methods setacl, getacl, deleteacl, and listrights. These methods are not yet fully tested 
+and should be considered beta for this release.
+
+Enhanced support for the myrights method (which is implemented via the default method).
+
+Changes in version 1.07
+-----------------------
+
+Removed the autodiscovery of the folder hierarchy from the login method. This will speed up logging
+in but may delay certain other methods later (but see the next item, below).
+
+Updated the exists method to issue a "STATUS" IMAP Client command, rather than depend on the 
+folder hierarchy being discovered via 'LIST "" "*"'. Apparently this speeds things up a lot for
+some configurations, although the difference will be negligable to many.
+
+Updated Makefile.PL to support the PREFIX=~/ directive. Thanks to Henry C. Barta (hbarta@wwa.com)
+for this fix.
+
+Added the Timeout parameter and eponymous accessor method, which, if set to a true value, 
+causes reads to time out after the number of seconds specified in the Timeout parameter. The
+value can be in fractions of a second. This has not been fully tested though, so use of this parameter
+is strictly "Beta".
+
+Enhanced support for the UID IMAP client command. Setting the new Uid parameter to a true value
+will now cause the object to treat all message numbers as message UID numbers rather than message
+sequence numbers. Setting the Uid parameter to a false value will turn off this behavior again. 
+
+Updated test suite to handle servers that cannot do UIDPLUS and to add tests for the Uid parameter.
+
+Incorporated bug fixes for recent_count and message_count in which some servers are sticking in
+extra \r's, and updated DESTROY to remove spurious warning messages under some versions of perl
+(thanks to Scott Wilson for catching and killing these bugs).
+
+
 Changes in version 1.06
 -----------------------
 Changed folders method so that it correctly handles mail folders whose names start and end
@@ -172,4 +213,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id$
+# $Id: Changes,v 19991216.7 2000/01/12 17:49:39 dkernen Exp $

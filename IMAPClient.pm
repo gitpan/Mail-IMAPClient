@@ -1,11 +1,16 @@
 package Mail::IMAPClient;
-# $Id: IMAPClient.pm,v 1.9 1999/11/23 17:34:31 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.06';
-$Mail::IMAPClient::VERSION = '1.06';  	# do it twice to make sure it takes
+# $Id: IMAPClient.pm,v 19991216.8 2000/01/12 18:58:00 dkernen Exp $
 
+$Mail::IMAPClient::VERSION = '1.08';
+$Mail::IMAPClient::VERSION = '1.08';  	# do it twice to make sure it takes
+
+use Fcntl qw(:DEFAULT);
 use Socket;
 use IO::Socket;
+
+#print "Found Fcntl in $INC{'Fcntl.pm'}\n";
+#Fcntl->import;
 
 =head1 NAME 
 
@@ -24,13 +29,14 @@ sub Selected 		{ return 3 ; }		# mailbox selected
 
 {
  for my $datum (
-		qw( 	State Port Server Folder
-			User Password Socket 
-			Debug LastError Count	)
+		qw( 	State Port Server Folder Fast_io
+			User Password Socket Timeout
+			Debug LastError Count Uid
+		)
  ) {
 	no strict 'refs';
         *$datum = sub {
-                if ($_[1]) {
+                if (defined($_[1])) {
                         return $_[0]->{$datum} = $_[1] ;
                 } else {
                         return $_[0]->{$datum};
@@ -152,13 +158,13 @@ sub login {
 	my $string = "Login " . $self->User . " " . $self->Massage($self->Password) ;
 	$self->_imap_command($string) 
 		and $self->State(Authenticated);
-	$self->folders and $self->separator;
+	# $self->folders and $self->separator unless $self->NoAutoList;
 	return ( ($self->State eq Authenticated) ? $self : undef);
 }
 
 sub separator {
 	my $self = shift;
-	my $target = shift || "INBOX";
+	my $target = shift ; defined($target) or $target = "INBOX";
 	$target = 'INBOX' if $target =~ /inbox/i;
 
 	# The fact that the response might end with {123} doesn't really matter here:
@@ -175,8 +181,8 @@ sub separator {
 sub list {
 	my $self = shift;
 	my ($reference, $target) = (shift, shift);
-	$reference 	||= "";	
-	$target 	||= '*';	
+	$reference = "" unless defined($reference);
+	$target = '*' unless defined($target);
 	$target 	  = $self->Massage($target);
 	my $string 	=  qq(LIST "$reference" $target);
 	$self->_imap_command($string)  or return undef;
@@ -185,9 +191,65 @@ sub list {
 }
 
 
+sub deleteacl {
+	my $self = shift;
+	my ($target, $user ) = @_;
+	$target 	  = $self->Massage($target);
+	$user		  =~ s/^"(.*)"$/$1/;
+	$user 	  	  =~ s/"/\\"/g;
+	my $string 	=  qq(DELETEACL "$target" "$user");
+	$self->_imap_command($string)  or return undef;
+
+	return wantarray ? 	$self->History($self->Count) 		: 
+				$self->{"History"}{$self->Count}	;
+}
+
+sub setacl {
+	my $self = shift;
+	my ($target, $user, $acl) = @_;
+	$user = $self->User unless defined($user);
+	$target = $self->Folder unless defined($target);
+	$target 	  = $self->Massage($target);
+	$user		  =~ s/^"(.*)"$/$1/;
+	$user 	  	  =~ s/"/\\"/g;
+	$acl		  =~ s/^"(.*)"$/$1/;
+	$acl 	  	  =~ s/"/\\"/g;
+	my $string 	=  qq(SETACL "$target" "$user" "$acl");
+	$self->_imap_command($string)  or return undef;
+	return wantarray ? 	$self->History($self->Count) 		: 
+				$self->{"History"}{$self->Count}	;
+}
+
+sub getacl {
+	my $self = shift;
+	my ($target) = @_;
+	$target = $self->Folder unless defined($target);
+	$target 	  = $self->Massage($target);
+	my $string 	=  qq(GETACL "$target");
+	$self->_imap_command($string)  or return undef;
+	return wantarray ? 	$self->History($self->Count) 		: 
+				$self->{"History"}{$self->Count}	;
+}
+
+sub listrights {
+	my $self = shift;
+	my ($target, $user) = @_;
+	$user = $self->User unless defined($user);
+	$target = $self->Folder unless defined($target);
+	$target 	  = $self->Massage($target);
+	$user		  =~ s/^"(.*)"$/$1/;
+	$user 	  	  =~ s/"/\\"/g;
+	my $string 	=  qq(GETACL "$target" "$user");
+	$self->_imap_command($string)  or return undef;
+	my $rights = ( grep(s/.*$target"?\s+"?$user"?\s+//, $self->History($self->Count) ) );
+	$rights =~ s/\s+//g;	
+	return wantarray ? split(//,$rights) : $rights ;
+}
+
 sub select {
 	my $self = shift;
-	my $target = shift or return undef;
+	my $target = shift ;  
+	return undef unless defined($target);
 
 	$target = $self->Massage($target);
 
@@ -223,6 +285,18 @@ sub message_string {
 	return join("",@head) . join("",@torso);
 }
 
+sub message_uid {
+	my $self = shift;
+	my $msg  = shift;
+	my @uid = $self->fetch($msg,"UID");
+	shift @uid and pop @uid and pop @uid;
+	my $uid;
+	while ( my $u = shift @uid and !$uid) {
+		($uid) = $u =~ /\(UID\s+(\d+)\)\r?$/;
+	}
+	return $uid;
+}
+
 sub body_string {
 	my $self = shift;
 	my $msg  = shift;
@@ -233,7 +307,7 @@ sub body_string {
 
 sub examine {
 	my $self = shift;
-	my $target = shift or return undef;
+	my $target = shift ; return undef unless defined($target);
 	$target = $self->Massage($target);
 	my $string 	=  qq/EXAMINE $target/;
 
@@ -259,7 +333,8 @@ sub _imap_command {
 
 	$good = quotemeta($good);
 
-	my $clear = $self->Clear;
+	my $clear = "";
+	$clear = $self->Clear;
 
 	$self->Clear($clear) 
 		if $self->Count >= $clear and $clear > 0;
@@ -321,7 +396,11 @@ sub _send_line {
 	}
 
 	print "Sending: $string\n" if $self->Debug;
-	return	syswrite($self->Socket, $string, length($string) ) ;
+	return	syswrite(	
+				$self->Socket, 
+				$string, 
+				length($string) 
+	) ;
 }
 
 #_read_line reads from the socket:
@@ -331,14 +410,60 @@ sub _read_line {
 	my $sh		= $self->Socket;
 	
 	my $buffer	= ""; 
-	#my $count	= sysread($sh,$buffer,2048,0) ;	# first read is block read
-	my $count	= 0;
-	until ($buffer =~ /\r?\n$/ ) {
-		sysread($sh,$buffer,1,$count++) ;
+	my $count	= ""; $count = 0;
+	my $rvec 	= my $ready = my $errors = 0; 
+	my $timeout	= $self->Timeout;
+
+	my $readlen 	= 1;
+	my $fcntl 	= '';
+	my $flags 	= '0';
+
+	if ( $self->Fast_io and $fcntl=fcntl($sh, F_GETFL, $flags) ) {
+		# print STDERR 
+		# "Setfl = ",F_SETFL," and GETFL = ",F_GETFL," and NONBLOCK = ",O_NONBLOCK,"\n";
+		# print STDERR "Fcntl flag is now $fcntl\n";
+		my $newflags = $fcntl;
+		$newflags |= O_NONBLOCK;
+		fcntl($sh, F_SETFL, $newflags) and $readlen = 4096;
 	}
+
+	until ($buffer =~ /\r?\n$/ ) {
+		if ($timeout) {
+			vec($rvec, fileno($self->Socket), 1) = 1;
+			CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ;
+			unless ( vec ( $ready, fileno($self->Socket), 1 ) ) {
+				$self->LastError("Tag " . $self->Transaction . 
+					": Timeout waiting for data from server\n");	
+				fcntl($sh, F_SETFL, $fcntl) 
+					if $self->Fast_io and defined($fcntl);
+				return undef;
+			}
+		}
+		my $newcount = $count;
+		my $oldW = $^W;
+		$^W = 0;
+		$count += sysread(
+					$sh,
+					$buffer,
+					$readlen,
+					$newcount
+		) ;
+		$^W = $oldW;
+		# print "Read so far: $buffer\n" if $self->Debug;
+
+	}
+	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
 	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
 		my $len = $1 + 2;
 		my $newcount = 0;
+		if ($timeout) {
+			vec($rvec, fileno($self->Socket), 1) = 1;
+			unless ( CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ) {
+				$self->LastError("Tag " . $self->Transaction . 
+					": Timeout waiting for literal data from server\n");	
+				return undef;
+			}
+		}
 		$newcount += sysread($sh,$buffer,$len-$newcount, 
 						$count+$newcount)
 			until $newcount >= $len;
@@ -419,7 +544,7 @@ sub folders {
 
 sub exists {
 	my ($self,$what) = (shift,shift);
-	map { return 1 if $_ eq $what } @{$self->folders} ;
+	return $self if $self->STATUS(qq($what),"(MESSAGES)");
 	return undef;
 }
 	
@@ -427,7 +552,9 @@ sub exists {
 sub fetch {
 
 	my $self = shift;
-	$self->_imap_command( "FETCH " . (join(" ",@_)||'ALL')) 	 or return undef;
+	$self->_imap_command( ( $self->Uid ? "UID " : "" ) .
+				"FETCH " . (join(" ",@_)||'ALL')
+	) 	 					or return undef;
 	return wantarray ? 	$self->History($self->Count) 	: 
 				$self->{"History"}{$self->Count}	;
 
@@ -442,9 +569,15 @@ sub AUTOLOAD {
 	if (scalar(@_)) {
 		my @a = @_;
 		if (	
-			$Mail::IMAPClient::AUTOLOAD =~ /^(?:create|delete|lsub|rename|search)$/i
+			$Mail::IMAPClient::AUTOLOAD =~ 
+				/^(?:subscribe|create|delete|lsub|search|myrights)$/i
 		) {
 			$a[-1] = $self->Massage($a[-1]) ;
+		} elsif (
+			$Mail::IMAPClient::AUTOLOAD =~ /^(?:store|copy)$/i
+		) {
+			$Mail::IMAPClient::AUTOLOAD = "UID $Mail::IMAPClient::AUTOLOAD"
+				if $self->Uid;
 		}
 		print "Running: $Mail::IMAPClient::AUTOLOAD " . join(" ",@a) ,"\n" if $self->Debug;
 		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD / . join(" ",@a) )  or return undef;
@@ -455,14 +588,29 @@ sub AUTOLOAD {
 				$self->{"History"}{$self->Count}	;
 
 }
-	
 
+sub rename {
+    my $self = shift;
+    my ($from, $to) = @_;
+    local($_);
+    if ($from =~ /^"(.*)"$/) {
+	$from = $1 unless $self->exists($from);
+        $from =~ s/"/\\"/g;
+    }
+    if ($to =~ /^"(.*)"$/) {
+	$to = $1 unless $self->exists($from) and $from =~ /^".*"$/;
+        $to =~ s/"/\\"/g;
+    }
+    $self->_imap_command(qq(RENAME "$from" "$to")) or return undef;
+    return $self;
+}
 
 sub status {
 
 	my $self = shift;
-	my $box = shift or return undef;
-	   $box = $self->Massage($box);
+	my $box = shift ;  
+	return undef unless defined($box);
+	$box = $self->Massage($box);
 	my @pieces = @_;
 	$self->_imap_command("STATUS $box (". (join(" ",@_)||'MESSAGES'). ")") or return undef;
 	return wantarray ? 	$self->History($self->Count) 	: 
@@ -514,6 +662,8 @@ sub recent_count {
 			$self->History($self->Transaction)
 	)[0]);
 
+	$r =~ s/\D//g;
+
 	return $r;
 }
 
@@ -527,9 +677,10 @@ sub message_count {
 			$self->History($self->Transaction) 
 	)[0]);
 
+	$m =~ s/\D//g;
+
 	return $m;
 
-	
 }
 
 {
@@ -543,7 +694,7 @@ for my $datum (
 		my $self = shift;
 		my @hits;
 
-		$self->_imap_command( "SEARCH $datum")
+		$self->_imap_command( ($self->Uid ? "UID " : "") . "SEARCH $datum")
 			 or return wantarray ? @hits : \@hits ;
 		my @results =  $self->History($self->Count)     ;
 
@@ -578,8 +729,9 @@ sub disconnect { $_[0]->logout }
 
 sub DESTROY {
 	my $self = shift;
+	local($^W = 0);
 	eval {
-		$self->logout if $self->State->Connected; 
+		$self->logout if $self->IsConnected; 
 		$self->Socket->close if ref($self->Socket);
 	}
 }
@@ -591,7 +743,7 @@ sub search {
 	my @hits;
 	my @a = @_;
 	$a[-1] = $self->Massage($a[-1]) if scalar(@a) > 1; # massage
-	$self->_imap_command( "SEARCH ". join(' ',@a)) 
+	$self->_imap_command( ( $self->Uid ? "UID " : "" ) . "SEARCH ". join(' ',@a)) 
 		 or return wantarray ? @hits : \@hits ;
 	my @results =  $self->History($self->Count) 	;
 
@@ -629,6 +781,17 @@ sub delete_message {
 	$self->store(join(',',@msgs),'+FLAGS.SILENT','(\Deleted)') and $count++;
 
 	return $count;
+}
+
+sub uidvalidity {
+
+	my $self = shift; my $folder = $self->Massage(shift);
+
+	my $vline = (grep(/UIDVALIDITY/i, $self->status($folder, "UIDVALIDITY")))[0];
+
+	my($validity) = $vline =~ /\(UIDVALIDITY\s+([^\)]+)/;
+
+	return $validity;
 }
 
 sub capability {
@@ -672,7 +835,7 @@ sub is_parent {
 	}	
 	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\)/ if $line;
 	unless ( $f =~ /\\/) {		# no flags at all unless there's a backslash
-		my $sep = $self->separator;
+		my $sep = $self->separator($folder);
 		return 1 if scalar(grep /^$folder$sep/, $self->folders);
 		return 0;
 	}
@@ -810,10 +973,6 @@ sub move {
 	$self->create($target) and $self->subscribe($target) 
 		unless $self->exists($target);
 
-	#for my $msg (@msgs) { 
-	#	$self->copy("$msg","$target") or return undef;
-	#}
-
 	$self->copy(join(',',@msgs),"$target") or return undef;
 
 	$self->delete_message(@msgs);
@@ -835,7 +994,10 @@ sub Massage {
 	my $self= shift;
 	my $arg = shift;
 
-	$arg 	= substr($arg,1,length($arg)-2) if $arg =~ /^".*"$/;
+	my $escaped_arg = $arg; $escaped_arg =~ s/"/\\"/g;
+	$arg 	= substr($arg,1,length($arg)-2) if $arg =~ /^".*"$/
+                and ! ( $self->STATUS(qq("$escaped_arg"),"(MESSAGES)"));
+
 
 	if ($arg =~ /["'\\]/) {
 		$arg = "{" . length($arg) . "}\r\n$arg" ;
@@ -1051,6 +1213,17 @@ method call or separately by calling the B<Server> object method.
 
 =cut
 
+=item Timeout
+
+Specifies the timeout value in seconds for reads. Specifying a true value for I<Timeout> 
+will prevent B<Mail::IMAPClient> from blocking in a read.
+
+Since timeouts are implemented via the perl B<select> operator, the I<Timeout> parameter
+may be set to a fractional number of seconds. Not supplying a I<Timeout>, or (re)setting it to 
+zero, disables the timeout feature.
+
+=cut
+
 =item User
 
 Specifies the userid to use when logging into the IMAP service. Can be supplied with the 
@@ -1087,7 +1260,64 @@ immediate clearing of the history buffer; setting it to 1 (or any other number) 
 
 The default I<Clear> value is set to five in order to conserve memory.
 
-=cut
+=item Uid
+
+If I<Uid> is set to a true value (i.e. 1) then the behavior of the B<fetch>, B<search>, B<copy>,
+and B<store> methods (and their derivatives) is changed so that arguments that would otherwise be 
+message sequence numbers are treated as message UID's and so that return values (in the case of the 
+B<search> method and its derivatives) that would normally be message sequence numbers are 
+instead message UID's.
+
+Internally this is implemented as a switch that, if turned on, causes methods that would otherwise
+issue an IMAP FETCH, STORE, SEARCH, or COPY client command to instead issue UID FETCH, UID STORE,
+UID SEARCH, or UID COPY, respectively. The main difference between message sequence numbers and 
+message UID's is that, according to RFC2060, UID's must not change during a session and should not
+change between sessions, and must never be reused. Sequence numbers do not have that same guarantee and
+in fact may be reused right away. 
+
+Since foldernames also have a unique identifier (UIDVALIDITY), which is provided when the folder 
+is B<select>ed or B<examine>d or by doing something like "$imap->status($folder,"UIDVALIDITY"), 
+it is possible to uniquely identify every message on the server, although normally you won't need 
+to bother.
+
+The methods currently affected by turning on the I<Uid> flag are:
+
+	copy 		fetch
+	search 		store 
+	message_string 	message_uid
+	body_string 	flags
+	move 		size
+
+Note that if for some reason you only want the I<Uid> parameter turned on for one command, then
+you can choose between the following two snippets, which are equivalent:
+
+Example 1:
+
+	$imap->Uid(1);
+	my @hits = $imap->search('SUBJECT',"Just a silly test");
+	$imap->Uid(0);
+
+Example 2:
+
+	my @hits 
+       	foreach $r ($imap->uid("SEARCH","SUBJECT","Just a silly test") {
+	       chomp $r;
+	       $r =~ s/\r$//;
+	       $r =~ s/^\*\s+SEARCH\s+// or next;
+	       push @hits, grep(/\d/,(split(/\s+/,$r)));
+	}
+
+In the second example, we used the default method to issue the UID IMAP Client command, being 
+careful to use different case so as not to inadvertently call the I<Uid> accessor method. Then
+we parsed out the message UID's manually, since we don't have the benefit of the built-in 
+B<search> method doing it for us.
+	
+Please be very careful when turning the I<Uid> parameter on and off throughout a script. If you loose
+track of whether you've got the I<Uid> parameter turned on you might do something sad, like deleting
+the wrong message. Remember, like all eponymous accessor methods, the B<Uid> method without arguments
+will return the current value for the I<Uid> parameter, so do yourself a favor and check. The safest
+approach is probably to turn it on at the beginning and then leave it on. (Remember that leaving it
+turned off can lead to problems if changes to a folder's contents cause resequencing.) 
 
 =back
 
@@ -1119,7 +1349,8 @@ The B<append> method adds a message to the specified folder. It takes two argume
 name of the folder to append the message to, and the text of the message (including headers).
 Additional arguments are added to the message text, separated with a newline.
 
-The B<append> method returns a true value if successful or undef if not.
+The B<append> method returns the UID of the new message (a true value) if successful, 
+or undef if not.
 
 =cut
 
@@ -1138,9 +1369,9 @@ appended if neccessary.
 
 =item body_string
 
-The B<body_string> method accepts a message sequence number as an argument a returns the message
-body as a string. The returned value contains the entire message in one scalar variable, without 
-the message headers.
+The B<body_string> method accepts a message sequence number (or a message UID, if the I<Uid> parameter 
+is set to true) as an argument a returns the message body as a string. The returned value contains 
+the entire message in one scalar variable, without the message headers.
 
 =cut
 
@@ -1171,16 +1402,25 @@ to the server.
 
 =item delete_message
 
-The B<delete_message> method accepts a list of arguments. Each item in the list should be either: 
+The B<delete_message> method accepts a list of arguments. If the I<Uid> parameter is not set to 
+a true value, then each item in the list should be either: 
 
 =item a message sequence number,
 
-=item a comma-separated list of message sequence numbers, or
+=item a comma-separated list of message sequence numbers, 
 
-=item a reference to an array of message sequence numbers.
+=item a reference to an array of message sequence numbers, or
 
-The messages identified by the sequence numbers will be deleted. B<delete_message> returns the number
-of messages it was told to delete. However, since the delete is done by issuing the 
+If the I<Uid> parameter is set to a true value, then each item in the list should be either: 
+
+=item a message UID, 
+
+=item a comma-separated list of UID's, or 
+
+=item a reference to an array of message UID's.
+
+The messages identified by the sequence numbers or UID's will be deleted. B<delete_message> returns 
+the number of messages it was told to delete. However, since the delete is done by issuing the 
 I<+FLAGS.SILENT> option of the STORE IMAP client command, there is no guarantee that the 
 delete was successful. In this manner the B<delete_message> method sacrifices accuracy for speed. 
 If you must have guaranteed results then use the IMAP STORE client command (via the default
@@ -1233,16 +1473,18 @@ not exist.
 The B<fetch> method implements the FETCH IMAP client command. It accepts a list of
 arguments, which will be converted into a space-delimited list of arguments to the
 FETCH IMAP client command. If no arguments are supplied then B<fetch> does a FETCH ALL.
-(It would really be a good idea at this point to review RFC2060.)
+If the I<Uid> parameter is set to a true value then the first argument will be treated as
+a UID or list of UID's, which means that the UID FETCH IMAP client command will be run instead
+of FETCH. (It would really be a good idea at this point to review RFC2060.) 
 
 =cut
 
 =item flags
 
 The B<flags> method implements the FETCH IMAP client command to list a single message's flags.
-It accepts one argument, a message sequence number, and returns an array (or a reference to  
-an array, if called in scalar context) listing the flags that have been set. Flag names are 
-provided with leading backslashes, if any. 
+It accepts one argument, a message sequence number (or a message UID, if the I<Uid> parameter is
+true), and returns an array (or a reference to an array, if called in scalar context) listing the 
+flags that have been set. Flag names are provided with leading backslashes, if any. 
 
 =cut
 
@@ -1319,16 +1561,26 @@ parses out the results to obtain the number of messages.
 
 =item message_string
 
-The B<message_string> method accepts a message sequence number as an argument a returns the message
-as a string. The returned value contains the entire message in one scalar variable, including the
-message headers.
+The B<message_string> method accepts a message sequence number (or message UID if I<Uid> is true)
+as an argument a returns the message as a string. The returned value contains the entire message 
+in one scalar variable, including the message headers.
+
+=cut
+
+=item message_uid
+
+The B<message_uid> method accepts a message sequence number (or message UID if I<Uid> is true)
+as an argument and returns the message's UID. Yes, if I<Uid> is true then it will use the IMAP 
+UID FETCH UID client command to obtain and return the very same argument you supplied.  This is an 
+IMAP feature so don't complain to me about it.
 
 =cut
 
 =item move
 
 The B<move> method moves messages from the currently selected folder to the folder specified
-in the first argument to B<move>.  The rest of the arguments should be either:
+in the first argument to B<move>.  If the I<Uid> parameter is not true, then the rest of the arguments 
+should be either:
 
 =over 8
 
@@ -1337,6 +1589,14 @@ in the first argument to B<move>.  The rest of the arguments should be either:
 =item a comma-separated list of message sequence numbers, or
 
 =item a reference to an array of message sequence numbers.
+
+If the I<Uid> parameter is true, then the arguments should be:
+
+=item a message UID,
+
+=item a comma-separated list of message UID's, or
+
+=item a reference to an array of message UID's.
 
 =back
 
@@ -1381,6 +1641,8 @@ are included in the returned hash of lists.
 If you're not emotionally prepared to deal with a hash of lists then you can always call the 
 B<fetch> method yourself with the appropriate parameters and parse the data out any way you want to.
 
+If the I<Uid> parameter is true then the first argument will be treated as a message UID.
+
 Currently, specifying a range of message numbers as the first argument is not supported. 
 
 =cut
@@ -1388,7 +1650,7 @@ Currently, specifying a range of message numbers as the first argument is not su
 =item recent
 
 The B<recent> method performs an IMAP SEARCH RECENT search against the selected folder and returns
-an array of sequence numbers of messages that are recent.
+an array of sequence numbers (or UID's, if the I<Uid> parameter is true) of messages that are recent.
 
 =cut
 
@@ -1397,6 +1659,14 @@ an array of sequence numbers of messages that are recent.
 The B<recent_count> method accepts as an argument a folder name. It returns the number of recent 
 messages in the folder (as returned by the IMAP client command "STATUS folder RECENT"), or undef 
 in the case of an error. The B<recent_count> method was contributed by Rob Deker (deker@ikimbo.com).
+
+=cut
+
+=item rename
+
+The B<rename> method accepts two arguments: the name of an existing folder, and a new name for
+the folder. The existing folder will be renamed to the new name using the RENAME IMAP client 
+command. B<rename> will return a true value if successful, or undef if unsuccessful.
 
 =cut
 
@@ -1413,7 +1683,9 @@ quotes will be preserved when passing the argument. I.e. use C<qq/"$arg"/> inste
 C<"$arg">.
 
 The B<search> method returns an array containing sequence numbers of messages that passed the
-SEARCH IMAP client command's search criteria. 
+SEARCH IMAP client command's search criteria. If the I<Uid> parameter is true then the array
+will contain message UID's. If B<search> is called in scalar context then a pointer to the array
+will be passed, instead of the array itself.
 
 =cut
 
@@ -1421,6 +1693,8 @@ SEARCH IMAP client command's search criteria.
 
 The B<seen> method performs an IMAP SEARCH SEEN search against the selected folder and returns
 an array of sequence numbers of messages that have already been seen (ie their SEEN flag is set).
+If the I<Uid> parameter is true then an array of message UID's will be returned instead. If called
+in scalar context than a pointer to the array (rather than the array itself) will be returned.
 
 =cut
 
@@ -1436,15 +1710,24 @@ It accepts one argument, which is the name of the folder to select.
 The B<separator> method returns the character used as a separator character in 
 folder hierarchies. On unix-based servers, this is often a forward slash (/). It accepts one
 argument, the name of a folder whose hierarchy's separator should be returned. If no folder
-name is supplied then the separator from INBOX is returned, which probably is good enough.
+name is supplied then the separator for the INBOX is returned, which probably is good enough.
+
+=cut
+
+=item setacl
+
+The B<setacl> method accepts three input arguments, a folder name, a user id (or authentication
+identifier, to use the terminology of RFC2086), and an access rights modification string. See
+RFC2086 for more information.
 
 =cut
 
 =item size
 
-The B<size> method accepts one input argument, a sequence number. It returns the size of the message
-in the currently selected folder with the supplied sequence number.  The B<IMAPClient> object must be 
-in a I<Selected> state in order to use this method.
+The B<size> method accepts one input argument, a sequence number (or message UID if the I<Uid> parameter
+is true). It returns the size of the message in the currently selected folder with the supplied 
+sequence number (or UID).  The B<IMAPClient> object must be in a I<Selected> state in order to use 
+this method.
 
 =cut
 
@@ -1465,10 +1748,17 @@ B<Status Methods>, below).
 
 =cut
 
+=item uidvalidity
+
+The B<uidvalidity> method accepts one argument, the name of a folder, and returns the string
+that is the unique identifier validity value for the folder.
+
 =item unseen
 
 The B<unseen> method performs an IMAP SEARCH UNSEEN search against the selected folder and returns
 an array of sequence numbers of messages that have not yet been seen (ie their SEEN flag is not set).
+If the I<Uid> parameter is true then an array of message UID's will be returned instead. If called
+in scalar context than a pointer to the array (rather than the array itself) will be returned.
 
 =cut
 
@@ -1499,6 +1789,21 @@ being sent to the IMAP server (assuming that 99 is the current transaction numbe
 
 B<CAUTION:> Once again, remember to quote your quotes if you want quotes to be part of the 
 IMAP command string.     
+
+You can also use the default method to override the behavior of implemented IMAP methods by
+changing the case of the method name, preferably to all-uppercase so as not to conflict with
+the Class method and accessor method namespace. For example, if you don't want the B<search>
+method's behavior (which returns a list of message numbers) but would rather have an array
+of raw data returned from your B<search> operator, you can issue the following snippet:
+	
+	@raw = $imap->SEARCH("SUBJECT","Whatever...");
+
+which is slightly more efficient than the equivalent:
+
+	my @msgs = $imap->search("SUBJECT","Whatever...");
+
+	my @raw = $imap->Results;
+
 
 =cut
 
@@ -1611,4 +1916,50 @@ the GNU General Public License or the Artistic License for more details.
 =cut
 
 my $not_void_context = '0 but true'; 		# return true value
+
+# $Log: IMAPClient.pm,v $
+# Revision 19991216.8  2000/01/12 18:58:00  dkernen
+# *** empty log message ***
+#
+# Revision 19991216.7  2000/01/12 17:49:40  dkernen
+#
+# Modified Files: 	Changes IMAPClient.pm  -- to fix problem in subscribe
+# method when subscribing to folders with embedded spaces in name and updated
+# change log to document same
+#
+# Revision 19991216.6  1999/12/28 13:56:35  dkernen
+# Created v1.08. Added acl methods.
+#
+# Revision 19991216.5  1999/12/16 17:18:32  dkernen
+# Bring up to same level
+#
+# Revision 19991216.2  1999/12/16 17:17:17  dkernen
+# Bring up to same level
+#
+# Revision 19991216.1  1999/12/16 17:16:16  dkernen
+# Bring up to same level
+#
+# Revision 19991129.6  1999/12/16 17:13:56  dkernen
+# Incorporate changes for exists method performance enhancement
+#
+# Revision 19991129.5  1999/12/15 21:39:07  dkernen
+# Made performance enhancements to login and exists methods.
+#
+# Revision 19991129.4  1999/12/10 21:51:05  dkernen
+# Fix my brain-damaged select operator.
+#
+# Revision 19991129.3  1999/12/07 16:13:23  dkernen
+# Added timeout feature to IMAPClient.pm and documented same in pod,
+# fixed bug in Makefile.PL when specifying PREFIX directive,
+# and updated change log accordingly.
+#
+# Revision 19991129.2  1999/12/01 22:11:03  dkernen
+# Enhance support for UID and add tests to t/basic for same
+#
+# Revision 19991129.1  1999/11/30 20:36:24  dkernen
+# Updated DESTROY to turn off spurious warnings
+#
+# Revision 19991129.0  1999/11/30 15:50:02  dkernen
+# Incorporated bug fixes from Scott Wilson
+#
 

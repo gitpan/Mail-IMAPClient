@@ -230,5 +230,20 @@ return 		sprintf							(
 			$date[0]					)
 									;
 									}
-# $Id$
-# $Log$
+# $Id: populate_mailbox.pl,v 19991216.5 1999/12/16 17:19:15 dkernen Exp $
+# $Log: populate_mailbox.pl,v $
+# Revision 19991216.5  1999/12/16 17:19:15  dkernen
+# Bring up to same level
+#
+# Revision 19991124.3  1999/12/16 17:14:26  dkernen
+# Incorporate changes for exists method performance enhancement
+#
+# Revision 19991124.02  1999/11/24 17:46:21  dkernen
+# More fixes to t/basic.t
+#
+# Revision 19991124.01  1999/11/24 16:51:51  dkernen
+# Changed t/basic.t to test for UIDPLUS before trying UID cmds
+#
+# Revision 1.4  1999/11/23 17:51:06  dkernen
+# Committing version 1.06 distribution copy
+#

@@ -6,7 +6,7 @@
 # DESC: Reads a users IMAP folders, and converts them to mbox
 #       Good for an interim switch-over from say, Exchange to Cyrus IMAP.
 
-# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 1.2 1999/11/22 20:22:15 dkernen Exp $
+# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 19991216.5 1999/12/16 17:19:12 dkernen Exp $
 
 # TODO:
 # ----- 
@@ -117,6 +117,21 @@ sub write_folder {
 	print("\n");
 }
 
-# $Id$ 
-# $Log$
+# $Id: imap_to_mbox.pl,v 19991216.5 1999/12/16 17:19:12 dkernen Exp $ 
+# $Log: imap_to_mbox.pl,v $
+# Revision 19991216.5  1999/12/16 17:19:12  dkernen
+# Bring up to same level
+#
+# Revision 19991124.3  1999/12/16 17:14:25  dkernen
+# Incorporate changes for exists method performance enhancement
+#
+# Revision 19991124.02  1999/11/24 17:46:19  dkernen
+# More fixes to t/basic.t
+#
+# Revision 19991124.01  1999/11/24 16:51:49  dkernen
+# Changed t/basic.t to test for UIDPLUS before trying UID cmds
+#
+# Revision 1.3  1999/11/23 17:51:06  dkernen
+# Committing version 1.06 distribution copy
+#
 
