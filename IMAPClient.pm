@@ -2,8 +2,8 @@ package Mail::IMAPClient;
 
 # $Id: IMAPClient.pm,v 19991216.13 2000/04/27 17:59:45 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.12';
-$Mail::IMAPClient::VERSION = '1.12';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.13';
+$Mail::IMAPClient::VERSION = '1.13';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -872,9 +872,9 @@ sub parse_headers {
 
 	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
 
-		$string = 	"$msg body[header]" 	; 
+		$string = 	"$msg body.peek[header]" 	; 
 	} else {
-		$string	= 	"$msg body[header.fields (" 	. 
+		$string	= 	"$msg body.peek[header.fields (" 	. 
 				join(" ",@fields) 		. ')]' ;
 	}
 

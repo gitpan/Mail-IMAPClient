@@ -1,5 +1,12 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.13
+-----------------------
+Changed the parse_headers method so that it uses BODY.PEEK instead of BODY. This prevents the
+parse_headers method from implicitly setting the "\Seen" flag for messages that have not been
+otherwise read. This change could produce an incompatibility in scripts that relied on the 
+parse_headers previous behavior.
+
 Changes in version 1.12
 -----------------------
 Fixed a bug in the folders method when called with a second arg then once without a second arg.
