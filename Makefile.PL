@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     'NAME'		=> 'Mail::IMAPClient',
     'VERSION_FROM' 	=> 'IMAPClient.pm', # finds $VERSION
-    'clean' 		=> {	FILES 	=> '.test'	}
+    'clean' 		=> {	FILES 	=> 'test.txt'	}
 
 );
 
@@ -12,14 +12,14 @@ WriteMakefile(
 
 sub set_test_data {
 	unless (-f "./IMAPClient.pm") { warn "ERROR: not in installation directory\n"; return }
-	return if -f "./.test";
+	return if -f "./test.txt";
 	print 	"You have the option of running an extended suite of tests during\n",
 		"'make test'. This requires an IMAP server name, user account, and ",
 		"password to test with.","\n","\n",
 		"Do you want to run the extended tests? (n/y) ==> ";
 	my $yes = <STDIN>;
 	return unless $yes =~ /^[Yy](?:[Ee]:[Ss]?)?$/ ;
-	unless (open TST,">./.test") { warn "ERROR: couldn't open ./.test: $!\n"; return }
+	unless (open TST,">./test.txt") { warn "ERROR: couldn't open ./test.txt: $!\n"; return }
 	print "\nPlease provide the hostname of a host running an IMAP server \n",
 		"(or QUIT to skip the extended tests) ==> ";
 	my $server = <STDIN>;
@@ -44,7 +44,7 @@ sub set_test_data {
 	print TST "port=$port\n";
 	close TST;
 	print "\nGracias! The information you provided (including the \n",
-		" password!) has been stored in ",cwd,"/.test and should be\n",
+		" password!) has been stored in ",cwd,"/test.txt and should be\n",
 		" removed (either by hand or by 'make clean') after testing.\n";
 }
 

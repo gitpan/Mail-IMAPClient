@@ -13,4 +13,4 @@ examples/imap_to_mbox.pl
 examples/build_dist.pl
 examples/build_ldif.pl
 docs/rfc2060.txt
-.test_template
+test_template.txt

@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.8 2000/01/12 18:58:00 dkernen Exp $
+# $Id: IMAPClient.pm,v 19991216.11 2000/03/09 20:32:28 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.08a';
-$Mail::IMAPClient::VERSION = '1.08a';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.09';
+$Mail::IMAPClient::VERSION = '1.09';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -105,7 +105,7 @@ sub new {
 		}
 	}	
 	$self->Clear(5) unless exists $self->{'Clear'};
-	return $self->connect if $self->Server;
+	return $self->connect if $self->Server and !$self->Socket;
 	return $self;
 }
 
@@ -155,7 +155,10 @@ sub connect {
 
 sub login {
 	my $self = shift;
-	my $string = "Login " . $self->User . " " . $self->Massage($self->Password) ;
+	my $id   = $self->User;
+	my $has_quotes = $id =~ /^".*"$/ ? 1 : 0;
+	my $string = 	"Login " . ( $has_quotes ? $id : qq("$id") ) . " " . 
+			$self->Massage($self->Password) ;
 	$self->_imap_command($string) 
 		and $self->State(Authenticated);
 	# $self->folders and $self->separator unless $self->NoAutoList;
@@ -320,12 +323,22 @@ sub examine {
 	}
 }
 
+sub tag_and_run {
+	my $self = shift;
+	my $string = shift;
+	my $good = shift;
+	$self->_imap_command($string,$good);
+	return @{$self->Results};
+}
 # _{name} methods are undocumented and meant to be private.
 
 # _imap_command runs a command, inserting the correct tag
 # and <CR><LF> and whatnot.
+# When updating _imap_command, remember to examine the run method, too, since it is very similar.
 #
+
 sub _imap_command {
+	
 	my $self 	= shift;
 	my $string 	= shift 	or return undef;
 	my $good 	= shift 	|| 'GOOD';
@@ -368,6 +381,54 @@ sub _imap_command {
 	}	
 	
 	return $code =~ /^OK|$good/ ? $self : undef ;
+
+}
+
+sub run {
+	my $self 	= shift;
+	my $string 	= shift 	or return undef;
+	my $good 	= shift 	|| 'GOOD';
+	my $count 	= $self->Count($self->Count+1);
+	my($tag)	= $string =~ /^(\S+) /  ;
+
+	unless ($tag) {
+		$self->LastError("Invalid string passed to run method; no tag found.\n");
+		return undef;
+	}
+
+	$good = quotemeta($good);
+
+	my $clear = "";
+	$clear = $self->Clear;
+
+	$self->Clear($clear) 
+		if $self->Count >= $clear and $clear > 0;
+
+	$self->_record($count,"$string\r\n");
+
+	my $feedback = $self->_send_line("$string");
+
+	unless ($feedback) {
+		$self->LastError( "Error sending '$string' to IMAP: $!\n");
+		return undef;
+	}
+
+	my ($code, $output);	
+	$output = "";
+
+	until ( ($code) = $output =~ /^$tag (OK|BAD|NO|$good)/m ) {
+
+		$output = $self->_read_line;	
+		for my $o (split(/\r?\n/,$output)) { 
+			$self->_record($count,"$o\r\n");
+		}
+		if ($output =~ /^\*\s+BYE/) {
+			$self->State(Unconnected);
+			return undef ;
+		}
+	}	
+	$self->{"History"}{$tag} = $self->{"History"}{$count};
+	return $code =~ /^OK|$good/ ? @{$self->Results} : undef ;
 
 }
 
@@ -452,8 +513,10 @@ sub _read_line {
 
 	}
 	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
+	#	print "Buffer is now $buffer\n";
 	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
-		# my $len = $1 + 2;
+		# print "in literal logic\n";
+		my $len = $1 ;
 		my $newcount = 0;
 		if ($timeout) {
 			vec($rvec, fileno($self->Socket), 1) = 1;
@@ -697,14 +760,14 @@ for my $datum (
 		my @hits;
 
 		$self->_imap_command( ($self->Uid ? "UID " : "") . "SEARCH $datum")
-			 or return wantarray ? @hits : \@hits ;
+			 or return undef;
 		my @results =  $self->History($self->Count)     ;
 
 		for my $r (@results) {
 
 		       chomp $r;
 		       $r =~ s/\r$//;
-		       $r =~ s/^.*SEARCH\s+//;
+		       $r =~ s/^\*\s+SEARCH\s+// or next;
 		       push @hits, grep(/\d/,(split(/\s+/,$r)));
 
 		}
@@ -713,6 +776,47 @@ for my $datum (
 
 
         };
+}
+}
+{
+for my $datum (
+                qw(     sentbefore 	sentsince 	senton
+			since 		before 		on
+                 )
+) {
+	no strict 'refs';
+	*$datum = sub {
+
+		my($self,$time) = (shift,shift);
+
+		my @hits; my $imapdate;
+		my @mnt  =      qw{ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec};
+
+		if ( $time =~ /\d\d-\D\D\D-\d\d\d\d/ ) {
+			$imapdate = $time;
+		} elsif ( $time =~ /^\d+$/ ) {
+			my @ltime = localtime($time);
+			$imapdate = sprintf(	"%2.2d-%s-%4.4d", 
+						$ltime[3], $mnt[$ltime[4]], $ltime[5] + 1900);
+		} else {
+			$self->LastError("Invalid date format supplied to '$datum' method.");
+			return undef;
+		}
+		$self->_imap_command( ($self->Uid ? "UID " : "") . "SEARCH $datum $imapdate")
+			or return undef;
+		my @results =  $self->History($self->Count)     ;
+
+		for my $r (@results) {
+
+		       chomp $r;
+		       $r =~ s/\r$//;
+		       $r =~ s/^\*\s+SEARCH\s+//i or next;
+		       push @hits, grep(/\d/,(split(/\s+/,$r)));
+			print "Hits are now: ",join(',',@hits),"\n";
+		}
+
+		return wantarray ? @hits : \@hits;
+	}
 }
 }
 
@@ -1407,6 +1511,26 @@ will return the current value for the I<Uid> parameter, so do yourself a favor a
 approach is probably to turn it on at the beginning and then leave it on. (Remember that leaving it
 turned off can lead to problems if changes to a folder's contents cause resequencing.) 
 
+=item Socket
+
+The I<Socket> method can be used to obtain the socket handle of the current connection (say, to
+do I/O on the connection that is not otherwise supported by B<Mail::IMAPClient>) or to replace
+the current socket with a new handle (perhaps an SSL handle, for example). 
+
+If you supply a socket handle yourself, either by doing something like:
+
+	 $imap=Mail::IMAPClient->new(Socket=>$sock, User => ... );
+
+or by doing something like:
+
+	 $imap=Mail::IMAPClient->new(User => $user, Password => $pass, Server => $host);
+	 # blah blah blah
+	 $imap->Socket($ssl);
+
+then it will be up to you to establish the connection AND to authenticate, either via the B<login>
+method, or the fancier B<authenticate>, or, since you know so much anyway, by just doing raw I/O 
+against the socket.
+
 =back
 
 Parameters can be set during B<new> method invocation by passing named parameter/value pairs
@@ -1453,6 +1577,13 @@ is passed as the only argument to the code or subroutine referenced in the secon
 value from the 2nd argument's code is written to the server as is, except that a <CR><NL> sequence is
 appended if neccessary.
 
+=cut
+
+=item before
+
+The B<before> method works just like the B<since> method, below, except it returns a list of messages 
+whose internal system dates are before the date supplied as the argument to the B<before> method.
+ 
 =cut
 
 =item body_string
@@ -1716,6 +1847,13 @@ If the move is not successful then B<move> returns undef.
 
 =cut
 
+=item on
+
+The B<on> method works just like the B<since> method, below, except it returns a list of messages 
+whose internal system dates are the same as the date supplied as the argument to the B<on> method.
+ 
+=cut
+
 =item parse_headers 
 
 The B<parse_headers> method accepts as arguments a message sequence number and a list of header
@@ -1782,6 +1920,31 @@ command. B<rename> will return a true value if successful, or undef if unsuccess
 
 =cut
 
+=item run
+
+Like Perl itself, the B<Mail::IMAPClient> module is designed to make common things easy and 
+uncommon things possible. The B<run> method is provided to make those uncommon things possible.
+
+The B<run> method excepts one or two arguments. The first argument is a string containing 
+an IMAP Client command, including a tag and all required arguments. The optional second 
+argument is a string to look for that will indicate success. (The default is OK.*). The B<run>
+method returns an array of output lines from the command, which you are free to parse as you
+see fit.
+
+The B<run> method does not do any syntax checking, other than rudimentary checking for a tag.
+
+When B<run> processes the command, it increments the transaction count and saves the command and 
+responses in the History buffer in the same way other commands do. However, it also creates a 
+special entry in the History buffer named after the tag supplied in the string passed as the 
+first argument. If you supply a numeric value as the tag then you may risk overwriting a previous
+transaction's entry in the History buffer, unless the numeric value is greater then the value of 
+the I<Clear> parameter and I<Clear> is not 0.
+
+If you want the control of B<run> but you don't want to worry about the damn tags then see the 
+B<tag_and_run> method, below.
+
+=cut
+
 =item search
 
 The B<search> method implements the SEARCH IMAP client command. Any argument supplied to
@@ -1817,6 +1980,37 @@ It accepts one argument, which is the name of the folder to select.
 
 =cut
 
+=item sentbefore
+
+The B<sentbefore> works just like B<sentsince>, below, except it searches for messages that were 
+sent before the date supplied as an argument to the method.
+
+=cut
+
+=item senton
+
+The B<senton> works just like B<sentsince>, below, except it searches for messages that were 
+sent on the exact date supplied as an argument to the method.
+
+=cut
+
+=item sentsince
+
+The B<sentsince> method accepts one argument, a date in either standard perl format (seconds since 
+1/1/1970, or as output by B<time> and as accepted by B<localtime>) or in the I<date_text> format as 
+defined in RFC2060 (dd-Mon-yyyy, where Mon is the English-language three-letter abbreviation for 
+the month). 
+
+It searches for items in the currently selected folder for messages sent since the day whose date 
+is provided as the argument. It uses the RFC822 I<Date:> header to determine the I<senton> date.
+
+In the case of arguments supplied as a number of seconds, the returned result list will include 
+items sent on or after that day, regardless of whether they arrived before the specified time on 
+that day. The IMAP protocol does not support searches at a granularity finer than a day, so 
+neither do I. 
+
+=cut
+
 =item separator
 
 The B<separator> method returns the character used as a separator character in 
@@ -1831,6 +2025,22 @@ name is supplied then the separator for the INBOX is returned, which probably is
 The B<setacl> method accepts three input arguments, a folder name, a user id (or authentication
 identifier, to use the terminology of RFC2086), and an access rights modification string. See
 RFC2086 for more information.
+
+=cut
+
+=item since
+
+The B<since> method accepts a date in either standard perl format (seconds since 1/1/1970, or
+as output by B<time> and as accepted by B<localtime>) or in the I<date_text> format as defined 
+in RFC2060 (dd-Mon-yyyy, where Mon is the English-language three-letter abbreviation for the month). 
+It searches for items in the currently selected folder for messages whose internal dates are on or
+after the day whose date is provided as the argument. It uses the internal system date for a 
+message to determine if that message was sent since the given date.
+
+In the case of arguments supplied as a number of seconds, the returned result list will include 
+items whose internal date is on or after that day, regardless of whether they arrived before the 
+specified time on that day. The IMAP protocol does not support searches at a granularity finer 
+than a day, so neither do I. 
 
 =cut
 
@@ -1857,6 +2067,20 @@ rather than the array itself.
 The B<status> method should not be confused with the B<Status> method (with an uppercase 'S'),
 which returns information about the B<IMAPClient> object. (See the section labeled 
 B<Status Methods>, below).
+
+=cut
+
+=item tag_and_run
+
+The B<tag_and_run> method accepts one or two arguments. The first argument is a string containing 
+an IMAP Client command, without a tag but with all required arguments. The optional second 
+argument is a string to look for that will indicate success. (The default is OK.*). 
+
+The B<tag_and_run> method will prefix your string (from the first argument) with the next 
+transaction number and run the command. It returns an array of output lines from the command, 
+which you are free to parse as you see fit. Using this method instead of B<run> (above) will 
+free you from having to worry about handling the tags (and from worrying about the side affects of 
+naming your own tags).
 
 =cut
 
@@ -2035,6 +2259,31 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 19991216.11  2000/03/09 20:32:28  dkernen
+#
+# Modified Files:
+# 		IMAPClient.pm  	-- to fix bugs in recent, seen, and unseen
+# 		Changes 	-- to document same
+#
+# Revision 19991216.10  2000/03/09 14:05:18  dkernen
+#
+# Modified Files:
+# 	Changes -- to document changes
+# 	IMAPClient.pm -- to add new methods since, sentsince, before, on, senton, sentbefore
+# 			 and to fix bug in i/o engine
+# 	INSTALL -- to enhance installation documentation
+# 	README -- to add new platforms to list of tested platforms
+# 	Todo -- to update entries with current status
+#
+# Revision 19991216.9  2000/03/02 19:56:06  dkernen
+#
+# Modified Files:
+# Changes -- to document changes
+# IMAPClient.pm -- to add run and run_and_tag methods and to add documentation, also to
+# 	fix bug in folders method when optional arg is supplied
+# INSTALL -- to improve install instructions
+# README --  to add to list of IMAP servers against which this module has been used successfully
+#
 # Revision 19991216.8  2000/01/12 18:58:00  dkernen
 # *** empty log message ***
 #

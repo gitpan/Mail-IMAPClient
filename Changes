@@ -1,5 +1,57 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.09
+-----------------------
+
+Changed login method so that values for the User parameter that do not start and end with quotes
+will be quoted when sent to the server. This is to support user id's with embedded spaces, which
+are legal on some platforms. 
+
+Changed name of test input file created by perl Makefile.PL and used by 'make test' from .test to
+test.txt to support weird, offbeat OS platforms that cannot handle filenames beginning with a dot.
+
+Fixed bugs in seen, unseen, and recent methods.  (These are almost the same method anyway; they
+are dynamically created at compile time from the same code, with variable substitution filling in
+the places where "seen", "unseen", or "recent" belong.) The bug caused these methods to return the
+transaction number of the search as if it were the last message sequence number (or message uid) in
+the result set.
+
+Added the 'since' method, which accepts a date in either standard perl format (seconds since 1/1/1970, or
+as output by time and as accepted by localtime) or in the date_text format as defined in RFC2060 
+(dd-Mon-yyyy, where Mon is the English-language three-letter abbreviation for the month). It searches
+for items in the currently selected folder for messages sent since the day whose date is provided as
+an argument.
+
+Added 'sentsince', 'senton', 'sentbefore', 'on', and 'before' methods which are totally 100% just
+like the 'since' method, except that they run different searches. (Did I mention that it's useful
+to have RFC2060 handy when writing IMAP clients?)
+
+Added two new methods, run and tag_and_run, to allow IMAP client programmers finer control over
+the IMAP conversation. These methods allow the programmer to compose the entire IMAP command string
+and pass it as-is to the IMAP server. The difference between these two methods is that the run 
+method requires that the string include the tag while the tag_and_run method requires that it does not.
+
+To a similar end, the pre-existing Socket parameter and eponymous accessor method has been 
+documented to allow direct access to the IMAP socket handle and to allow the socket handle to 
+be replaced with some other file handle, presumably one derived from a more interesting technology 
+(such as SSL).
+
+Fixed a bug that caused blank lines to be removed from 'literal' output (as defined in RFC2060)
+when fast_io was not used. This bug was especially likely to show up in routines that fetched a 
+message's body text.  The fact that this bug did not occur in the newer fast_io code may 
+indicate that I've learned something, but on the other hand we shouldn't jump to rash conclusions.
+
+I've run benchmarks on the fast_io code to determine whether or not it is faster and, if so, under
+what circumstances. It appears that the fast_io code is quite faster, except when reading large 
+'literal' strings (i.e. message bodies), in which case it appears to take the same amount of time 
+as the older i/o code but at the cost of more cpu cycles (which means it may actually be slower 
+on cpu-constrained systems). The reason for this is that reads of literal strings are by their 
+nature already optimized, but without the overhead of fcntl calls. So if you expect to be doing 
+lots of message text (or multipart message body parts) fetching you should not use fast_io, but in 
+pretty much any other case you should go ahead and use it. In any event, a number of people have 
+tested fast_io so I no longer consider it experimental, unless you're running perl on NT or CP/M 
+or something funky like that, in which case let me know how you make out! 
+
 Changes in version 1.08
 -----------------------
 
@@ -216,9 +268,9 @@ login is attempted but fails. Previous releases returned a Mail::IMAPClient
 object that was not connected or not logged in, depending on what failed.
 
 Changed installation script so that it reuses the parameter file for test.pl 
-if it finds one. Installation can be run in the background if the .test file 
+if it finds one. Installation can be run in the background if the test.txt file 
 exists. Touching it is good enough to prevent prompts; having a correctly 
-formatted version (as described in .test_template) is even better, as it will 
+formatted version (as described in test_template.txt) is even better, as it will 
 allow you to do a thorough 'make test'.
 
 Changes in version .99 
@@ -261,4 +313,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.7 2000/01/12 17:49:39 dkernen Exp $
+# $Id: Changes,v 19991216.12 2000/03/10 16:04:22 dkernen Exp $

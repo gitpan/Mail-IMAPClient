@@ -2,11 +2,11 @@ The following is a list of some items that I hope to include in a future
 release:
 
 - Better support for converting a message into a structure that is based upon
-the message's BODYSTRUCTURE.
+the message's BODYSTRUCTURE. ** Coming soon, courtesy of Rob Arnold **
 
 - Support for a timeout to prevent the module from getting blocked in a read.
 This would require rewriting the I/O engine, which is somewhat complicated 
-already.
+already. ****** D O N E ********
 
 - Currently a number of IMAP Client commands are implemented using the 
 'default method', which is an AUTOLOAD hack. I'd like to reduce that if 
@@ -16,12 +16,15 @@ possible to a bare minimum.
 which returns an array or a pointer to an array of folder names and which 
 has no direct IMAP counterpart. For example, a 'since' method could be 
 written to implement the SEARCH SINCE syntax. It would be nice if eventually 
-you didn't have to reference RFC2060 to use this module.
+you didn't have to reference RFC2060 to use this module. ** Many of these methods
+have been implemented since this was first written. ** 
 
 - I'd like to see this module certified for more OS's and more IMAP servers. 
 This is (hopefully) just a matter of testing; the code should already be 
 compatible with the IMAP servers that are out there and with any OS that 
-allows the IO::Socket module to work.
+allows the IO::Socket module to work. ** A number of platforms have been added
+to the list of tested platforms since this was first written. Please contact 
+David.Kernen@erols.com if you have any to add.
 
 - Support for older/other versions of IMAP. Currently only RFC2060 is 
 explicitly supported, although thanks to the 'default method' (implemented 
@@ -33,5 +36,5 @@ addresses some of this issue.)
 - Support for other authentication mechanisms, such as NTLM. (NOTE: Ditto 
 above in re the recent AUTHENTICATE method.)
 
-- Better support for the UID Imap Client command.
+- Better support for the UID Imap Client command. *** DONE ***
 

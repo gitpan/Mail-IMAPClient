@@ -17,10 +17,10 @@ but I hope to incorporate more thorough testing in a future version. You should 
 try it and let me know if your tests fail. 
 
 Version 1.0 changed the installation script so that it reuses the parameter file for 
-test.pl if it finds one. Installation can be run in the background if the .test file 
+test.pl if it finds one. Installation can be run in the background if the test.txt file 
 exists. Touching it is good enough to prevent prompts; having a correctly formatted 
-version (as shown in .test_template) is even better, as it will allow you to do a 
-thorough 'make test'. Invalid data in .test (either from precreating it or from 
+version (as shown in test_template.txt) is even better, as it will allow you to do a 
+thorough 'make test'. Invalid data in test.txt (either from precreating it or from 
 responding inaccurately to prompts) will cause 'make test' to report 'not ok' results 
 but won't break anything important (like the IMAPClient.pm file, or your car).
 
@@ -29,12 +29,20 @@ perl -I./blib/lib t/basic.t from the installation dir will pinpoint the failing 
 Better yet, update t/basic.t to change Debug => 0 to Debug => 1 and run it again. E-mail
 me the results.
 
-If you don't have a .test file in your installation directory then you will have to 
-answer at least one prompt. If you do have a .test file, and you run 'make clean', then 
-you won't have a .test file anymore, so take precautions. 
+If you don't have a test.txt file in your installation directory then you will have to 
+answer at least one prompt. If you do have a test.txt file, and you run 'make clean', then 
+you won't have a test.txt file anymore, so take precautions. 
 
-For examples, check out the examples subdirectory. If you have better examples then why
-haven't you e-mailed them to me?
+If, when replying to the "perl Makefile.PL" prompts, you supply server, id, and password 
+credentials for an id that has a ridiculously huge number of folders and subfolders then 
+the 'make test' may run approximately forever. Next time try an id with less stuff. 
+
+For examples on using Mail::IMAPClient, check out the examples subdirectory. If you have 
+better examples, then why haven't you e-mailed them to me? Also, I totally recommend that you
+have a copy of RFC2060 handy when using this module, since the documentation for this module
+is meant to compliment, not replace, RFC2060. In fact, I am so convinced that you'll need the
+RFC that I've included a copy of it in the distribution, under the "docs/" subdirectory. It's
+a smashing good read so have at it.
 
 Now go and write IMAP clients.
 

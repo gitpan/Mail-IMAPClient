@@ -18,9 +18,9 @@ B<build_ldif.pl> requires B<MIME::Lite>.
 
 =head1 SYNTAX
 
-b<build_ldif.pl> I<-h>
+B<build_ldif.pl> I<-h>
 
-b<build_ldif.pl> I<-s servername -u username -p password -f folder [ -d ]>
+B<build_ldif.pl> I<-s servername -u username -p password -f folder [ -d ]>
 
 =over 4
 
@@ -157,8 +157,12 @@ $imap->append($opt_f, $msg->as_string) unless $opt_n;
 print Dumper($imap) if $opt_d;
 $imap->logout;
 
-# $Id: build_ldif.pl,v 19991216.7 2000/02/21 16:16:10 dkernen Exp $
+# $Id: build_ldif.pl,v 19991216.8 2000/03/02 19:57:13 dkernen Exp $
 # $Log: build_ldif.pl,v $
+# Revision 19991216.8  2000/03/02 19:57:13  dkernen
+#
+# Modified Files: build_ldif.pl -- to support new option to all "To:" and "Cc:" to be included in ldif file
+#
 # Revision 19991216.7  2000/02/21 16:16:10  dkernen
 #
 # Modified Files: build_ldif.pl  -- to allow for "To:" and "Cc:" header handling and

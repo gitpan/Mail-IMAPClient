@@ -1,10 +1,9 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.7 2000/01/12 18:58:05 dkernen Exp $
+# $Id: basic.t,v 19991216.9 2000/03/10 16:04:39 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
-# (It may become useful if the test is moved to ./t subdirectory.)
 
 END {print "not ok 1\n" unless $main::loaded;}
 use Mail::IMAPClient;
@@ -265,7 +264,7 @@ BEGIN {
 		}
 	};
 
-	if ( -f "./.test" ) { 
+	if ( -f "./test.txt" ) { 
 		print "1..${\(scalar @tests + 6)}\n";  # update here if adding test to existing sub
 	} else {		
 		print "1..1\n"; 	
@@ -275,9 +274,9 @@ BEGIN {
 	print "ok 1\n";
 	$| = 1; 
 
-	unless ( -f "./.test" ) { exit;}
+	unless ( -f "./test.txt" ) { exit;}
 
-	open TST,"./.test" or exit;
+	open TST,"./test.txt" or exit;
 	while (defined(my $l = <TST>)) {
 		my($p,$v)=split(/=/,$l);
 		chomp $v if $v;
@@ -318,6 +317,22 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.9  2000/03/10 16:04:39  dkernen
+#
+# Renamed .test file to test.txt to support weird platforms that don't support filenames
+# beginning with a dot.
+#
+# Modified Files: Changes INSTALL MANIFEST Makefile Makefile.PL
+#
+# Added Files: test.txt test_template.txt
+#
+# Removed Files: .test .test_template Makefile.old
+#
+# Revision 19991216.8  2000/03/02 19:59:15  dkernen
+#
+# Modified Files: build_ldif.pl -- to support new option to all "To:" and "Cc:" to be included in ldif file
+# Modified Files: basic.t -- to work better with UW IMAP server
+#
 # Revision 19991216.7  2000/01/12 18:58:05  dkernen
 # *** empty log message ***
 #
