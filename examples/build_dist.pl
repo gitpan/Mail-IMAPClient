@@ -1,4 +1,4 @@
-#!/home/dkernen/usr/local/bin/perl
+#!/usr/local/bin/perl
 
 use Mail::IMAPClient;
 
@@ -106,3 +106,6 @@ EOMSG
 $imap->append($opt_f,$append) or warn "Couldn't append the message.";
 
 $imap->logout;
+
+# $Id$
+# $Log$

@@ -230,3 +230,5 @@ return 		sprintf							(
 			$date[0]					)
 									;
 									}
+# $Id$
+# $Log$

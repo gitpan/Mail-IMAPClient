@@ -118,3 +118,6 @@ $msg->attach(	Type     =>'text/ldif',
 print $text;
 $imap->append($opt_f, $msg->as_string);
 $imap->logout;
+
+# $Id$
+# $Log$

@@ -1,5 +1,28 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.06
+-----------------------
+Changed folders method so that it correctly handles mail folders whose names start and end
+with quotes.
+
+Changed append method so that it returns the uid of the newly appended message if
+successful. Since the uid is a "true" value this should not affect the behavior of
+existing scripts, although it may enhance the behavior of new scripts ;-)
+
+Fixed bug in parse_headers that could cause script to die if there were no headers of
+the type requested and if there was a space on the blank line returned from FETCH.
+(Some blank lines are blanker than others...)
+
+Added the "flags" method, which returns an array (or array reference if called in scalar
+context) containing the flags that have been set for the message whose sequence number has
+been provided as the argument to the method. 
+
+Added the "message_string" method, which accepts a message sequence number as an argument and
+returns the contents of the message (including RFC822 headers) as a single string.
+
+Added the "body_string" method, which accepts a message sequence number as an argument and
+returns the contents of the message (not including RFC822 headers) as a single string.
+
 Changes in version 1.05
 -----------------------
 
@@ -148,3 +171,5 @@ session) are available.
 Changes in version 0.09  
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
+
+# $Id$

@@ -6,7 +6,7 @@
 # DESC: Reads a users IMAP folders, and converts them to mbox
 #       Good for an interim switch-over from say, Exchange to Cyrus IMAP.
 
-# $Header: /home/cvs/dev/scripts/imap_to_mbox.pl,v 1.5 1999/11/01 02:46:42 tstromberg Exp $
+# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 1.2 1999/11/22 20:22:15 dkernen Exp $
 
 # TODO:
 # ----- 
@@ -116,4 +116,7 @@ sub write_folder {
 	close(mbox);
 	print("\n");
 }
+
+# $Id$ 
+# $Log$
 

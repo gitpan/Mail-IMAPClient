@@ -20,6 +20,7 @@ my $test = 1;
 my %parms;
 my $imap;
 my @tests;
+my $uid;
 
 BEGIN { 
 	my $target; my $sep;
@@ -121,7 +122,7 @@ BEGIN {
 
 
 	push @tests, sub {
-		if ( eval { $imap->append("$target",&testmsg)} ) {
+		if ( eval { $uid = $imap->append("$target",&testmsg)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -136,6 +137,21 @@ BEGIN {
 		}
 	};
 
+	push @tests, sub {
+		my $m1 ; my $m2 = &testmsg;
+		if ( eval { $m1 = $imap->message_string($uid) } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+		$m1 =~ s/\r//g or warn "didn't work";
+		if ( $m1 eq $m2) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+	
 	push @tests, sub {
 		my @res;
 		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
@@ -204,7 +220,7 @@ BEGIN {
 	};
 
 	if ( -f "./.test" ) { 
-		print "1..${\(scalar @tests + 3)}\n"; 
+		print "1..${\(scalar @tests + 4)}\n"; 
 	} else {		
 		print "1..1\n"; 	
 	}	

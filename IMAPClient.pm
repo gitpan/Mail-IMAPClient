@@ -1,7 +1,8 @@
 package Mail::IMAPClient;
+# $Id: IMAPClient.pm,v 1.9 1999/11/23 17:34:31 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.05';
-$Mail::IMAPClient::VERSION = '1.05';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.06';
+$Mail::IMAPClient::VERSION = '1.06';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -97,7 +98,7 @@ sub new {
 			$self->$k($v);
 		}
 	}	
-	$self->Clear(5) unless exists $self->{Clear};
+	$self->Clear(5) unless exists $self->{'Clear'};
 	return $self->connect if $self->Server;
 	return $self;
 }
@@ -122,6 +123,21 @@ sub connect {
 		return undef;
 	}
 	$self->Socket($sock);
+	my ($code, $output);
+        $output = "";
+
+        until ( ($code) = $output =~ /^\*\s+(OK|BAD|NO)/i ) {
+
+                $output = $self->_read_line;
+                for my $o (split(/\r?\n/,$output)) {
+                        $self->_record(0,"$o\r\n");
+                }
+                if ($output =~ /^\*\s+(BYE|NO)/) {
+                        $self->State(Unconnected);
+                        return undef ;
+                }
+        }
+
 	$self->State(Connected);
 	if ($self->User and $self->Password) {
 		return $self->login ;
@@ -187,7 +203,33 @@ sub select {
 	}
 }
 
+sub flags {
+	my $self = shift;
+	my $msg  = shift;
+	$self->fetch($msg,"FLAGS");
+	my $line = ($self->Results)[-2];
+        my($flags) = $line =~ /FLAGS\s*\(([^)]*)\)/;
+        my @flags = split(/\s+/,$flags);
+	return wantarray ? @flags : \@flags ;
+}
 
+sub message_string {
+	my $self = shift;
+	my $msg  = shift;
+	my @head = $self->fetch($msg,"RFC822.HEADER");
+	my @torso = $self->fetch($msg,"RFC822.TEXT");
+	shift @head and pop @head and pop @head;
+	shift @torso and pop @torso and pop @torso;
+	return join("",@head) . join("",@torso);
+}
+
+sub body_string {
+	my $self = shift;
+	my $msg  = shift;
+	my @torso = $self->fetch($msg,"RFC822.TEXT");
+	shift @torso and pop @torso and pop @torso;
+	return join("",@torso);
+}
 
 sub examine {
 	my $self = shift;
@@ -352,7 +394,7 @@ sub folders {
 	for (my $m = 0; $m < scalar(@$list); $m++ ) {
 	
 		if ($list->[$m]  =~ s/(\{\d+\})\r\n$// ) {
-			$list->[$m] .= $list->[$m+1];
+			$list->[$m] .= '\FOLDER LITERAL::' . $list->[$m+1];
 			$list->[$m+1] = "";	
 		}
 			
@@ -367,7 +409,7 @@ sub folders {
 
         } 
 
-        my @fixed;
+        for my $f (@folders) { $f =~ s/^\\FOLDER LITERAL:://;}
 
         $self->{Folders} = \@folders;
 
@@ -443,20 +485,23 @@ sub parse_headers {
 	my @raw=$self->fetch(	$string	) or return undef;
 	
 	my $h = {};
-	for my $header (@raw) {
-		next if $header =~ /^\*/;
-		next if $header =~ /^$/;
-		# ( for vi
-		last if $header =~ /^\)/;	
-		chomp $header;
-		$header =~ s/\r$//;	
-		if ($header =~ s/^(\S+): //) { 
-			$field = $1 ;
-			push @{$h->{$field}} , $header;
-		} else {
-			$h->{$field}[-1] .= $header;
-		}	
-	}
+
+        for my $header (@raw) {
+                next if $header =~ /^\*/;
+                next if $header =~ /^\s+$/;
+                # ( for vi
+                last if $header =~ /^\)/;
+                my $hdr = $header;
+                chomp $hdr;
+                $hdr =~ s/\r$//;   
+                if ($hdr =~ s/^(\S+): //) { 
+                        $field = $1 ;
+                        push @{$h->{$field}} , $hdr ;
+                } else {
+                        $h->{$field}[-1] .= $hdr if ref($h->{$field}) eq 'ARRAY';
+                }
+        }
+
 	return $h;
 }
 
@@ -688,9 +733,13 @@ sub append {
                         return undef ;
                 }
         }
+	if ($code !~ /^OK/) {
+		return undef;
+	}
 
-        return $code =~ /^OK/ ? $self : undef ;
+	my($uid) = $output =~ m#\s+(\d+)\]#;
 
+        return defined($uid) ? $uid : $self;
 }
 
 
@@ -1087,6 +1136,14 @@ appended if neccessary.
 
 =cut
 
+=item body_string
+
+The B<body_string> method accepts a message sequence number as an argument a returns the message
+body as a string. The returned value contains the entire message in one scalar variable, without 
+the message headers.
+
+=cut
+
 =item capability
 
 The B<capability> method returns an array of capabilities as returned by the CAPABILITY IMAP 
@@ -1180,6 +1237,15 @@ FETCH IMAP client command. If no arguments are supplied then B<fetch> does a FET
 
 =cut
 
+=item flags
+
+The B<flags> method implements the FETCH IMAP client command to list a single message's flags.
+It accepts one argument, a message sequence number, and returns an array (or a reference to  
+an array, if called in scalar context) listing the flags that have been set. Flag names are 
+provided with leading backslashes, if any. 
+
+=cut
+
 =item folders
 
 The B<folders> method returns an array listing the available folders. It will only be 
@@ -1245,9 +1311,17 @@ a session later in the program.
 
 =item message_count
 
-The message_count method accepts the name of a folder as an argument and returns the number
+The B<message_count> method accepts the name of a folder as an argument and returns the number
 of messages in that folder. Internally, it invokes the B<status> method (see above) and 
 parses out the results to obtain the number of messages. 
+
+=cut
+
+=item message_string
+
+The B<message_string> method accepts a message sequence number as an argument a returns the message
+as a string. The returned value contains the entire message in one scalar variable, including the
+message headers.
 
 =cut
 
