@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$Mail::IMAPClient::VERSION = '.99';
-$Mail::IMAPClient::VERSION = '.99';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.00';
+$Mail::IMAPClient::VERSION = '1.00';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -100,7 +100,7 @@ sub new {
 		}
 	}	
 	$self->Clear(5) unless $self->Clear;
-	$self->connect if $self->Server;
+	return $self->connect if $self->Server;
 	return $self;
 }
 
@@ -750,6 +750,71 @@ This provides a record of the entire conversation, including
 client command strings and server responses, and is a wonderful debugging tool as well as
 a useful source of raw data for custom parsing.
 
+=head2 Class Methods
+
+There are a couple of methods that can be invoked as class methods. Generally they can be 
+invoked as an object method as well, as a convenience to the programmer. (That is, as a 
+convenience to the programmer who wrote this module, as well as the programmers using it. 
+It's easier I<not> to enforce a class method's classiness.) Note that if the B<new> method 
+is called as an object method, the object returned is identical to what have would been 
+returned if B<new> had been called as a class method. It doesn't give you a copy of the original 
+object or anything like that.
+
+=over 4
+
+=item new
+
+The B<new> method creates a new instance of an B<IMAPClient> object. If the I<Server> parameter
+is passed as an argument to B<new>, then B<new> will implicitly call the B<connect> method. If
+the I<Server> parameter is not supplied then the B<IMAPClient> object is created in the 
+I<Unconnected> state.
+
+=back
+
+=cut
+
+=item Unconnected
+
+returns a value equal to the numerical value associated with an object in the B<Unconnected> 
+state.
+
+
+=item Connected
+
+returns a value equal to the numerical value associated with an object in the B<Connected> 
+state.
+
+
+=item Authenticated
+
+returns a value equal to the numerical value associated with an object in the B<Authenticated> 
+state.
+
+=item Selected
+
+returns a value equal to the numerical value associated with an object in the B<Selected> 
+state.
+
+=item Strip_cr
+
+The <Strip_cr> method strips carriage returns from IMAP client command output. Although 
+RFC2060 specifies that lines in an IMAP conversation end with <CR><LF>, it is often cumbersome
+to have the carriage returns in the returned data. This method accepts a line of text as 
+an argument, and returns that line with all carriage returns removed. If the input argument
+had no carriage returns then it is returned unchanged. 
+
+B<Strip_cr> does not remove new line characters.
+
+=cut
+
+=item Rfc822_date
+
+The B<Rfc822_date> method accepts one input argument, a number of seconds since
+the epoch date. It returns an RFC822 compliant date string for that date
+(without the 'Date:' prefix). Useful for putting dates in messagestrings before
+calling <append>.
+
+=cut
 
 =head2 Parameters
 
@@ -854,6 +919,9 @@ to the method, or later by calling the parameter's eponymous object method.
 =cut
 
 =head2 Object Methods
+
+Object methods must be invoked against objects created via the B<new> method. They cannot be
+invoked as class methods, which is why they are "object methods" and not "class methods". 
 
 There are basically two types of object methods--those that participate in the IMAP session's
 conversation (i.e. they issue IMAP client commands) and those that do not. Methods that do
@@ -1052,15 +1120,6 @@ If the target folder does not exist then it will be created.
 
 =cut
 
-=item new
-
-The B<new> method creates a new instance of an B<IMAPClient> object. If the I<Server> parameter
-is passed as an argument to B<new>, then B<new> will implicitly call the B<connect> method. If
-the I<Server> parameter is not supplied then the B<IMAPClient> object is created in the 
-I<Unconnected> state.
-
-=cut
-
 =item recent
 
 The B<recent> method performs an IMAP SEARCH RECENT search against the selected folder and returns
@@ -1171,10 +1230,10 @@ IMAP command string.
 
 =item Status Methods
 
-There are several methods that return the status of the object. They can be
+There are several object methods that return the status of the object. They can be
 used at any time to check the status of an B<IMAPClient> object, but are particularly useful 
 for determining the cause of failure when a connection and login are attempted as part of
-a single B<new> method invocationl. The status methods are:
+a single B<new> method invocation. The status methods are:
 
 =over 8
 
@@ -1240,58 +1299,6 @@ array reference rather than an array.
 =back
 
 =cut
-
-=head2 Class Methods
-
-The following class methods can also be called as object methods:
-
-=over 4
-
-=item Unconnected
-
-returns a value equal to the numerical value associated with an object in the B<Unconnected> 
-state.
-
-
-=item Connected
-
-returns a value equal to the numerical value associated with an object in the B<Connected> 
-state.
-
-
-=item Authenticated
-
-returns a value equal to the numerical value associated with an object in the B<Authenticated> 
-state.
-
-=item Selected
-
-returns a value equal to the numerical value associated with an object in the B<Selected> 
-state.
-
-=item Strip_cr
-
-The <Strip_cr> method strips carriage returns from IMAP client command output. Although 
-RFC2060 specifies that lines in an IMAP conversation end with <CR><LF>, it is often cumbersome
-to have the carriage returns in the returned data. This method accepts a line of text as 
-and argument, and returns that line with all carriage returns removed. If the input argument
-had no carriage returns then it is returned unchanged. 
-
-B<Strip_cr> does not remove new line characters.
-
-=cut
-
-=item Rfc822_date
-
-The B<Rfc822_date> method accepts one input argument, a number of seconds since
-the epoch date. It returns an RFC822 compliant date string for that date
-(without the 'Date:' prefix). Useful for putting dates in messagestrings before
-calling <append>.
-
-=cut
-
-=back
-
 
 =head1 AUTHOR
 

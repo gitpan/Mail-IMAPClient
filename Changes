@@ -1,7 +1,19 @@
 Revision history for Perl extension IMAPClient.
 
-0.09  Thu Aug 26 14:10:03 1999
-	- original version; created by h2xs 1.19
+Changes in version 1.0
+----------------------
+Cosmetic changes to documentation
+
+Fixed a bug introduced into the 'folders' method in .99
+
+Changed 'new' method so that it returns undef if an implicit connection or login is 
+attempted but fails. Previous releases returned a Mail::IMAPClient object that was
+not connected or not logged in, depending on what failed. 
+
+Changed installation script so that it reuses the parameter file for test.pl if it 
+finds one. Installation can be run in the background if the .test file exists. Touching
+it is good enough to prevent prompts; having a correctly formatted version (as described
+in .test_template) is even better, as it will allow you to do a thorough 'make test'.
 
 Changes in version .99 
 ----------------------
@@ -33,3 +45,7 @@ even if it's not in conjuction with an IMAP session.
 Added more tests, which will optionally run at 'make test' time, provided all the necessary data
 (like username, hostname, password for testing an IMAP session) are available.
 
+
+Changes in version 0.09  
+-----------------------
+Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19

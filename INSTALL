@@ -13,6 +13,17 @@ The 'make install' will do step 2 ('make') if you haven't done it already. Curre
 is lame (although not as lame as in the last release!) but I hope to incorporate more thorough testing 
 in a future version. You should at least try it and let me know if your tests fail. 
 
+Version 1.0 changed the installation script so that it reuses the parameter file for test.pl if it
+finds one. Installation can be run in the background if the .test file exists. Touching it is good 
+enough to prevent prompts; having a correctly formatted version (as shown in .test_template) 
+is even better, as it will allow you to do a thorough 'make test'. Invalid date in .test (either 
+from precreating it or from responding inaccurately to prompts) will cause 'make test' to report
+'not ok' results but won't break anything important (like the IMAPClient.pm file).
+
+If you don't have a .test file in your installation directory then you will have to answer at 
+least one prompt. If you do have a .test file, and you run 'make clean', then you won't have a
+.test file anymore, so take precautions. 
+
 Now go and write IMAP clients.
 
 Dave Kernen

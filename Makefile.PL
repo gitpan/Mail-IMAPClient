@@ -11,13 +11,14 @@ WriteMakefile(
 &set_test_data;
 
 sub set_test_data {
+	unless (-f "./IMAPClient.pm") { warn "ERROR: not in installation directory\n"; return }
+	return if -f "./.test";
 	print 	"You have the option of running an extended suite of tests during\n",
 		"'make test'. This requires an IMAP server name, user account, and ",
 		"password to test with.","\n","\n",
 		"Do you want to run the extended tests? (n/y) ==> ";
 	my $yes = <>;
 	return unless $yes =~ /^[Yy](?:[Ee]:[Ss]?)?$/ ;
-	unless (-f "./IMAPClient.pm") { warn "ERROR: not in installation directory\n"; return }
 	unless (open TST,">./.test") { warn "ERROR: couldn't open ./.test: $!\n"; return }
 	print "\nPlease provide the hostname of a host running an IMAP server \n",
 		"(or QUIT to skip the extended tests) ==> ";

@@ -6,7 +6,6 @@
 # Change 1..1 below to 1..last_test_to_print .
 # (It may become useful if the test is moved to ./t subdirectory.)
 
-BEGIN { $| = 1; print "1..8\n"; }
 END {print "not ok 1\n" unless $loaded;}
 use IMAPClient;
 $loaded = 1;
@@ -19,18 +18,104 @@ print "ok 1\n";
 # (correspondingly "not ok 13") depending on the success of chunk 13
 # of the test code):
 
-unless ( -f "./.test" ) { exit;}
-
 my $test = 1;
 my %parms;
-open TST,"./.test" or exit;
-while (defined(my $l = <TST>)) {
-	my($p,$v)=split(/=/,$l);
-	chomp $v;
-	$parms{$p}=$v;
+my $imap;
+my @tests;
+
+BEGIN { 
+	$| = 1; 
+
+	unless ( -f "./.test" ) { exit;}
+
+	open TST,"./.test" or exit;
+	while (defined(my $l = <TST>)) {
+		my($p,$v)=split(/=/,$l);
+		chomp $v;
+		$parms{$p}=$v;
+	}
+	close TST;
+
+	push @tests, sub {
+		if ($imap) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( eval { $imap->select('inbox') } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+			print $imap->History,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( eval { $imap->create("IMAPClient_$$") } ) {
+			print "ok ",++$test,"\n";
+		} else {
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( eval { $imap->exists("IMAPClient_$$") } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+
+	push @tests, sub {
+		if ( eval { $imap->append("IMAPClient_$$",&testmsg)} ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( eval { $imap->select("IMAPClient_$$") } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	my @hits = ();
+	push @tests, sub {
+		sleep 3;
+		eval { @hits = $imap->search(qq(SUBJECT "Testing")) } ;
+		if ( scalar(@hits) == 1 ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( $imap->delete_message(@hits) ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( $imap->delete("IMAPClient_$$") ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	print "1..@{[scalar(@tests)+1]}\n"; 
 }
-close TST;
-my $imap ;
+
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -38,72 +123,8 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Debug   => 0,
 ) } ;
-if ($imap) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-}
 
-if ( eval { $imap->select('inbox') } ) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-	print $imap->History,"\n";
-}
-
-if ( eval { $imap->create("IMAPClient_$$") } ) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-}
-
-if ( eval { $imap->exists("IMAPClient_$$") } ) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-}
-
-
-if ( eval { $imap->append("IMAPClient_$$",&testmsg)} ) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-}
-
-if ( eval { $imap->select("IMAPClient_$$") } ) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-}
-
-sleep 3;
-my @hits = ();
-eval { @hits = $imap->search(qq(SUBJECT "Testing")) } ;
-if ( scalar(@hits) == 1 ) {
-	print "ok ",++$test,"\n";
-} else {	
-	print "not ok ",++$test,"\n";
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+for my $test (@tests) { $test->(); }
 
 
 sub testmsg {
