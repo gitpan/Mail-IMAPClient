@@ -1,5 +1,37 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
+Changes in version 2.2.1
+------------------------
+Updated append_string to wrap the date argument in double quotes if the argument was
+provided without quotes. Thanks to Grant Waldram for pointing out that some IMAP 
+servers require this behavior.
+
+Added a new method, selectable, which returns a true value if a folder is selectable.
+
+Documented in this Changes file a change that was actually made for 2.2.0, in which 
+newlines are chomped off of $@ (but not LastError).
+
+Added pointers in the documentation to point to Mark Bush's Authen::NTLM module. This 
+module will allow you to use NTML authentication with Mail::IMAPClient connections.
+Also changed the authenticate method so that it will work with Authen::NTML without
+the update mentioned in NTLM::Authen's README.
+
+Added a second example on using the new migrate method, migrate_mail2.pl. This example
+demonstrates more advanced techniques then the first, such as using the separator method
+to massage folder names and stuff like that.  
+
+Added support for the IMAP THREAD extension. Added Mail::IMAPClient::Thread.pm to support
+this. (This pm file is generated during make from Thread/Thread.grammar.) This new 
+function should be considered experimental. Note also that this extension has nothing
+to do with threaded perl or anything like that. This is still on the TODO list.
+
+Updated the search, sort, and thread methods to set $@ to "" before attempting their
+respective operations so that text in $@ won't be left over from some other error and
+therefore always indicative of an error in search, sort, or thread, respectively.
+
+Made many many tweaks to the documentation, including adding more examples (albeit
+simple ones) and fixing some errors.
+
 Changes in version 2.2.0
 ------------------------
 Fixed some tests so that they are less likely to give false negatives. For example, test
@@ -31,8 +63,6 @@ it was still there. Noticing it was the hard part (none of you guys reported it 
 
 Fixed a bug reported by Jeremy Hinton regarding how the search method handles dates. It was
 screwing it all up but it should be much better now.
-
-Added tests to the testsuite for the new migrate method. (Well, new as of 2.1.5, below.)
 
 Added the get_envelope method which is like the get_bodystructure method except for in ways
 in which it's different. 

@@ -4,6 +4,7 @@ IMAPClient.pm
 BodyStructure/BodyStructure.pm
 BodyStructure/Parse/Parse.pod
 INSTALL
+INSTALL_perl5.80
 MANIFEST
 README
 Makefile.PL
@@ -22,6 +23,7 @@ examples/cyrus_expire.pl
 examples/find_dup_msgs.pl
 examples/imap_to_mbox.pl
 examples/migrate_mbox.pl
+examples/migrate_mail2.pl
 examples/populate_mailbox.pl
 test_template.txt
 sample.perldb
@@ -52,3 +54,10 @@ BodyStructure/Parse/Parse.grammar
 BodyStructure/Parse/t/parse.t
 BodyStructure/Makefile.PL
 BodyStructure/t/bodystructure.t
+docs/draft-crispin-imapv-17.txt
+docs/draft-ietf-imapext-annotate-04.txt
+docs/draft-ietf-imapext-thread-11.txt
+Thread/Thread.pod
+Thread/Thread.grammar
+Thread/Makefile.PL
+Thread/t/thread.t

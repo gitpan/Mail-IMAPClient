@@ -27,17 +27,19 @@ BEGIN {
 	push @tests, sub { $test++ } ; # Dummy test 1
 	push @tests, sub {	# 2
 		if (ref($imap)) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 2
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 
 	push @tests, sub {	# 3
 		if ($sep = $imap->separator) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 3
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 
@@ -47,11 +49,11 @@ BEGIN {
 		if (defined($isparent)) {
 			$target = "INBOX${sep}IMAPClient_$$";
 			$target2 = "INBOX${sep}IMAPClient_2_$$";
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 4
 		} else {	
 			$target = "IMAPClient_$$";
 			$target2 = "IMAPClient_2_$$";
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 4
 		}
 		# print "target is $target\n";
 	};
@@ -59,18 +61,20 @@ BEGIN {
 	
 	push @tests, sub {	# 5
 		if ( eval { $imap->select('inbox') } ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 5
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 			# print $imap->History,"\n";
 		}
 	};
 
 	push @tests, sub {	# 6
 		if ( eval { $imap->create("$target") } ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 6
 		} else {
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 	push @tests, 
@@ -80,39 +84,42 @@ BEGIN {
 	push @tests, sub {	# 7,8,9
 		if (defined($imap->is_parent($target))) {	#7 
 			if ( eval { $imap->create(qq($target${sep}has "quotes")) } ) {
-				print "ok ",++$test,"\n";	
+				print "ok ",++$test,"\n";	# ok 7
 			} else {
                           if ($imap->LastError =~ /NO Invalid.*name/) {
-                                print "ok ",++$test,
+                                print "ok ",++$test,	
 				 " $parms{server} doesn't support quotes in folder names--",
-				 "skipping next 2 tests\n";
-                                print "ok ", ++$test," (skipped)\n";
-                                print "ok ", ++$test," (skipped)\n";
+				 "skipping next 2 tests\n";	# ok 7
+                                print "ok ", ++$test," (skipped)\n"; # ok 8
+                                print "ok ", ++$test," (skipped)\n"; # ok 9
                                 return;
                           } else {
                                 print "not ok ",++$test,"\n";
-                                print "ok ", ++$test," (skipped)\n";
-                                print "ok ", ++$test," (skipped)\n";
+				print STDERR "\nTest $test failed:\n$@\n";
+                                print "ok ", ++$test," (skipped)\n"; # ok 8
+                                print "ok ", ++$test," (skipped)\n"; # ok 9
 				return;
                           }
 
 			}
 			if ( eval { $imap->select(qq($target${sep}has "quotes")) } ) { #8
-				print "ok ",++$test,"\n";
+				print "ok ",++$test,"\n"; # ok 8
 			} else {
 				print "not ok ",++$test,"\n";
+				print STDERR "\nTest $test failed:\n$@\n";
 			}
 			$imap->close;
 			$imap->select('inbox');
 			if ( eval { $imap->delete(qq($target${sep}has "quotes")) } ) { #9
-				print "ok ",++$test,"\n";
+				print "ok ",++$test,"\n"; # ok 9
 			} else {
 				print "not ok ",++$test,"\n";
+				print STDERR "\nTest $test failed:\n$@\n";
 			}
 		} else { 
-			print "ok ",++$test,"\n";
-			print "ok ",++$test,"\n";
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; # ok 7
+			print "ok ",++$test,"\n"; # ok 8
+			print "ok ",++$test,"\n"; # ok 9
 		}
 	};
 
@@ -122,6 +129,7 @@ BEGIN {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 
@@ -130,12 +138,14 @@ BEGIN {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	}, 		sub {	# 12
 		if ( eval { $imap->exists($target2) } ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 			
@@ -144,7 +154,7 @@ BEGIN {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
-			#print STDERR $imap->Results;
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 
@@ -153,6 +163,7 @@ BEGIN {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 	{
@@ -161,29 +172,33 @@ BEGIN {
 	push @tests, sub {	# 15, 16, 17, 18, 19
 		$target = ref($uid) ? ($imap->search("ALL"))[0] : $uid;
 		if ( eval { $size = $imap->size($target) } ) { # 15  test size
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #15
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		} 
  	}, sub {
 		if ( eval { $string = $imap->message_string($target) } ) { # 16  test message_string
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #16
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	}, sub {
 		if ( $size == length($string) ) {	# 17 test size = length of string
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #17
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 	push @tests, sub {
 		eval { $imap->message_to_file($file,$target)};
 		if ( $@ ) {					# 18 test message_to_file success
 			print "not ok ",++$test,"\n";	
+			print STDERR "\nTest $test failed:\n$@\n";
 		} else {
-			print "ok ",++$test,"\n";	
+			print "ok ",++$test,"\n";	#18	
 		}
 	};
 	push @tests, sub {
@@ -191,15 +206,17 @@ BEGIN {
 		eval { $array_ref = $imap->search("HEADER","Message-id","NOT_A_MESSAGE_ID")};
 		if ( $array_ref ) {			# should have returned undef
 			print "not ok ",++$test,"(arrayref=$array_ref)\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		} else {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n";	#19
 		}
 	};
 	push @tests, sub {
 		if ( -s $file == $size ) {			# 20 test message_to_file size
-			print "ok ",++$test,"\n";	#
+			print "ok ",++$test,"\n";	#20
 		} else {
-			print "not ok ",++$test,"\n";	#
+			print "not ok ",++$test,"\n";	#20
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		unlink "$file" or warn "$! unlinking $file\n";
 	};
@@ -208,41 +225,48 @@ BEGIN {
 	push @tests, sub {	# 21, 22, 23, 24, 25 26, 27
 		my @unseen; my @seen;
 		if ( eval { @seen = $imap->seen } ) { # 21	test seen's success
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #21
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		if ( @seen == 1 ) 			{ # 22	test seen's results
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #22
 		} else {
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		
 		if ( eval { $imap->deny_seeing(\@seen) } ) { # 23 test deny_seeing's success
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #23
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		if ( eval { @unseen = $imap->unseen } ) { # 24 test unseen's success
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #24
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 
 		if ( @unseen == 1 ) 		    { # 25 test deny_seeing's and unseen's results
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #25
 		} else {
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		if ( eval { $imap->see(\@seen) } ) { # 26 test see's success
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #26
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		if ( @seen == 1 ) 			{ # 27 test seen's and see's success
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #27
 		} else {
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		eval { $imap->deny_seeing(@seen)  };
 		my $subject;
@@ -250,37 +274,41 @@ BEGIN {
 		eval { $subject = $imap->parse_headers($seen[0],"Subject")->{Subject}[0] };
 		if ( join("",$imap->flags($seen[0])) =~ /\\Seen/i ) { 	# 28 test "Peek = 1"
 			print "not ok ",++$test,"\n";	
+			print STDERR "\nTest $test failed:\n$@\n";
 		} 	else {
-			print "ok ",++$test,"\n";	
+			print "ok ",++$test,"\n";	#28	
 		}
 		eval { $imap->deny_seeing(@seen)  };
 		eval { $imap->Peek(0) };
 		eval { $subject = $imap->parse_headers($seen[0],"Subject")->{Subject}[0] };
 		if ( join("",$imap->flags($seen[0])) =~ /\\Seen/i ) { 	# 29 test "Peek = 0"
-			print "ok ",++$test,"\n";	
+			print "ok ",++$test,"\n";	#29	
 		}	else {
 			print "not ok ",++$test,"\n";	
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 		eval { $imap->deny_seeing(@seen)  };
 		eval { $imap->Peek(undef) };
 		eval { $subject = $imap->parse_headers($seen[0],"Subject")->{Subject}[0] };
 		if ( join("",$imap->flags($seen[0])) =~ /\\Seen/i ) { 	# 30 test "Peek = undef"
 			print "not ok ",++$test,"\n";	
+			print STDERR "\nTest $test failed:\n$@\n";
 		}	else {
-			print "ok ",++$test,"\n";	
+			print "ok ",++$test,"\n";	#30
 		}
 		
 		
 	};
-	# Add dummy tests to come up to 29 test routines:
+	# Add dummy tests to come up to right number of test routines:
 	push @tests, 	sub { 22 }, sub { 23 } , sub { 24 }, sub { 25 }, sub { 26 }, sub {27},
 			sub {28}, sub {29}, sub {30};
 
 	push @tests, sub {	# 31
 		if ( eval { my $uid2 = $imap->copy($target2,1)} ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #31 
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 
@@ -288,9 +316,10 @@ BEGIN {
 	push @tests, sub {	# 32
 		my @res;
 		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #32
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	};
 
@@ -298,12 +327,13 @@ BEGIN {
 		my $h;
 		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
 			and $h->{Subject}[0] =~ /^Testing from pid/o } ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; 	#33
 		} else {	
 			 use Data::Dumper;
 			print Dumper($h);
 			print "$h->{Subject}[0] \n";
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		 	print $imap->Results;
 		}
 	};
@@ -313,9 +343,10 @@ BEGIN {
 		$imap->select("$target");
 		eval { @hits = $imap->search('SUBJECT','Testing') } ;
 		if ( scalar(@hits) == 1 ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #34
 		} else {	
-			print "not ok ",++$test,"\n";
+			print "not ok ",++$test,"\n"; #34
+			print STDERR "\nTest $test failed:\n$@\n";
 			print "Found ",scalar(@hits), 
 			  " hits (",join(", ",@hits),")-- expected 2\n";
 		}
@@ -323,20 +354,22 @@ BEGIN {
 
 	push @tests, sub {	# 35, 36
 		if ( $imap->delete_message(@hits) ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #35
 			my $flaghash = $imap->flags(\@hits);
 			my $flagflag = 0;
 			foreach my $v ( values %$flaghash ) { 
 				foreach my $f (@$v) { $flagflag++ if $f =~ /\\Deleted/}
 			}
 			if ( $flagflag == scalar(@hits) ) {
-				print "ok ", ++$test,"\n";
+				print "ok ", ++$test,"\n"; #36
 			} else {
 				print "not ok ", ++$test,"\n";
+				print STDERR "\nTest $test failed:\n$@\n";
 			}
 		} else {	
-			print "not ok ",++$test,"\n";
-			print "not ok ",++$test,"\n";
+			print "not ok ",++$test,"\n"; #35
+			print STDERR "\nTest $test failed:\n$@\n";
+			print "not ok ",++$test,"\n"; #36
 		}
 	}, sub { return "Dummy test 35"} ;
 
@@ -344,41 +377,45 @@ BEGIN {
 	  eval { 
 		my @nohits = $imap->search(qq(SUBJECT "Productioning")) ;
 		unless ( scalar(@nohits)  ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #37
 		} else {	
 			print "not ok ",++$test," (",scalar(@nohits),")\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		}
 	  };
 	};
 
 	push @tests, sub {	# 38, 39
 		if ( $imap->restore_message(@hits) ) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #38
 			my $flaghash = $imap->flags(\@hits);
 			my $flagflag = scalar(@hits);
 			foreach my $v ( values %$flaghash ) { 
 				foreach my $f (@$v) { $flagflag-- if $f =~ /\\Deleted/}
 			}
 			if ( $flagflag == scalar(@hits) ) {
-				print "ok ", ++$test,"\n";
+				print "ok ", ++$test,"\n"; #39
 			} else {
 				print "not ok ", ++$test,"\n";
+				print STDERR "\nTest $test failed:\n$@\n";
 			}
 		} else {	
-			print "not ok ",++$test,"\n";
-			print "not ok ",++$test,"\n";
+			print "not ok ",++$test,"\n"; #38
+			print STDERR "\nTest $test failed:\n$@\n";
+			print "not ok ",++$test,"\n"; #39
 		}
-	}, sub { $imap->delete_message(@hits) } ;	# dummy 37
+	}, sub { $imap->delete_message(@hits) } ;	# dummy 39
 	push @tests, sub {	# 40
 		$imap->select($target2);
 		if ( 	$imap->delete_message($imap->search("ALL")) 
 			and $imap->close and 
 			$imap->delete($target2) 
 		) {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #40
 			
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 			print $imap->Report;
 		}
 	};
@@ -395,8 +432,9 @@ BEGIN {
 		if ($@ ) {
 			$@ =~ s/\r\n$//;
 			print "not ok ",++$test, " ($@)\n";
+			print STDERR "\nTest $test failed:\n$@\n";
 		} else {
-			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n"; #41
 		}
 	};
 	# Test migrate method
@@ -434,25 +472,28 @@ BEGIN {
 	 if ( $@ ) {
 			$@=~s/\r\n$//;
 			print "not ok ",++$test," ($@)\n";	
+			print STDERR "\nTest $test failed:\n$@\n";
 	 } else {
-			print "ok ",++$test,"\n";	
+			print "ok ",++$test,"\n";	#42
 	 }
 	},	# 43
 	sub {
 	 my($total_bytes1,$total_bytes2) ;
 	 eval {
-		for ($imap->search("ALL")) { my $s = $imap->size($_); $total_bytes1 += $s; print "Size of msg $_ is $s\n"};
-		for ( $im2->search("ALL")) { my $s =  $im2->size($_); $total_bytes2 += $s; print "Size of msg $_ is $s\n"};
+		for ($imap->search("ALL")) { my $s = $imap->size($_); $total_bytes1 += $s; print "Size of msg $_ is $s\n" if $ARGV[0]};
+		for ( $im2->search("ALL")) { my $s =  $im2->size($_); $total_bytes2 += $s; print "Size of msg $_ is $s\n" if $ARGV[0]};
 	 };
 	 for ($total_bytes1,$total_bytes2) { $_||=0};
 	 if ($@) { 
 		$@=~s/\r\n$//;
 		print "not ok ",++$test," ($@)\n";
+		print STDERR "\nTest $test failed:\n$@\n";
 	 } elsif ( $total_bytes1 != $total_bytes2 ) {
 		print "not ok ",++$test," (source has $total_bytes1 bytes and ",
 			"target has $total_bytes2)\n";
+		print STDERR "\nTest $test failed:\n$@\n";
 	 } else {
-		print "ok ",++$test,"\n";
+		print "ok ",++$test,"\n"; #43
 		$im2->select($migtarget);
 		$im2->delete_message(@{$im2->messages}) if $im2->message_count;
 		$im2->close($migtarget);
@@ -462,33 +503,27 @@ BEGIN {
 	};	# end of the anonysub and push	
 	} # end of migrate method tests' scope
 
-	push @tests, sub {	# 44, 45
+	push @tests, sub {	# 44
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
-			print "ok ",++$test,"\n";
+
+			print "ok ",++$test,"\n"; #44
 			$imap->close;
 			$imap->select("${target}NEW") ;
 			$imap->delete_message(@{$imap->messages}) if $imap->message_count;
-			$imap->close("${target}NEW") ;
-			
-			if ( $imap->delete("${target}NEW") ) {
-			#if ( 1 ) {
-				print "ok ",++$test,"\n";
-			} else {	
-				print "not ok ",++$test,"\n";
-			}
-		} else {	
-			print "not ok ",++$test,"\n";
 			$imap->close;
-			if ( $imap->delete("$target") ) {
-			#if ( 1 ) {
-				print "ok ",++$test,"\n";
-			} else {	
-				print "not ok ",++$test,"\n";
-			}
+			$imap->delete("${target}NEW") ;
+			
+		} else {	
+
+			print "not ok ",++$test,"\n";
+			print STDERR "\nTest $test failed:\n$@\n";
+			$imap->delete_message(@{$imap->messages}) if $imap->message_count;
+			$imap->close;
+			$imap->delete("$target") ;
 		}
 	}, 
-	sub { "Dummy 45" } ,
+		# sub { "commented out #45" } ,
 	; 	
 
 	if ( -f "./test.txt" ) { 
