@@ -1,4 +1,54 @@
 Revision History for Perl extension Mail::IMAPClient.
+Changes in version 2.1.4
+------------------------
+Added Paul Warren's bugfix to the sort method.
+
+Added Mike Halderman's bugfix for the get_bodystructure method.
+
+Fixed a localization problem reported by Ivo Panecek. Because of this fix,
+the Errno.pm file is now a prerequisite to this module. This way I can just
+test to see if the error is an "EAGAIN" error (as defined in sys/errno.h and thus
+Errno.pm) instead of awkwardly checking the string value of $!. 
+
+I also renamed the MaxTempErrors parameter to Maxtemperrors in response the same 
+bug report.  Added a "MaxTempErrors" accessor method that will set and return 
+Maxtemperrors for backwards compatibility. Also, the number of temporary errors 
+gets reset after each successful I/O, so that the socket i/o operation fails only if
+you if your temporary I/O errors happen more than "Maxtemperrors" times in a row.
+The old behavior was to continue incrementing the count of temporary errors until
+either the entire message was written or until a total of Maxtemperrors had occurred,
+regardless of how many intervening successful syswrites occurred. This was a bug, but 
+Ivo politely suggested the new behavior as an enhancement. ;-) Also, you can now
+specify "UNLIMITED" as the Maxtemperrors, in which case these errors will be ignored.
+And the default for Maxtemperrors is now 100, but I'm open to any feedback you may
+have in this regard. 
+
+I also fixed the operator precedence problem that was reported by many folks in that
+very same part of the code. (As you may have guessed, that code was new in the last
+version!)
+
+One of the people who reported the precedence problem was Jules Agee, who also submitted
+a patch that may in the end provide an optimal solution to handling EAGAIN errors. 
+Unfortunately I have not had time to retrofit his patch into the current version of the
+module. But if I can manage to do this soon and it tests well I'll include it in the next
+release, in which case the Maxtemperrors parameter will be of interest only to historians.
+
+I also received a patch from John Ello that adds support for Netscape's proprietary PROXYAUTH 
+IMAP client command. I haven't included that support in this release because you can already
+use the proxyauth method. It's one of those famous "default" methods that, despite their 
+fame and my documentation, nobody seems to know about. But you can always say 
+"$imap->proxyauth($uid)", for example, providing that $imap and $uid are already what they're
+supposed to be. (I've been doing this myself for years.)
+
+However, John's patch does provide a cleaner interface (it remembers who you are as well as who
+you were, for example) so I may include it later as part of a separate module that extends 
+Mail::IMAPClient. This would also give me an excuse for providing the framework for plugging in
+Administrative methods that are proprietary to other imap servers, so if you have a technique for
+acquiring administrative access to your users' mailboxes (besides proxyauth) please let me know what
+it is. Perhaps we'll get something cool out of it, like a document on how to write administrative
+scripts for various platforms and a suite of supporting methods for each. 
+
+
 
 Changes in version 2.1.3
 ------------------------

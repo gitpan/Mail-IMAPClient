@@ -2,8 +2,8 @@ package Mail::IMAPClient;
 
 # $Id: IMAPClient.pm,v 20001010.9 2001/02/07 20:19:50 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.1.3';
-$Mail::IMAPClient::VERSION = '2.1.3';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.1.4';
+$Mail::IMAPClient::VERSION = '2.1.4';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -12,6 +12,7 @@ use IO::Select();
 use IO::File();
 use Carp qw(carp);
 use Data::Dumper;
+use Errno qw/EAGAIN/;
 
 
 #print "Found Fcntl in $INC{'Fcntl.pm'}\n";
@@ -38,6 +39,11 @@ sub _debug {
 	print $fh @_;
 }
 
+sub MaxTempErrors {
+	my $self = shift;
+	$_[0]->{Maxtemperrors} = $_[1] if defined($_[1]);
+	return $_[0]->{Maxtemperrors};
+}
 
 # This function is used by the accessor methods
 #
@@ -88,7 +94,7 @@ BEGIN {
  for my $datum (
 		qw( 	State Port Server Folder Fast_io Peek
 			User Password Socket Timeout Buffer
-			Debug LastError Count Uid Debug_fh MaxTempErrors
+			Debug LastError Count Uid Debug_fh Maxtemperrors
 		)
  ) {
         no strict 'refs';
@@ -183,7 +189,6 @@ sub new {
 	while (scalar(@_)) {
 		$self->{ucfirst(lc($_[0]))} = $_[1]; shift, shift;
 	}
-
 	bless $self, ref($class)||$class;
 
 	$self->State(Unconnected);
@@ -303,7 +308,6 @@ sub sort {
     my $self = shift;
     my @hits;
     my @a = @_;
-    $a[-1] = $self->Massage($a[-1]) if scalar(@a) > 1; # massage
     $a[0] = "($a[0])" unless $a[0] =~ /^\(.*\)$/;      # wrap criteria in parens
     $self->_imap_command( ( $self->Uid ? "UID " : "" ) . "SORT ". join(' ',@a))
          or return wantarray ? @hits : \@hits ;
@@ -493,7 +497,7 @@ sub message_string {
 	my $string = "";
 
 	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
-              $string .= $result->[DATA] if $self->_is_literal($result) ;
+              $string .= $result->[DATA] if defined($result) and $self->_is_literal($result) ;
 	}      
 	# BUG? should probably return undef if length != expected
 	if ( length($string) != $expected_size ) { 
@@ -529,7 +533,7 @@ sub bodypart_string {
 	my $string = "";
 
 	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
-              $string .= $result->[DATA] if $self->_is_literal($result) ;
+              $string .= $result->[DATA] if defined($result) and $self->_is_literal($result) ;
 	}      
 	return $string;
 }
@@ -611,6 +615,26 @@ sub message_uid {
 	return $uid;
 }
 
+sub migrate {
+	my($self,$peer,$msgs,$folder) = @_;
+	unless ( eval { $peer->isConnected } ) {
+		$self->LastError("Invalid or unconnected " . ref($self) . " object used as target for migrate.");
+		return undef;
+	}
+	unless ($folder) {
+		$folder = $self->Folder;
+		$peer->exists($folder) 		or 
+			$peer->create($folder) 	or 
+			(
+				$self->LastError("Unable to created folder $folder on target mailbox: ".
+					"$peer->LastError") and 
+				return undef 
+			) ;
+	}			
+	if ( $msgs =~ /^all$/ ) { $msgs = $self->search("ALL") }
+	foreach my $mid ( ref($msgs) ? @$msgs : $msgs ) {
+	}
+}
 #sub old_body_string {
 #     my $self = shift;
 #     my $msg  = shift;
@@ -628,7 +652,7 @@ sub body_string {
 
         my $string = "";
     	foreach my $result  (@{$ref}) 	{ 
-                $string .= $result->[DATA] if $self->_is_literal($result) ;
+                $string .= $result->[DATA] if defined($result) and $self->_is_literal($result) ;
         }
 	return $string if $string;
 
@@ -643,7 +667,18 @@ sub body_string {
 			$self->LastError("Unable to parse server response from " . $self->LastIMAPCommand );
 			return undef ;
 	}
-	my $popped ; $popped = pop @$ref until $popped =~ /\)\x0d\x0a$/ or not grep(/\)\x0d\x0a$/,@$ref);
+	my $popped ; $popped = pop @$ref until 	
+			( 
+				( 	defined($popped) and 
+					# (-:	Smile!
+					$popped =~ /\)\x0d\x0a$/ 
+				) 	or
+					not grep(
+						# (-:	Smile again!
+						/\)\x0d\x0a$/,
+						@$ref
+					)
+			);
 
         if      ($head =~ /BODY\[TEXT\]\s*$/i )     {       # Next line is a literal
                         $string .= shift @$ref while scalar(@$ref);
@@ -873,8 +908,10 @@ sub _send_line {
 					length($string)-$total, 
 					$total
 					);
-		if ($! =~ /Resource temporarily unavailable/i ) {
-			if ( $temperrs++ > $self->{MaxTempErrors}||10 ) {
+		if ($! == &EAGAIN ) {
+			if ( 	$self->{Maxtemperrors} !~ /^unlimited/i 	and
+				$temperrs++ > ( $self->{Maxtemperrors}||10) 
+			) {
 				$self->LastError("Persistent '${!}' errors\n");
 				$self->_debug("Persistent '${!}' errors\n");
 				return undef;
@@ -885,7 +922,10 @@ sub _send_line {
 			return undef unless(defined $ret);	 
 		}
 		
-		$total += $ret;
+		if ( defined($ret) ) {
+			$temperrs = 0  ;
+			$total += $ret ;
+		}
 	}
 	_debug $self,"Sent $total bytes\n" if $self->Debug;
 	return $total;
@@ -1121,10 +1161,22 @@ sub _read_line {
 
 			# Figure out what's left to read (i.e. what part of literal wasn't in buffer):
 			my $remainder_count = $len - length($litstring);
+			my $callback_value = "";
 
-			if ( defined($literal_callback) ) 	{	# let's assume this is a fh for now
-				print $literal_callback $litstring ;
-				$litstring = "";
+			if ( defined($literal_callback) ) 	{	
+				if 	( $literal_callback =~ /GLOB/) 	{	
+					print $literal_callback $litstring ;
+					$litstring = "";
+				} elsif ($literal_callback =~ /CODE/ ) {
+					# Don't do a thing
+
+				} else 	{
+					$self->LastError(
+						ref($literal_callback) . 
+						" is an invalid callback type; must be a filehandle or coderef"
+					); 
+				}
+
 		
 			}
 			if ($remainder_count > 0 and $timeout) {
@@ -1173,11 +1225,16 @@ sub _read_line {
 				}
 				$remainder_count -= $ret;	   # decrement remaining bytes by amt read
 				if ( defined($literal_callback) ) {
-					print $literal_callback $litstring;
-					$litstring = "";
+					if ( $literal_callback =~ /GLOB/ ) {
+						print $literal_callback $litstring;
+						$litstring = "";
+					} 
 				}
 
 			}
+			$literal_callback->($litstring) 
+				if defined($litstring) and $literal_callback =~ /CODE/;
+
 			$self->Fast_io($fast_io) if $fast_io;
 			# Now let's make sure there are no IMAP server output lines 
 			# (i.e. [tag|*] BAD|NO|OK Text) embedded in the literal string
@@ -1250,7 +1307,7 @@ sub History {
 sub Escaped_results {
 	my @a;
 	foreach  my $line (@{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}} ) {
-		if (  $_[0]->_is_literal($line) ) { 
+		if (  defined($line) and $_[0]->_is_literal($line) ) { 
 			$line->[DATA] =~ s/([\\\(\)"\x0d\x0a])/\\$1/g ;
 			push @a, qq("$line->[DATA]");
 		} else {
@@ -1337,7 +1394,7 @@ sub get_bodystructure {
 		$self->LastError("Unable to use get_bodystructure: $@\n");
 		return undef;
 	}
-	return Mail::IMAPClient::BodyStructure->new(grep(/bodystructure \(/i,$self->fetch("BODYSTRUCTURE",$msg)));
+	return Mail::IMAPClient::BodyStructure->new(grep(/bodystructure \(/i,$self->fetch($msg,"BODYSTRUCTURE")));
 }
 	
 sub fetch {
@@ -2678,19 +2735,20 @@ sub _index { $_[1]->[INDEX]; }
 sub _type {  $_[1]->[TYPE]; }
 
 # _is_literal returns true if this is a literal:
-sub _is_literal { $_[1]->[TYPE] eq "LITERAL" };
+sub _is_literal { defined $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "LITERAL" };
 
 # _is_output_or_literal returns true if this is an 
 #  	output line (or the literal part of one):
 sub _is_output_or_literal { 
-              $_[1]->[TYPE] eq "OUTPUT" || $_[1]->[TYPE] eq "LITERAL" 
+              defined $_[1] and defined $_[1]->[TYPE] and 
+			($_[1]->[TYPE] eq "OUTPUT" || $_[1]->[TYPE] eq "LITERAL") 
 };
 
 # _is_output returns true if this is an output line:
-sub _is_output { $_[1]->[TYPE] eq "OUTPUT" };
+sub _is_output { defined $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "OUTPUT" };
 
 # _is_input returns true if this is an input line:
-sub _is_input { $_[1]->[TYPE] eq "INPUT" };
+sub _is_input { defined $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "INPUT" };
 
 # _next_index returns next_index for a transaction; may legitimately return 0 when successful.
 sub _next_index { 
@@ -3010,18 +3068,17 @@ won't do.
 
 =cut
 
-=item MaxTempErrors()
+=item Maxtemperrors()
 
-The I<MaxTempErrors> parameter specifies the number of times a write operation is allowed to fail on a
+The I<Maxtemperrors> parameter specifies the number of times a write operation is allowed to fail on a
 "Resource Temporarily Available" error. These errors can occur from time to time if the server is too 
 busy to empty out its read buffer (which is logically the "other end" of the client's write buffer). By 
 default, B<Mail::IMAPClient> will retry 10 times, but you can adjust this behavior by setting 
-I<MaxTempErrors>. Note that after each temporary error, the server will wait for a number of seconds 
-equal to the number of consecutive temporary errors times .25, so very high values for I<MaxTempErrors>
+I<Maxtemperrors>. Note that after each temporary error, the server will wait for a number of seconds 
+equal to the number of consecutive temporary errors times .25, so very high values for I<Maxtemperrors>
 can slow you down in a big way if your "temporary error" is not all that temporary.
 
-Generally you won't have to set this value, unless you are doing very large appends on a relatively small,
-slow, or busy server. 
+You can set this parameter to "UNLIMITED" to ignore "Resource Temporarily Unavailable" errors.
 
 =item Password()
 
@@ -3703,6 +3760,27 @@ UID FETCH UID client command to obtain and return the very same argument you sup
 IMAP feature so don't complain to me about it.
 
 =cut
+
+=item migrate()
+
+The B<migrate> method copies the indicated messages from the currently selected folder to another 
+B<Mail::IMAPClient> object's session. It requires n arguments:
+
+	1. a reference to the target object;
+	2. the message(s) to be copied, specified as either a) the message sequence number (or message
+	   UID if the UID parameter is true) of a single message, b) a reference to an array of message
+	   sequence numbers (or message UID's if the UID parameter is true) or c) the special string "ALL",
+	   which is a shortcut for the results of B<search("ALL")>.
+	3. the folder name of a folder on the target mailbox to receive the message(s). If this argument is
+	   not supplied or if I<undef> is supplied then a folder with the same name as the currently selected
+	   folder on the calling object will be created if necessary and used. If you specify something other
+	   then I<undef> for this argument, even if it's '$imap1->Folder' or the name of the currently selected 
+	   folder then that folder will only be used if it exists on the target object's mailbox; otherwise 
+	   B<migrate> will fail.
+
+The B<migrate> method uses Black Magic to hardwire the I/O between the two B<Mail::IMAPClient> objects  in order
+to minimize resource consumption. If you have older scripts that used B<message_to_file> and B<append_file> to 
+move large messages between IMAP mailboxes then you may want to try this method as a possible replacement.
 
 =item move()
 

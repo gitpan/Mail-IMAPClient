@@ -9,8 +9,8 @@ use Data::Dumper;
 B<build_ldif.pl> accepts the name of a target folder as an argument. It
 then opens that folder and rummages through all the mail files in it, looking
 for "Reply-to:" headers (or "From:" headers, where there is no "Reply-to:").
-It then prints to STDOUT a file in ldif format containing entries for all of the
-addresses that it finds. It also appends a message into the specified folder containing
+It then prints to STDOUT a file in ldif format containing entries for all of 
+the addresses that it finds. It also appends a message into the specified folder containing
 all of the addresses in both the B<To:> field of the message header and in an 
 LDIF-format attachment.
 
