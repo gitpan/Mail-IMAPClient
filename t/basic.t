@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.12 2000/06/23 19:08:40 dkernen Exp $
+# $Id: basic.t,v 19991216.13 2000/07/10 20:54:19 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -175,11 +175,11 @@ BEGIN {
 			and $h->{Subject}[0] =~ /^Testing from pid/o } ) {
 			print "ok ",++$test,"\n";
 		} else {	
-			# use Data::Dumper;
-			# print Dumper($h);
-			# print "$h->{Subject}[0] \n";
+			 use Data::Dumper;
+			print Dumper($h);
+			print "$h->{Subject}[0] \n";
 			print "not ok ",++$test,"\n";
-			# print $imap->Results;
+		 	print $imap->Results;
 		}
 	};
 
@@ -263,6 +263,7 @@ BEGIN {
 	close TST;
 
 }
+# $db = IO::File->new(">/tmp/de.bug");
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -270,12 +271,16 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Debug   => 0,
+		# Debug_fh   => $db,
 		Fast_IO => 0,
-) } ;
+) 	or 
+	print STDERR "\nCannot log into $parms{server} as $parms{user}. Are server/user/password correct?\n" 
+	and exit
+} ;
 
 
 for my $test (@tests) { $test->(); }
-# print $imap->Report,"\n";
+# print $db $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}
@@ -294,6 +299,12 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.13  2000/07/10 20:54:19  dkernen
+#
+# Modified Files: Changes IMAPClient.pm MANIFEST Makefile README
+# Modified Files: find_dup_msgs.pl
+# : Modified Files: basic.t fast_io.t
+#
 # Revision 19991216.12  2000/06/23 19:08:40  dkernen
 #
 # Modified Files:

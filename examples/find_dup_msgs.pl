@@ -1,6 +1,6 @@
 #!/usr/local/bin/perl
 
-use Mail::IMAPClient
+use Mail::IMAPClient;
 use Getopt::Std;
 
 #
@@ -18,7 +18,8 @@ my $psw = $ARGV[1] or die "Invalid argument.\n\nUsage:\n\t$0 [-d] uid\n\t-d\tdel
 my $host = $ARGV[2] or die "Invalid argument.\n\nUsage:\n\t$0 [-d] uid\n\t-d\tdelete duplicates\n\n";
 
 print "Connecting to $host:143\n" if $opt_v;
-my $imap = Imap->new(	Server	=> $host,
+my $imap = Mail::IMAPClient->new(	
+			Server	=> $host,
 			User	=> $uid,
 			Password=> $psw,
 ) or die "couldn't connect to $host port 143: $!\n";

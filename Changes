@@ -1,5 +1,50 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.19
+-----------------------
+Fixed a bug in which the Folder parameter returned quoted folder names, which sometimes caused other methods
+to requote the folders an extra time. (The IMAP protocol is real picky about that.) Thanks go to Felix Finch
+for both reporting the bug and identifying the fix.
+
+Siggy Thorarinsson contributed the new "unseen_count" method and suggested a new "peek mode" parameter.
+I have not yet gotten around to implementing the new parameter but have included the unseen_count method,
+since a) he was kind enough to write it, and b) it tests well. 
+
+In the meantime, you cannot tell methods like "parse_headers" and "message_string" and so forth 
+whether or not you want them to mark messages as "\Seen". So, to make life easier for you in particular I 
+added a bunch of new methods: set_flag, unset_flag, see, and deny_seeing. The latter two are derivitives 
+of the former two, respectively, which should make this sentence almost as difficult to parse as an IMAP 
+conversation.
+
+Fixed bug in which "BAD" "OK" or "NO" lines prefixed by an asterisk (*) instead of the tag are not handled 
+correctly. This is especially likely when LOGIN to a UW IMAP server fails. Thanks go to Phil Lobbes for 
+squashing this bug.
+
+Fixed bug in logout that caused the socket handle to linger. Credit goes to Jean-Philippe Bouchard for 
+reporting this bug and for identifying the fix.
+
+Fixed bug in uidvalidity method where folder has special characters in it.
+
+Made several bug fixes to the example script examples/find_dup_msgs.pl. Thanks to Steve Mayer for identifying 
+these bugs.
+
+Changed Fast_io to automatically turn itself off if running on a platform that does not provide the necessary
+fcntl macros (I won't mention any names, but it's initials are "NT"). This will occur silently unless warnings 
+are turned on or unless the Debug parameter is set to true. Previously scripts running on this platform had 
+to turn off fast_io by hand, which is lame. (Thank you Kevin Cutts for reporting this problem.)
+
+Updated logic that X's out login credentials when printing debug output so that funky characters in "User" or
+"Password" parameters won't break the regexp. (Kevin Cutts found this one, too.)
+
+Tinkered with the Strip_cr method so it can accept multiple arguments OR an array reference as an argument. See
+the updated pod for more info.
+
+Fixed a typo in the documentation in the section describing the fetch method. There has been an entire paragraph
+missing from this section for who knows how long. Thanks to Adam Wells, who reported this documentation error.
+
+Fixed bug in seen, recent, and unseen methods that caused them to return empty arrays erroneously under certain 
+conditions.
+
 Changes in version 1.18
 -----------------------
 Timeouts during read operations now work correctly.
@@ -479,4 +524,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.17 2000/06/23 19:07:52 dkernen Exp $
+# $Id: Changes,v 20001010.1 2000/10/10 17:32:12 dkernen Exp $

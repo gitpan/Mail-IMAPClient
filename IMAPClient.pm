@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.16 2000/06/23 19:07:53 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.1 2000/10/10 17:32:15 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.18';
-$Mail::IMAPClient::VERSION = '1.18';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.19';
+$Mail::IMAPClient::VERSION = '1.19';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -38,7 +38,7 @@ sub _debug {
 {
  for my $datum (
 		qw( 	State Port Server Folder Fast_io
-			User Password Socket Timeout
+			User Password Socket Timeout Buffer
 			Debug LastError Count Uid Debug_fh
 		)
  ) {
@@ -76,6 +76,17 @@ return          sprintf(
                         $date[8]) ;
 }
 
+# The following class method strips out <CR>'s so lines end with <LF> instead of <CR><LF>:
+
+sub Strip_cr {
+	my $class = shift;
+	unless ( ref($_[0]) or scalar(@_) > 1 ) {
+		(my $string = $_[0]) =~ s/\r\n/\n/gm;
+		return $string;
+	}
+	return wantarray ?     	map { s/\r\n/\n/gm ; $_ }  (ref($_[0]) ? @{$_[0]}  : @_)  : 
+				[ map { s/\r\n/\n/gm ; $_ } ref($_[0]) ? @{$_[0]} : @_ ] ;
+}
 
 # The following defines a special method to deal with the Clear parameter:
 
@@ -189,7 +200,8 @@ sub login {
 sub separator {
 	my $self = shift;
 	my $target = shift ; defined($target) or $target = "INBOX";
-	$target = 'INBOX' if $target =~ /inbox/i or !$self->exists($target) ;
+	$target ||= '""' ;
+	
 	
 
 	# The fact that the response might end with {123} doesn't really matter here:
@@ -320,9 +332,9 @@ sub select {
 	my $target = shift ;  
 	return undef unless defined($target);
 
-	$target = $self->Massage($target);
+	my $qqtarget = $self->Massage($target);
 
-	my $string 	=  qq/SELECT $target/;
+	my $string 	=  qq/SELECT $qqtarget/;
 
 	my $old = $self->Folder;
 
@@ -356,6 +368,132 @@ sub message_string {
 	until ($head[-1] =~ /\r\n\r\n$/) { $head[-1] .= "\r\n"} ;
 	# _debug $self, "Last header is $head[$#head]";
 	return join("",@head) ;
+}
+
+sub message_to_file {
+	my $self = shift;
+	my $fh   = shift;
+	unless (ref($fh) ) {
+		my $handle = IO::File->new(">$fh");
+		unless ( defined($handle)) {
+			$@ = "Unable to open $fh: $!";
+			$self->LastError("Unable to open $fh: $!");
+			return undef;
+		}
+	}
+
+        my $clear = "";
+        $clear = $self->Clear;
+
+        $self->Clear($clear)
+                if $self->Count >= $clear and $clear > 0;
+
+        my $trans       = $self->Count($self->Count+1);
+
+        $string         = "$trans $string" ;
+
+        $self->_record($trans,"$string\r\n");
+
+        my $feedback = $self->_send_line("$string");
+
+        unless ($feedback) {
+                $self->LastError( "Error sending '$string' to IMAP: $!\n");
+                $@ = "Error sending '$string' to IMAP: $!";
+                return undef;
+        }
+
+	my $sh		= $self->Socket;
+	
+	my $buffer	= ""; 
+	my $count	= ""; $count = 0;
+	my $rvec 	= my $ready = my $errors = 0; 
+	my $timeout	= $self->Timeout;
+
+	my $readlen 	= $self->{Buffer}||( $self->{Fast_io} ? 4096 : 1 );
+	my $fcntl 	= '';
+	my $flags 	= '0';
+
+	if ( $self->Fast_io ) {
+		eval { $fcntl=fcntl($sh, F_GETFL, $flags) } ;
+		if ($@) {
+			$self->Fast_io(0);
+			warn ref($self) . " not using Fast_IO; not available on this platform.\n" 
+				if ( $^W or $self->Debug);
+		} else {
+ 
+			my $newflags = $fcntl;
+			$newflags |= O_NONBLOCK;
+			fcntl($sh, F_SETFL, $newflags) and $readlen = ($self->{Buffer}||4096);
+		}
+	}
+	my $offset = 0;
+
+	until ($buffer =~ /\r?\n$/ ) {
+		# _debug $self,"Entering read engine.\n" if $self->Debug;
+		if ($timeout) {
+			vec($rvec, fileno($self->Socket), 1) = 1; CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ;
+			unless ( vec ( $ready, fileno($self->Socket), 1 ) ) {
+				$self->LastError("Tag " . $self->Transaction . 
+					": Timeout waiting for data from server\n");	
+				fcntl($sh, F_SETFL, $fcntl) 
+					if $self->Fast_io and defined($fcntl);
+				$self->_record(	$self->Transaction,$self->Transaction . 
+						"* NO Timeout during read from server\r\n");
+				$@ = "Timeout during read from server\r\n";
+				return undef;
+			}
+		}
+		_debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
+		local($^W) = undef;
+		$count += sysread(
+					$sh,
+					$buffer,
+					$readlen,
+					$offset
+		) ;
+		$offset = $count ;
+		pos $buffer = 1;
+		LITERAL: while ( $buffer =~ /\{(\d+)\}\r\n/g ) {
+			_debug $self, 	"Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
+			my $len = $1 ;
+			$offset = $count - pos($buffer) ;
+			$count -= length("{" . "$len" . "}\r\n" ) ;
+			$count -= $offset;
+
+			# _debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
+
+			substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
+				
+
+			if ($timeout) {
+				vec($rvec, fileno($self->Socket), 1) = 1;
+				unless ( CORE::select( $ready = $rvec, 
+							undef, 
+							$errors = $rvec, 
+							$timeout) 
+				) {
+					$self->LastError("Tag " . $self->Transaction . 
+						": Timeout waiting for literal data from server\n");	
+					return undef;
+				}	
+			}
+			until ( $offset >= $len ) {
+				# _debug $self, "Reading literal data\n";
+				$offset += sysread($sh,$buffer,$len-$offset, $count+$offset) ;
+			}
+			$count += $offset;
+			#_debug $self, "Read so far: $buffer\n" if $self->Debug;
+			pos $buffer = 1;
+		}
+		$offset = length($buffer);
+		# _debug $self, "Read so far: $buffer\n" if $self->Debug;
+
+		pos $buffer = 1;
+	}
+	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
+	#	_debug $self, "Buffer is now $buffer\n";
+	_debug $self, "Read: $buffer\n" if $self->Debug;
+	return $self;
 }
 
 sub message_uid {
@@ -532,7 +670,7 @@ sub _send_line {
 	if ($self->Debug) {
 		my $dstring = $string;
 		if ( $dstring =~ m[\d+\s+Login\s+]i) {
-			$dstring =~ 	s	(\b(?:$self->{Password}|$self->{User})\b)
+			$dstring =~ 	s	(\b(?:\Q$self->{Password}\E|\Q$self->{User}\E)\b)
 						('X' x length($self->{Password}))eg;
 		}
 		_debug $self, "Sending: $dstring\n" if $self->Debug;
@@ -559,13 +697,21 @@ sub _read_line {
 	my $fcntl 	= '';
 	my $flags 	= '0';
 
-	if ( $self->Fast_io and $fcntl=fcntl($sh, F_GETFL, $flags) ) {
+	if ( $self->Fast_io ) {
+		eval { $fcntl=fcntl($sh, F_GETFL, $flags) } ;
 		# _debug $self, STDERR 
 		# "Setfl = ",F_SETFL," and GETFL = ",F_GETFL," and NONBLOCK = ",O_NONBLOCK,"\n";
 		# _debug $self, STDERR "Fcntl flag is now $fcntl\n";
-		my $newflags = $fcntl;
-		$newflags |= O_NONBLOCK;
-		fcntl($sh, F_SETFL, $newflags) and $readlen = 4096;
+		if ($@) {
+			$self->Fast_io(0);
+			warn ref($self) . " not using Fast_IO; not available on this platform.\n" 
+				if ( $^W or $self->Debug);
+		} else {
+ 
+			my $newflags = $fcntl;
+			$newflags |= O_NONBLOCK;
+			fcntl($sh, F_SETFL, $newflags) and $readlen = ($self->{Buffer}||4096);
+		}
 	}
 	my $offset = 0;
 
@@ -579,12 +725,13 @@ sub _read_line {
 					": Timeout waiting for data from server\n");	
 				fcntl($sh, F_SETFL, $fcntl) 
 					if $self->Fast_io and defined($fcntl);
-				$self->_record($self->Transaction,$self->Transaction . "* NO Timeout during read from server\r\n");
+				$self->_record($self->Transaction,
+					$self->Transaction . "* NO Timeout during read from server\r\n");
 				$@ = "Timeout during read from server\r\n";
 				return undef;
 			}
 		}
-		_debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
+		# _debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
 		local($^W) = undef;
 		$count += sysread(
 					$sh,
@@ -595,12 +742,12 @@ sub _read_line {
 		$offset = $count ;
 		pos $buffer = 1;
 		LITERAL: while ( $buffer =~ /\{(\d+)\}\r\n/g ) {
-			_debug $self, 	"Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
+			# _debug $self, 	"Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
 			my $len = $1 ;
 			$offset = $count - pos($buffer) ;
 			$count -= length("{" . "$len" . "}\r\n" ) ;
 
-			_debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
+			# _debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
 
 			substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
 				
@@ -667,7 +814,7 @@ sub logout {
 	$self->_imap_command($string) ; 
 	$self->State(Unconnected);
 	$self->{Folders} = undef;
-	$self->Socket->close ; $self->Socket(undef);
+	$self->Socket->close ; $self->{Socket} = undef;
 	return $self;
 }
 
@@ -851,13 +998,15 @@ sub flags {
  	foreach my $resultline ($self->Results) {
 		if (	$resultline =~ 
 			/	\*\s+(\d*)\s+FETCH\s*	# * nnn FETCH 
-				\(FLAGS\s*\((.*)\)	# (FLAGS (\Flag1 \Flag2)
+				\(			# ( 
+				(?:\sUID\s(\d+)\s?)?	# optional: UID nnn <space>
+				FLAGS\s*\((.*)\)\s?	# FLAGS (\Flag1 \Flag2) <space>
 				(?:\sUID\s(\d+))?	# optional: UID nnn
 				\) 			# )
 			/x
 		) {
 			my $mailid = $u_f ? $3 : $1;
-			my $flagsString = $2;
+			my $flagsString = $2||4;
 			my @flags = map { s/\s+$//; $_ } split(/\s+/, $flagsString);
 			$flagset->{$mailid} = \@flags;
 		}
@@ -910,7 +1059,7 @@ sub parse_headers {
 	
        	for my $header (@raw) {
 		local($^W) = undef;
-		my $pattern = $self->Uid ? 'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
+		my $pattern = $self->Uid ? 	'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
                	if (	my($msgid) = $header =~ /$pattern/ 
 			and $header =~ /BODY\[HEADER(?:\]|\.FIELDS)/i
 		) {	  
@@ -1012,20 +1161,9 @@ for my $datum (
 		my $self = shift;
 		my @hits;
 
-		$self->_imap_command( ($self->Uid ? "UID " : "") . "SEARCH $datum")
+		my $hits = $self->search("$datum")
 			 or return undef;
-		my @results =  $self->History($self->Count)     ;
-
-		for my $r (@results) {
-
-		       chomp $r;
-		       $r =~ s/\r$//;
-		       $r =~ s/^\*\s+SEARCH\s+// or next;
-		       push @hits, grep(/\d/,(split(/\s+/,$r)));
-
-		}
-
-		return wantarray ? @hits : \@hits;
+		return wantarray ? @$hits : $hits;
 
 
         };
@@ -1073,28 +1211,18 @@ for my $datum (
 }
 }
 
-sub Strip_cr {
-	my $self = shift;
+#sub Strip_cr {
+#	my $self = shift;
 
-	my $in = $_[0]||$self ;
+#	my $in = $_[0]||$self ;
 
-	$in =~ s/\r//g  ;
+#	$in =~ s/\r//g  ;
 
-	return $in;
-}
+#	return $in;
+#}
 
 
 sub disconnect { $_[0]->logout }
-
-sub DESTROY {
-	my $self = shift;
-	local($^W = 0);
-	local($@);
-	eval {
-		$self->logout if $self->IsConnected; 
-		$self->Socket->close if ref($self->Socket);
-	}
-}
 
 
 sub search {
@@ -1145,7 +1273,7 @@ sub delete_message {
 
 sub uidvalidity {
 
-	my $self = shift; my $folder = $self->Massage(shift);
+	my $self = shift; my $folder = shift;
 
 	my $vline = (grep(/UIDVALIDITY/i, $self->status($folder, "UIDVALIDITY")))[0];
 
@@ -1493,6 +1621,31 @@ sub move {
 	return $uids;
 }
 
+sub set_flag {
+	my($self, $flag, @msgs) = @_;
+	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
+	$flag =~ /^\\/ or $flag = "\\" . $flag ;
+	$self->store( join(",",@msgs), "+FLAGS.SILENT (" . $flag . ")" );
+}
+
+sub see {
+	my($self, @msgs) = @_;
+	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
+	$self->set_flag('\\Seen', @msgs);
+}
+
+sub unset_flag {
+	my($self, $flag, @msgs) = @_;
+	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
+	$flag =~ /^\\/ or $flag = "\\" . $flag ;
+	$self->store( join(",",@msgs), "-FLAGS.SILENT (" . $flag . ")" );
+}
+
+sub deny_seeing {
+	my($self, @msgs) = @_;
+	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
+	$self->unset_flag('\\Seen', @msgs);
+}
 
 sub size {
 
@@ -1554,6 +1707,24 @@ sub Massage {
 
 	return $arg;
 }
+
+sub unseen_count {
+
+	my ($self, $folder) = (shift, shift);
+	$folder ||= $self->Folder;
+	$self->status($folder, 'UNSEEN') or return undef;
+
+	chomp(	my $r = ( grep 
+			  { s/\*\s+STATUS\s+.*\(UNSEEN\s+(\d+)\s*\)/$1/ }
+			  $self->History($self->Transaction)
+			)[0]
+	);
+
+	$r =~ s/\D//g;
+	return $r;
+}
+
+
 
 # Status Routines:
 
@@ -1700,11 +1871,22 @@ state.
 
 The <Strip_cr> method strips carriage returns from IMAP client command output. Although 
 RFC2060 specifies that lines in an IMAP conversation end with <CR><LF>, it is often cumbersome
-to have the carriage returns in the returned data. This method accepts a line of text as 
-an argument, and returns that line with all carriage returns removed. If the input argument
-had no carriage returns then it is returned unchanged. 
+to have the carriage returns in the returned data. This method accepts one or more lines of text as 
+arguments, and returns those lines with all <CR><LF> sequences changed to <LF>. Any input argument
+with no carriage returns is returned unchanged. If the first argument (not counting the class name or
+object reference) is an array reference, then members of that array are processed as above and subsequent
+arguments are ignored. If the method is called in scalar context then an array reference is returned instead
+of an array of results.
 
-B<Strip_cr> does not remove new line characters.
+Taken together, these last two lines mean that you can do something like:
+ 
+	my @list = $imap->some_imap_method ;
+        @list = $imap->Strip_cr(@list) ; 
+	# or: 
+	my $list = [ $imap->some_imap_method ] ; # returns an array ref
+	$list = $imap->Strip_cr($list);
+
+B<NOTE: Strip_cr> does not remove new line characters.
 
 =cut
 
@@ -2106,6 +2288,18 @@ B<See also:> The B<delete> method, to delete a folder, and B<expunge> and B<clos
 
 =cut
 
+=item deny_seeing
+
+The B<deny_seeing> method accepts a list of one or more messages sequence numbers, or a single reference to an 
+array of one or more message sequence numbers, as its argument(s). It then unsets the "\Seen" flag for those 
+message(s). Of course, if the I<Uid> parameter is set to a true value then those message sequence numbers had
+better be unique message id's, but then you already knew that, didn't you?
+
+Note that specifying C<$imap->deny_seeing(@msgs)> is just a shortcut for specifying 
+C<$imap->unset_flag("Seen",@msgs)>. 
+
+=cut
+
 =item disconnect
 
 Disconnects the B<IMAPClient> object from the server. Functionally equivalent to the B<logout> 
@@ -2139,8 +2333,19 @@ If the I<Uid> parameter is set to a true value then the first argument will be t
 a UID or list of UID's, which means that the UID FETCH IMAP client command will be run instead
 of FETCH. (It would really be a good idea at this point to review RFC2060.) 
 
-me0n
-t
+If called in array context, B<fetch> will return an array of output lines. The output lines 
+will be returned just as they were received from the server, so your script will have to be 
+prepared to parse out the bits you want. The only exception to this is literal strings, which 
+will be inserted into the output line at the point at which they were encountered (without the 
+{nnn} literal field indicator). See RFC2060 for a description of literal fields, and don't blame 
+me if you're still confused by them. (I read that rfc just about every day and didn't really 
+understand those literal fields for about a year.)
+
+If B<fetch> is called in a scalar context, then a reference to an array (as described above) 
+is returned instead of the entire array. 
+
+
+=cut
 
 =item flags
 
@@ -2269,7 +2474,8 @@ trying something funky).
 
 The B<message_string> method accepts a message sequence number (or message UID if I<Uid> is true)
 as an argument a returns the message as a string. The returned value contains the entire message 
-in one scalar variable, including the message headers.
+in one scalar variable, including the message headers. Note that using this method will set the
+message's "\Seen" flag as a side effect.
 
 =cut
 
@@ -2467,6 +2673,18 @@ will be passed, instead of the array itself.
 
 =cut
 
+=item see
+
+The B<see> method accepts a list of one or more messages sequence numbers, or a single reference to an 
+array of one or more message sequence numbers, as its argument(s). It then sets the "\Seen" flag for those 
+message(s). Of course, if the I<Uid> parameter is set to a true value then those message sequence numbers had
+better be unique message id's, but then you already knew that, didn't you?
+
+Note that specifying C<$imap->see(@msgs)> is just a shortcut for specifying 
+C<$imap->set_flag("Seen",@msgs)>. 
+
+=cut
+
 =item seen
 
 The B<seen> method performs an IMAP SEARCH SEEN search against the selected folder and returns
@@ -2520,6 +2738,20 @@ The B<separator> method returns the character used as a separator character in
 folder hierarchies. On unix-based servers, this is often a forward slash (/). It accepts one
 argument, the name of a folder whose hierarchy's separator should be returned. If no folder
 name is supplied then the separator for the INBOX is returned, which probably is good enough.
+
+=cut
+
+=item set_flag
+
+The B<set_flag> method accepts the name of a flag as its first argument and a list of one or more messages sequence 
+numbers, or a single reference to an array of one or more message sequence numbers, as its next argument(s). 
+It then sets the flag specified for those message(s). Of course, if the I<Uid> parameter is set to a true value 
+then those message sequence numbers had better be unique message id's, but then you already knew that, didn't you?
+
+Note that when specifying the flag in question, the preceding backslash (\) is entirely optional. (For you,
+that is. B<Mail::IMAPClient> still has remember to stick it in there before passing the command to the 
+server. This is in fact so important that the method checks its argument and adds the backslash when necessary, 
+which is why you don't have to worry about it overly much.)
 
 =cut
 
@@ -2609,7 +2841,26 @@ an array of sequence numbers of messages that have not yet been seen (ie their S
 If the I<Uid> parameter is true then an array of message UID's will be returned instead. If called
 in scalar context than a pointer to the array (rather than the array itself) will be returned.
 
+Note that when specifying the flag in question, the preceding backslash (\) is entirely optional.
+
 =cut
+
+=item unseen_count
+
+The B<unseen_count> method accepts the name of a folder as an argument and returns the number of unseen
+messages in that folder. If no folder argument is provided then it returns the number of unseen messages 
+in the currently selected Folder.
+
+=item unset_flag
+
+The B<unset_flag> method accepts the name of a flag as its first argument and a list of one or more 
+messages sequence numbers, or a single reference to an array of one or more message sequence numbers, 
+as its next argument(s). It then unsets the flag specified for those message(s). Of course, if the I<Uid> 
+parameter is set to a true value then those message sequence numbers had better be unique message id's, 
+but then you already knew that, didn't you?
+
+=cut
+
 
 =item Other IMAP Client Commands
 
@@ -2814,6 +3065,21 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 20001010.1  2000/10/10 17:32:15  dkernen
+#
+# ----------------------------------------------------------------------
+# Tag: 	v1_19 rev 20001010.1
+# Modified Files:
+# 	.nstest .uwtest45 .uwtest47 Artistic Changes Copying
+# 	IMAPClient.pm INSTALL MANIFEST Makefile Makefile.PL README
+# 	Todo pm_to_blib test.txt test_template.txt
+# See Changes for a list of changes in v1.19
+# ----------------------------------------------------------------------
+#
+# Revision 19991216.17  2000/07/10 20:54:02  dkernen
+#
+# Modified Files: Changes IMAPClient.pm MANIFEST Makefile README
+#
 # Revision 19991216.16  2000/06/23 19:07:53  dkernen
 #
 # Modified Files:
