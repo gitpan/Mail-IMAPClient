@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$Mail::IMAPClient::VERSION = '1.03';
-$Mail::IMAPClient::VERSION = '1.03';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.04';
+$Mail::IMAPClient::VERSION = '1.04';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -143,19 +143,17 @@ sub login {
 sub separator {
 	my $self = shift;
 	my $target = shift || "INBOX";
+	$target = 'INBOX' if $target =~ /inbox/i;
 
 	# The fact that the response might end with {123} doesn't really matter here:
 
-	unless (exists $self->{$target,SEPARATOR}) {
-		my $list = (grep(/^\*\s+LIST\s+/, $self->list(undef,$target) ))[0];
-		$self->{$target,SEPARATOR} = substr(	
-			(split(/\s+/,$list))[3],
-			1,
-			length((split(/\s+/,$list))[3])-2
-		) ;
+	unless (exists $self->{"$target${;}SEPARATOR"}) {
+		my $list = (grep(/^\*\s+LIST\s+/, $self->list(undef,$target) ))[0] || qq("/");
+		my $s = (split(/\s+/,$list))[3];
+		$self->{"$target${;}SEPARATOR"} = $s eq 'NIL' ? 'NIL' : substr($s, 1,length($s)-2) ;
 	}
 
-	return $self->{$target,SEPARATOR};
+	return $self->{$target,'SEPARATOR'};
 }
 
 sub list {
@@ -240,7 +238,7 @@ sub _imap_command {
 	my ($code, $output);	
 	$output = "";
 
-	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/) {
+	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/m ) {
 		# print "Line +$output \t not '$count OK or BAD or NO or $good'\n" 
 		#	if $self->Debug;
 		$output = $self->_read_line;	
@@ -290,8 +288,8 @@ sub _read_line {
 	my $self 	= shift;	
 	my $sh		= $self->Socket;
 	
-	my $buffer	= undef; 
-	# my $count	= sysread($sh,$buffer,2048,0) ;	# first read is block read
+	my $buffer	= ""; 
+	#my $count	= sysread($sh,$buffer,2048,0) ;	# first read is block read
 	my $count	= 0;
 	until ($buffer =~ /\r?\n$/ ) {
 		sysread($sh,$buffer,1,$count++) ;
@@ -299,7 +297,8 @@ sub _read_line {
 	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
 		my $len = $1 + 2;
 		my $newcount = 0;
-		$newcount += sysread($sh,$buffer,$len,$count+$newcount)
+		$newcount += sysread($sh,$buffer,$len-$newcount, 
+						$count+$newcount)
 			until $newcount >= $len;
 	}
 	print "Read: $buffer\n" if $self->Debug;
@@ -612,7 +611,7 @@ sub is_parent {
 	my $line;
 
         for (my $m = 0; $m < scalar(@$list); $m++ ) {
-
+		return undef if $list->[$m] =~ /NoInferior/i; # let's not beat around the bush
                 if ($list->[$m]  =~ s/(\{\d+\})\r\n$// ) {
                         $list->[$m] .= $list->[$m+1];
                         $list->[$m+1] = "";
@@ -626,8 +625,7 @@ sub is_parent {
                                 (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
                         /x;
 	}	
-	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\)/;
-	return undef if $f =~ /NoInferiors/i;
+	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\)/ if $line;
 	unless ( $f =~ /\\/) {		# no flags at all unless there's a backslash
 		my $sep = $self->separator;
 		return 1 if scalar(grep /^$folder$sep/, $self->folders);
@@ -662,9 +660,9 @@ sub append {
 		return undef;
 	}
 
-	my ($code, $output);	
+	my ($code, $output) = ("","");	
 	
-	until ( ($code) = $output =~ /go ahead/) {
+	until ( ($code) = $output =~ /^\+/) {
 		$output = $self->_read_line;	
 		$self->_record($count,$output);
 		if ($output =~ /^\*\s+BYE/) {
@@ -785,11 +783,13 @@ sub size {
 }
 
 sub Massage {
-	my $self = shift;
-	my $arg =  shift;
-	
-	if ($arg =~ /^[^"]+"/) {
-		$arg = "{" . length($arg) . "}\r\n$arg" if $arg =~ /^[^"]+"/;
+	my $self= shift;
+	my $arg = shift;
+
+	$arg 	= substr($arg,1,length($arg)-2) if $arg =~ /^".*"$/;
+
+	if ($arg =~ /["'\\]/) {
+		$arg = "{" . length($arg) . "}\r\n$arg" ;
 	} else {
 		$arg = qq("${arg}") unless $arg =~ /^"/;
 	}

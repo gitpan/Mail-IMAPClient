@@ -26,7 +26,7 @@ BEGIN {
 
 	
 	push @tests, sub {
-		if ($imap) {
+		if (ref($imap)) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -43,13 +43,15 @@ BEGIN {
 
 	push @tests, sub {
 		my $isparent;
-		if (defined($isparent = $imap->is_parent("inbox"))) {
+		$isparent = $imap->is_parent(INBOX);
+		if (defined($isparent)) {
 			$target = "INBOX${sep}IMAPClient_$$";
 			print "ok ",++$test,"\n";
 		} else {	
 			$target = "IMAPClient_$$";
 			print "ok ",++$test,"\n";
 		}
+		print "target is $target\n";
 	};
 
 	
@@ -75,13 +77,27 @@ BEGIN {
 			if ( eval { $imap->create(qq($target${sep}has "quotes")) } ) {
 				print "ok ",++$test,"\n";
 			} else {
-				print "not ok ",++$test,"\n";
+                          if ($imap->LastError =~ /NO Invalid.*name/) {
+                                print "skipping ",++$test,
+				 " $parms{server} doesn't support quotes in folder names--",
+				 "skipping next 2 tests\n";
+                                print "skipping ",++$test,"\n";
+                                print "skipping ",++$test,"\n";
+                                return;
+                          } else {
+                                print "not ok ",++$test,"\n";
+                                print "skipping ",++$test,"\n";
+                                print "skipping ",++$test,"\n";
+				return;
+                          }
+
 			}
 			if ( eval { $imap->select(qq($target${sep}has "quotes")) } ) {
 				print "ok ",++$test,"\n";
 			} else {
 				print "not ok ",++$test,"\n";
 			}
+			$imap->select('inbox');
 			if ( eval { $imap->delete(qq($target${sep}has "quotes")) } ) {
 				print "ok ",++$test,"\n";
 			} else {
@@ -114,6 +130,15 @@ BEGIN {
 
 	push @tests, sub {
 		if ( eval { $imap->select("$target") } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		my @res;
+		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -170,6 +195,7 @@ BEGIN {
 	};
 
 	push @tests, sub {
+		$imap->select('inbox');
 		if ( $imap->delete("$target") ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -192,8 +218,8 @@ BEGIN {
 	open TST,"./.test" or exit;
 	while (defined(my $l = <TST>)) {
 		my($p,$v)=split(/=/,$l);
-		chomp $v;
-		$parms{$p}=$v;
+		chomp $v if $v;
+		$parms{$p}=$v if $v;
 	}
 	close TST;
 
@@ -204,7 +230,7 @@ eval { $imap = Mail::IMAPClient->new(
 		User 	=> "$parms{user}"  || scalar(getpwuid($<)),
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
-		Debug   => 0,
+		Debug   => 1,
 ) } ;
 
 

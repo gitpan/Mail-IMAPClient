@@ -5,10 +5,10 @@ INSTALL
 MANIFEST
 README
 Makefile.PL
-test.pl
+t/basic.t
 Copying
 Artistic
 examples/populate_mailbox.pl
+examples/imap_to_mbox.pl
 docs/rfc2060.txt
 .test_template
-
