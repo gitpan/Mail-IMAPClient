@@ -1,5 +1,15 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.14
+-----------------------
+Fixed a bug in the _readline subroutine (part of the I/O engine) that was caused by my less-than-perfect
+interpretation of RFC2060. This fix will allow the Mail::IMAPClient module to function correctly with
+servers that imbed literal datatypes in the middle of response lines (rather than just at the end of 
+them). Thanks to Pankaj Garg for reporting this problem and providing the debugging output necessary
+to correct it.
+
+Fixed a bug in parse_headers that was introduced with the fix to the I/O engine described above.
+
 Changes in version 1.13
 -----------------------
 Changed the parse_headers method so that it uses BODY.PEEK instead of BODY. This prevents the
@@ -68,8 +78,9 @@ reporting this bug.
 
 Enhanced the parse_headers routine so that it is less sensitive to variations of case in message
 headers. Now, the case of the returned key matches the case of the field as specified in the 
-parse_headers method's arguments, regardless of its case in the message being parsed. (You can thank
-Heather for this as well.) See below for more changes to parse_headers in this release.
+parse_headers method's arguments, regardless of its case in the message being parsed. 
+(You can thank Heather Atkins for this suggestion as well.) See below for more changes to 
+parse_headers in this release.
 
 Improved the append method so that it has better error handling and error recovery. Thanks to 
 Mark Keisler for pointing out some bugs in the error handling code in this method.
@@ -413,4 +424,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.14 2000/04/27 17:59:44 dkernen Exp $
+# $Id: Changes,v 19991216.15 2000/05/22 20:10:24 dkernen Exp $

@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.13 2000/04/27 17:59:45 dkernen Exp $
+# $Id: IMAPClient.pm,v 19991216.14 2000/05/22 20:10:25 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.13';
-$Mail::IMAPClient::VERSION = '1.13';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.14';
+$Mail::IMAPClient::VERSION = '1.14';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -132,6 +132,7 @@ sub connect {
 		PeerAddr => $self->Server		,
                 PeerPort => $self->Port||'imap(143)'	,
                 Proto    => 'tcp' 			,
+                Timeout  => $self->Timeout||0		,
 		Debug	=> $self->Debug 		,
 	)						
 	or $@ = "Unable to connect: $!" and return undef;
@@ -267,30 +268,32 @@ sub deleteacl {
 }
 
 sub setacl {
-	my $self = shift;
-	my ($target, $user, $acl) = @_;
-	$user = $self->User unless defined($user);
-	$target = $self->Folder unless defined($target);
-	$target 	  = $self->Massage($target);
-	$user		  =~ s/^"(.*)"$/$1/;
-	$user 	  	  =~ s/"/\\"/g;
-	$acl		  =~ s/^"(.*)"$/$1/;
-	$acl 	  	  =~ s/"/\\"/g;
-	my $string 	=  qq(SETACL $target "$user" "$acl");
-	$self->_imap_command($string)  or return undef;
-	return wantarray ? 	$self->History($self->Count) 		: 
-				$self->{"History"}{$self->Count}	;
+        my $self = shift;
+        my ($target, $user, $acl) = @_;
+        $user = $self->User unless length($user);
+        $target = $self->Folder unless length($target);
+        $target           = $self->Massage($target);
+        $user             =~ s/^"(.*)"$/$1/;
+        $user             =~ s/"/\\"/g;
+        $acl              =~ s/^"(.*)"$/$1/;
+        $acl              =~ s/"/\\"/g;
+        my $string      =  qq(SETACL $target "$user" "$acl");
+        $self->_imap_command($string)  or return undef;
+        return wantarray ?      $self->History($self->Count)            :
+                                $self->{"History"}{$self->Count}        ;
 }
 
 sub getacl {
-	my $self = shift;
-	my ($target) = @_;
-	$target = $self->Folder unless defined($target);
-	$target 	  = $self->Massage($target);
-	my $string 	=  qq(GETACL $target);
-	$self->_imap_command($string)  or return undef;
-	return wantarray ? 	$self->History($self->Count) 		: 
-				$self->{"History"}{$self->Count}	;
+        my $self = shift;
+        my ($target) = @_;
+        $target = $self->Folder unless defined($target);
+        $target           = $self->Massage($target);
+        my $string      =  qq(GETACL $target);
+        $self->_imap_command($string)  or return undef;
+        my $perm = (grep(/^\* ACL/,     @{$self->History($self->Count)}))[0]
+                        or return undef;
+        $perm = (split(/\s+/,$perm))[-1];
+        return $perm;
 }
 
 sub listrights {
@@ -578,33 +581,38 @@ sub _read_line {
 					$readlen,
 					$newcount
 		) ;
+		if ( $buffer =~ s/\{(\d+)\}\r\n$// ) {
+			_debug $self, "in literal logic\n" if $self->Debug;
+			$count = length($buffer);
+			my $len = $1 ;
+			my $newcount = 0;
+			if ($timeout) {
+				vec($rvec, fileno($self->Socket), 1) = 1;
+				unless ( CORE::select( $ready = $rvec, 
+							undef, 
+							$errors = $rvec, 
+							$timeout) 
+				) {
+					$self->LastError("Tag " . $self->Transaction . 
+						": Timeout waiting for literal data from server\n");	
+					return undef;
+				}
+			}
+			$newcount += sysread($sh,$buffer,$len-$newcount, 
+							$count+$newcount)
+				until $newcount >= $len;
+			$count += $newcount;
+			_debug $self, "Read so far: $buffer\n" if $self->Debug;
+		}
 		$^W = $oldW;
-		# _debug $self, "Read so far: $buffer\n" if $self->Debug;
+		_debug $self, "Read so far: $buffer\n" if $self->Debug;
 
 	}
 	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
 	#	_debug $self, "Buffer is now $buffer\n";
-	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
-		# _debug $self, "in literal logic\n";
-		my $len = $1 ;
-		my $newcount = 0;
-		if ($timeout) {
-			vec($rvec, fileno($self->Socket), 1) = 1;
-			unless ( CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ) {
-				$self->LastError("Tag " . $self->Transaction . 
-					": Timeout waiting for literal data from server\n");	
-				return undef;
-			}
-		}
-		$newcount += sysread($sh,$buffer,$len-$newcount, 
-						$count+$newcount)
-			until $newcount >= $len;
-		sysread($sh,$buffer,2,$count+$newcount) unless $buffer =~ /\r\n$/;
-	}
 	_debug $self, "Read: $buffer\n" if $self->Debug;
 	return defined($buffer) ? $buffer : undef ;
 }
-
 
 sub Report {
 	my $self = shift;
@@ -892,7 +900,6 @@ sub parse_headers {
 			# start of new message header:
 			$h = {};		  # new hash for headers for this mail
 			$headers->{$msgid} = $h;  # store in results, against this message
-			next;
 		}
 
                 next if $header =~ /^\s+$/;
@@ -908,6 +915,9 @@ sub parse_headers {
                		chomp $hdr;
                		$hdr =~ s/\r$//;   
                		if ($hdr =~ s/^(\S+): //) { 
+                       		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
+                       		push @{$h->{$field}} , $hdr ;
+               		} elsif ($hdr =~ s/^.*FETCH \(BODY\[HEADER\.FIELDS.*\)\]\s(\S+): //) { 
                        		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
                        		push @{$h->{$field}} , $hdr ;
                		} elsif ( ref($h->{$field}) eq 'ARRAY') {
@@ -2751,6 +2761,10 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 19991216.14  2000/05/22 20:10:25  dkernen
+#
+# Modified Files: Changes IMAPClient.pm
+#
 # Revision 19991216.13  2000/04/27 17:59:45  dkernen
 #
 # Modified Files:
