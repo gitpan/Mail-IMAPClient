@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.2 2000/10/27 14:43:25 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.3 2000/10/30 18:40:02 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.0.0';
-$Mail::IMAPClient::VERSION = '2.0.0';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.0.1';
+$Mail::IMAPClient::VERSION = '2.0.1';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -415,7 +415,7 @@ sub message_string {
 	my @head = $self->fetch($msg,"RFC822") or return undef;
 	# $self->_debug("Raw message string = " . join("",@head) . "<<END OF RAW STRING>>\n" ) ;
 	my $string = "";
-	my $head   = undef;	
+	my $head   = "";	
 
 	$head = shift(@head) until $head =~ /.*FETCH .*\(.*RFC822 /i ;
 
@@ -432,17 +432,25 @@ sub message_string {
 sub message_to_file {
 	my $self = shift;
 	my $fh   = shift;
-	unless (ref($fh) ) {
-		my $handle = IO::File->new(">$fh");
+	my @msgs = @_;
+	my $handle;
+
+	if ( ref($fh) ) {
+		$handle = $fh;
+	} else { 
+		$handle = IO::File->new(">$fh");
 		unless ( defined($handle)) {
 			$@ = "Unable to open $fh: $!";
-			$self->LastError("Unable to open $fh: $!");
+			$self->LastError("Unable to open $fh: $!\n");
+			carp $@ if $^W;
 			return undef;
 		}
-	}
+	} 
 
         my $clear = "";
         $clear = $self->Clear;
+
+	my $string = ( $self->Uid ? "UID " : "" ) . "FETCH " . join(",",@msgs) . " RFC822";
 
         $self->Clear($clear)
                 if $self->Count >= $clear and $clear > 0;
@@ -461,86 +469,27 @@ sub message_to_file {
                 return undef;
         }
 
-	my $sh		= $self->Socket;
-	
-	my $buffer	= ""; 
-	my $count	= ""; $count = 0;
-	my $rvec 	= my $ready = my $errors = 0; 
-	my $timeout	= $self->Timeout;
-	my $transno	= $self->Transaction;
+        my ($code, $output);
+        $output = "";
 
-	my $readlen 	= $self->{Buffer}||( $self->{Fast_io} ? 4096 : 1 );
-	my $flags 	= '0';
+        READ: until ( $code)  {
+                $output = $self->_read_line($handle);
+                for my $o (@$output) {
+                        $self->_record($trans,$o);
+                        # $self->_debug("Received from readline: ${\($o->[_DATA])}<<END OF RESULT>>\n");
+                        next unless $self->_is_output($o);
+                        ($code) = $o->[_DATA] =~ /^$trans (OK|BAD|NO)/mi ;
+                        if ($o->[_DATA] =~ /^\*\s+BYE/im) {
+                                $self->State(Unconnected);
+                                return undef ;
+                        }
+                }
+        }
 
-	until ($buffer =~ /\r?\n$/ ) {
-		# _debug $self,"Entering read engine.\n" if $self->Debug;
-		if ($timeout) {
-			vec($rvec, fileno($self->Socket), 1) = 1; 
-			CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ;
-			unless ( vec ( $ready, fileno($self->Socket), 1 ) ) {
-				$self->LastError("Tag " . $transno . 
-					": Timeout after $timeout seconds during read data from server\n");	
-				fcntl($sh, F_SETFL, $fcntl) 
-					if $self->Fast_io and defined($fcntl);
-				$self->_record(	$transno, 
-						[ 	$self->_next_index($transno),
-						  	"ERROR",
-							"* NO Timeout reading from ". $self->Server . "\r\n"
-						]
-				);
-				$@ = "Timeout after $timeout seconds during read from server\r\n";
-				return undef;
-			}
-		}
-		_debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
-		local($^W) = undef;
-		$count += sysread(
-					$sh,
-					$buffer,
-					$readlen,
-					$offset
-		) ;
-		$offset = $count ;
-		pos $buffer = 1;
-		LITERAL: while ( $buffer =~ /\{(\d+)\}\r\n/g ) {
-			_debug $self, 	"Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
-			my $len = $1 ;
-			$offset = $count - pos($buffer) ;
-			$count -= length("{" . "$len" . "}\r\n" ) ;
-			$count -= $offset;
+        # $self->_debug("Command $string: returned $code\n");
+	close $handle unless ref($fh);
+        return $code =~ /^OK/im ? $self : undef ;
 
-			# _debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
-
-			substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
-				
-
-			if ($timeout) {
-				vec($rvec, fileno($self->Socket), 1) = 1;
-				unless ( CORE::select( $ready = $rvec, 
-							undef, 
-							$errors = $rvec, 
-							$timeout) 
-				) {
-					$self->LastError("$transno: " .
-						"NO Timeout waiting for literal data from server\n");	
-					return undef;
-				}	
-			}
-			until ( $offset >= $len ) {
-				# _debug $self, "Reading literal data\n";
-				$offset += sysread($sh,$buffer,$len-$offset, $count+$offset) ;
-			}
-			$count += $offset;
-			pos $buffer = 1;
-		}
-		$offset = length($buffer);
-
-		pos $buffer = 1;
-	}
-	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
-	#	_debug $self, "Buffer is now $buffer\n";
-	_debug $self, "Read: $buffer\n" if $self->Debug;
-	return $self;
 }
 
 sub message_uid {
@@ -699,8 +648,8 @@ sub _record {
 	my ($self,$count,$array) = ( shift, shift, shift);
 	local($^W)= undef;
 
-	 $self->_debug(sprintf("in _record: count is $count, values are %s/%s/%s and caller is " . 
-		join(":",caller()) . "\n",@$array));
+	#$self->_debug(sprintf("in _record: count is $count, values are %s/%s/%s and caller is " . 
+	#	join(":",caller()) . "\n",@$array));
 	
 	if ( 	# 	$array->[_DATA] and 
 		$array->[_DATA] =~ /^\d+ LOGIN/i ) { 
@@ -850,11 +799,22 @@ sub _old_read_line {
 # It is also re-implemented in:
 #	message_to_file
 #
+# syntax: $output = $self->_readline( ( $literal_callback|undef ) , ( $output_callback|undef ) ) ;
+# 	  Both input argument are optional, but if supplied must either be a filehandle, coderef, or undef.
+#
+#	Returned argument is a reference to an array of arrays, ie: 
+#	$output = [ 
+#			[ $index, 'OUTPUT'|'LITERAL', $output_line ] ,
+#			[ $index, 'OUTPUT'|'LITERAL', $output_line ] ,
+#			... 	# etc,
+#	];
 
 sub _read_line {
 	
 	my $self 	= shift;	
 	my $sh		= $self->Socket;
+	my $literal_callback    = shift;
+	my $output_callback = shift;
 	
 	my $iBuffer	= ""; 
 	my $oBuffer	= [];
@@ -929,6 +889,11 @@ sub _read_line {
 			# Figure out what's left to read (i.e. what part of literal wasn't in buffer):
 			my $remainder_count = $len - length($litstring);
 
+			if ( defined($literal_callback) ) 	{	# let's assume this is a fh for now
+				print $literal_callback $litstring ;
+				$litstring = "";
+		
+			}
 			if ($remainder_count and $timeout) {
 				# If we're doing timeouts then here we set up select and wait for data from the
 				# the IMAP socket.
@@ -945,7 +910,7 @@ sub _read_line {
 					return undef;
 				}	
 			}
-
+			
 			fcntl($sh, F_SETFL, $self->{_fcntl}) if $fast_io and defined($self->{_fcntl});
 			while ( $remainder_count > 0 ) {	   # As long as the literal isn't complete,
 				$remainder_count -= sysread(	   # decrement remainder_count by bytes read
@@ -954,6 +919,10 @@ sub _read_line {
 						$remainder_count,  # bytes left to read
 						length($litstring) # offset into litstring to read into
 				) ;
+				if ( defined($literal_callback) ) {
+					print $literal_callback $litstring;
+					$litstring = "";
+				}
 
 			}
 			$self->Fast_io($fast_io) if $fast_io;
@@ -962,8 +931,8 @@ sub _read_line {
 			# (There shouldn't be but I've seen it done!)
 
 			my $embedded_output = 0;
-			my $lastline = ( split(/\r?\n/,$litstring))[-1] ;
-			if ( $lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i ) {
+			my $lastline = ( split(/\r?\n/,$litstring))[-1] if $litstring;
+			if ( $lastline and $lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i ) {
 				$litstring =~ s/$lastline\r?\n//;
 				$embedded_output++;
 				$self->_debug("Got server output mixed in with literal: $lastline\n") 
@@ -1109,7 +1078,7 @@ sub AUTOLOAD {
 	delete $self->{Folders}  ;
 	$Mail::IMAPClient::AUTOLOAD =~ s/.*:://;
 	if (	
-			$Mail::IMAPClient::AUTOLOAD =~ /^[a-z]+$/i
+			$Mail::IMAPClient::AUTOLOAD =~ /^[a-z]+$/
 		and	$Mail::IMAPClient::AUTOLOAD !~ 
 				/^	(?:
 						store	 |
@@ -1192,6 +1161,61 @@ sub status {
 
 }
 
+
+# Can take a list of messages now.
+# If a single message, returns array or ref to array of flags
+# If a ref to array of messages, returns a ref to hash of msgid => flag arr
+# See parse_headers for more information
+# 2000-03-22 Adrian Smith (adrian.smith@ucpag.com)
+
+sub flags {
+	my $self = shift;
+	my $msgspec = shift;
+	my $flagset = {};
+	my $msg;
+	my $u_f = $self->Uid;
+
+	# Determine if set of messages or just one
+	if (ref($msgspec) eq 'ARRAY') {
+		$msg = join(',', @$msgspec);
+	} else {
+		$msg = $msgspec;
+		if ( scalar(@_) ) {
+			$msg .= join(",",@_) ;
+			$msgspec = [ $msgspec, @_ ] ;
+		}
+	}
+
+	# Send command
+	$self->fetch($msg,"FLAGS");
+
+	# Parse results, setting entry in result hash for each line
+ 	foreach my $resultline ($self->Results) {
+		if (	$resultline =~ 
+			/	\*\s+(\d*)\s+FETCH\s*	# * nnn FETCH 
+				\(			# ( 
+				(?:\sUID\s(\d+)\s?)?	# optional: UID nnn <space>
+				FLAGS\s*\((.*)\)\s?	# FLAGS (\Flag1 \Flag2) <space>
+				(?:\sUID\s(\d+))?	# optional: UID nnn
+				\) 			# )
+			/x
+		) {
+			my $mailid = $u_f ? ( $2||$4) : $1;
+			my $flagsString = $3 ;
+			my @flags = map { s/\s+$//; $_ } split(/\s+/, $flagsString);
+			$flagset->{$mailid} = \@flags;
+		}
+	}
+
+	# Did the guy want just one response? Return it if so
+	if (ref($msgspec) ne 'ARRAY') {
+		my $flagsref = $flagset->{$msgspec};
+		return wantarray ? @$flagsref : $flagsref;
+	}
+
+	# Or did he want a hash from msgid to flag array?
+	return $flagset;
+}
 
 # parse_headers modified to allow second param to also be a
 # reference to a list of numbers. If this is a case, the headers
@@ -3455,6 +3479,10 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 20001010.3  2000/10/30 18:40:02  dkernen
+#
+# Modified Files: Changes IMAPClient.pm INSTALL MANIFEST Makefile README test.txt  -- for 2.0.1
+#
 # Revision 20001010.2  2000/10/27 14:43:25  dkernen
 #
 # Modified Files: Changes IMAPClient.pm Todo -- major rewrite of I/O et al.

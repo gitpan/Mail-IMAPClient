@@ -1,5 +1,20 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 2.0.1
+------------------------
+Several bug fixes related to the flags method and to spurious warning messages when run with warnings turned on.
+
+A new method, message_to_file, writes message text directly into a file. This bypasses saving the text in the history
+buffer and the overhead that entails, which could be especially important when processing big ass messages. Of course
+the bad news is that now you'll have to write all that shtuff out to a filehandle, but maybe you wanted to do 
+that anyway. Anyhow, between append_file and message_to_file, both of which take filehandle arguments, there should 
+be a way to "short circuit" the copying of mail between two imap sessions. I just haven't got it completely figured 
+out yet how it would work. Got any ideas? Anyhow, this method is currently considered experimental.
+
+A couple of new tests have been added to go along with our new little method.
+
+I've added a whole bunch more IMAP-related rfc's to the docs/ subdirectory. Trust me, you are going to need them.
+
 Changes in version 2.0.0
 -----------------------
 NEW I/O ENGINE
@@ -578,4 +593,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.2 2000/10/27 14:43:23 dkernen Exp $
+# $Id: Changes,v 20001010.3 2000/10/30 18:40:01 dkernen Exp $

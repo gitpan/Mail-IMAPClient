@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.14 2000/10/27 14:43:59 dkernen Exp $
+# $Id: basic.t,v 19991216.15 2000/10/30 18:40:50 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -155,8 +155,9 @@ BEGIN {
 		}
 	};
 	{
-	my $size; my $string; my $target;
-	push @tests, sub {	# 15, 16, 17
+	my $size; my $string; my $target; 
+	my $file = "./test_message_to_file";
+	push @tests, sub {	# 15, 16, 17, 18, 19
 		$target = ref($uid) ? ($imap->search("ALL"))[0] : $uid;
 		if ( eval { $size = $imap->size($target) } ) { # 15  test size
 			print "ok ",++$test,"\n";
@@ -176,53 +177,69 @@ BEGIN {
 			print "not ok ",++$test,"\n";
 		}
 	};
-	}
+	push @tests, sub {
+		eval { $imap->message_to_file($file,$target)};
+		if ( $@ ) {					# 18 test message_to_file success
+			print "not ok ",++$test,"\n";	
+		} else {
+			print "ok ",++$test,"\n";	
+		}
+	};
+	push @tests, sub {
+		if ( -s $file == $size ) {			# 19 test message_to_file size
+			print "ok ",++$test,"\n";	#
+		} else {
+			print "not ok ",++$test,"\n";	#
+		}
+	};
+	unlink $file;
+	}						# wrap up closure
 
-	push @tests, sub {	# 18, 19, 20, 21, 22, 23, 24
+	push @tests, sub {	# 20, 21, 22, 23, 24, 25 26
 		my @unseen; my @seen;
-		if ( eval { @seen = $imap->seen } ) { # 18	test seen's success
+		if ( eval { @seen = $imap->seen } ) { # 20	test seen's success
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 		}
-		if ( @seen == 1 ) 			{ # 19	test seen's results
+		if ( @seen == 1 ) 			{ # 21	test seen's results
 			print "ok ",++$test,"\n";
 		} else {
 			print "not ok ",++$test,"\n";
 		}
 		
-		if ( eval { $imap->deny_seeing(\@seen) } ) { # 20 test deny_seeing's success
+		if ( eval { $imap->deny_seeing(\@seen) } ) { # 22 test deny_seeing's success
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 		}
-		if ( eval { @unseen = $imap->unseen } ) { # 21 test unseen's success
+		if ( eval { @unseen = $imap->unseen } ) { # 23 test unseen's success
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 		}
 
-		if ( @unseen == 1 ) 		    { # 22 test deny_seeing's and unseen's results
+		if ( @unseen == 1 ) 		    { # 24 test deny_seeing's and unseen's results
 			print "ok ",++$test,"\n";
 		} else {
 			print "not ok ",++$test,"\n";
 		}
-		if ( eval { $imap->see(\@seen) } ) { # 23 test see's success
+		if ( eval { $imap->see(\@seen) } ) { # 25 test see's success
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 		}
-		if ( @seen == 1 ) 			{ # 24 test seen's and see's success
+		if ( @seen == 1 ) 			{ # 26 test seen's and see's success
 			print "ok ",++$test,"\n";
 		} else {
 			print "not ok ",++$test,"\n";
 		}
 		
 	};
-	# Add dummy tests to come up to 24 test routines:
-	push @tests, sub { 19 }, sub { 20 }, sub { 21 } , sub { 22 }, sub { 23 }, sub { 24 };
+	# Add dummy tests to come up to 26 test routines:
+	push @tests, sub { 21 }, sub { 22 }, sub { 23 } , sub { 24 }, sub { 25 }, sub { 26 };
 
-	push @tests, sub {	# 25
+	push @tests, sub {	# 27
 		if ( eval { my $uid2 = $imap->copy($target2,1)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -231,7 +248,7 @@ BEGIN {
 	};
 
 	
-	push @tests, sub {	# 26
+	push @tests, sub {	# 28
 		my @res;
 		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
 			print "ok ",++$test,"\n";
@@ -240,7 +257,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 27
+	push @tests, sub {	# 29
 		my $h;
 		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
 			and $h->{Subject}[0] =~ /^Testing from pid/o } ) {
@@ -255,7 +272,7 @@ BEGIN {
 	};
 
 	my @hits = ();
-	push @tests, sub {	# 28
+	push @tests, sub {	# 30
 		$imap->select("$target");
 		eval { @hits = $imap->search('SUBJECT','Testing') } ;
 		if ( scalar(@hits) == 1 ) {
@@ -267,22 +284,26 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 29, 30
+	push @tests, sub {	# 31, 32
 		if ( $imap->delete_message(@hits) ) {
 			print "ok ",++$test,"\n";
 			my $flaghash = $imap->flags(\@hits);
 			my $flagflag = 0;
 			foreach my $v ( values %$flaghash ) { 
 				foreach my $f (@$v) { $flagflag++ if $f =~ /\\Deleted/}
-				print "",($flagflag == scalar(@hits) ? "ok " :  "not ok "),++$test,"\n"  ;
+			}
+			if ( $flagflag == scalar(@hits) ) {
+				print "ok ", ++$test,"\n";
+			} else {
+				print "not ok ", ++$test,"\n";
 			}
 		} else {	
 			print "not ok ",++$test,"\n";
 			print "not ok ",++$test,"\n";
 		}
-	}, sub { return "Dummy test 30"} ;
+	}, sub { return "Dummy test 32"} ;
 
-	push @tests, sub {	# 31
+	push @tests, sub {	# 33
 		$imap->select($target2);
 		if ( $imap->delete_message($imap->search("ALL")) and $imap->delete($target2) ) {
 			print "ok ",++$test,"\n";
@@ -292,7 +313,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 32
+	push @tests, sub {	# 34
 		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
 		unless ( scalar(@hits)  ) {
 			print "ok ",++$test,"\n";
@@ -301,7 +322,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 33, 34
+	push @tests, sub {	# 35, 36
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";
@@ -318,7 +339,7 @@ BEGIN {
 				print "not ok ",++$test,"\n";
 			}
 		}
-	}, sub { print "ok ",++$test,"\n"} ;		# At least this one will work !!
+	}, sub { "Dummy 36" } ; 	
 
 	if ( -f "./test.txt" ) { 
 		print "1..${\(scalar @tests)}\n";  # update here if adding test to existing sub
@@ -343,8 +364,8 @@ BEGIN {
 }
 $db = IO::File->new(">/tmp/de.bug");
 local *TMP = $db ;
-open(STDERR,">&TMP");
-select(((select($db),$|=1))[0]);
+#open(STDERR,">&TMP");
+#select(((select($db),$|=1))[0]);
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -352,8 +373,8 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Timeout => 30,
-		Debug   => 1,
-		Debug_fh   => $db,
+		Debug   => 0,
+		# Debug_fh   => $db,
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 ) 	or 
@@ -382,6 +403,15 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.15  2000/10/30 18:40:50  dkernen
+#
+# Modified Files: Changes IMAPClient.pm INSTALL MANIFEST Makefile README test.txt  -- for 2.0.1
+# Added Files:
+# 	rfc1731.txt rfc1732.txt rfc1733.txt rfc2061.txt rfc2062.txt
+# 	rfc2086.txt rfc2087.txt rfc2088.txt rfc2177.txt rfc2180.txt
+# 	rfc2192.txt rfc2193.txt rfc2195.txt rfc2221.txt rfc2222.txt
+# 	rfc2234.txt rfc2245.txt rfc2342.txt rfc2359.txt rfc2683.txt
+#
 # Revision 19991216.14  2000/10/27 14:43:59  dkernen
 #
 # Modified Files: Changes IMAPClient.pm Todo -- major rewrite of I/O et al.
