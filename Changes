@@ -1,4 +1,9 @@
 Revision history for Perl extension IMAPClient.
+Changes in version 2.0.6
+------------------------
+
+Applied patches from Phil Lobbe to tighten up sysreads and 'writes and to correct a
+bug in the I/O engine.
 
 Changes in version 2.0.5
 ------------------------
@@ -695,4 +700,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.6 2000/12/20 19:36:51 dkernen Exp $
+# $Id: Changes,v 20001010.7 2001/01/09 19:24:28 dkernen Exp $

@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.7 2000/12/20 19:36:52 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.8 2001/01/09 19:24:29 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.0.5';
-$Mail::IMAPClient::VERSION = '2.0.5';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.0.6';
+$Mail::IMAPClient::VERSION = '2.0.6';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -432,7 +432,7 @@ sub message_string {
 	my $self = shift;
 	my $msg  = shift;
 	my $expected_size = $self->size($msg);
-	
+	return undef unless(defined $expected_size);	# unable to get size
 	my $cmd  = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]' ;
 
 	$self->fetch($msg,$cmd) or return undef;
@@ -442,13 +442,15 @@ sub message_string {
 	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
 		$string .= $result->[_DATA] if $self->_is_literal($result) ;
 	}      
+	# BUG? should probably return undef if length != expected
+	if ( length($string) != $expected_size ) { warn "${self}::message_string: expected $expected_size bytes but received " . length($string) if $self->Debug; }
 	if ( length($string) > $expected_size ) { $string = substr($string,0,$expected_size) }
-	if ( length($string) < $expected_size and $self->Debug ) {
+	if ( length($string) < $expected_size ) {
 		$self->LastError("${self}::message_string: expected $expected_size bytes but received " . 
 			length($string)."\n");
-		warn "${self}::message_string: expected $expected_size bytes but received " . length($string);
+		return undef;
 	}
-	return $string||undef;
+	return $string;
 }
 
 sub message_to_file {
@@ -750,12 +752,16 @@ sub _send_line {
 		_debug $self, "Sending: $dstring\n" if $self->Debug;
 	}
 	my $total = 0;
-	$total +=	syswrite(	
-				$self->Socket, 
-				$string, 
-				length($string)-$total, 
-				$total
-	) until $total >= length($string);
+	until ($total >= length($string)) {
+		my $ret =	syswrite(	
+					$self->Socket, 
+					$string, 
+					length($string)-$total, 
+					$total
+					);
+		return undef unless(defined $ret);	# avoid infinite loops on syswrite error
+		$total += $ret;
+	}
 	return $total;
 }
 
@@ -1053,7 +1059,7 @@ sub _read_line {
 			my $embedded_output = 0;
 			my $lastline = ( split(/\r?\n/,$litstring))[-1] if $litstring;
 			if ( $lastline and $lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i ) {
-				$litstring =~ s/$lastline\r?\n//;
+				$litstring =~ s/\Q$lastline\E\r?\n//;
 				$embedded_output++;
 				$self->_debug("Got server output mixed in with literal: ",
 						"$lastline\n") 
@@ -2244,8 +2250,10 @@ sub deny_seeing {
 sub size {
 
 	my ($self,$msg) = @_;
-
-	my($size) = grep(/RFC822\.SIZE/,$self->fetch($msg,"(RFC822.SIZE)"));
+	# return undef unless fetch is successful
+	my @data = $self->fetch($msg,"(RFC822.SIZE)");
+	return undef unless defined($data[0]);
+	my($size) = grep(/RFC822\.SIZE/,@data);
 
 	$size =~ /RFC822\.SIZE\s+(\d+)/;
 	
@@ -4005,6 +4013,14 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 20001010.8  2001/01/09 19:24:29  dkernen
+#
+# Modified Files:
+# 	Changes IMAPClient.pm Makefile test.txt  -- to add Phil Lobbe's patch.
+#
+# Revision 1.1  2000/12/27 01:22:35  phil
+# Initial revision
+#
 # Revision 20001010.7  2000/12/20 19:36:52  dkernen
 #
 # ---------------------------------------------------------------------------------
