@@ -1,5 +1,32 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 2.0.2
+------------------------
+Fixed bug that caused a compile error on some earlier versions of perl5. 
+
+Noticed that some older versions of perl give spurious "Ambiguous use" warnings here and there, mostly because
+I'm not quoting the name of the "History" member of the underlying Mail::IMAPClient hash. These warnings will
+go away when you upgrade perl. (I may fix them later, or maybe not. Depends on if I have time.) 
+
+Added new parameter (and eponymous method) Peek, along with new tests for 'make test' for same. See pod for 
+further info.
+
+Added some error checking to avoid trying to read or write with an unconnected IMAPClient object.
+
+Made bug fixes to parse_headers and flags.
+
+Added missing documentation for the exciting new message_to_file method (oops). Also cleaned up a few typos in 
+the pod while I happened to be there. (I'm sure there are still plenty left.)
+
+Fixed bugs in append and append_file. (Thanks to Mauro Bartolomeoli and to the people at jwm3.org for reporting 
+these bugs.) 
+
+Made changes to call to syswrite to guarantee delivery of entire message. (Only affects appends of very large
+messages.)
+
+Added the 'close' method to the list of lower-case-is-okay methods (see the section under version 2.0.0 on "NEW
+ERROR MESSAGES").
+
 Changes in version 2.0.1
 ------------------------
 Several bug fixes related to the flags method and to spurious warning messages when run with warnings turned on.
@@ -41,7 +68,7 @@ generate a warning telling you to use mixed- or upper-case method names (but onl
 say with the -w switch or $^W++ or something).  The exception are certain unimplemented yet quite popular methods 
 that, if ever explicitly implemented, will behave the same way as they do via the default method. (Or at least 
 they will remain downwardly compatible. I may add bells and whistles by not by default.) Those methods
-are listed in the pod and right here:  store, copy, subscribe, create, delete and expunge.
+are listed in the pod and right here:  store, copy, subscribe, close, create, delete and expunge.
 
 NEW VERSION NUMBERING SCHEME
 Changed the version numbering scheme to match perl's (as of perl v5.6.0).
@@ -593,4 +620,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.3 2000/10/30 18:40:01 dkernen Exp $
+# $Id: Changes,v 20001010.5 2000/11/10 22:08:05 dkernen Exp $

@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.15 2000/10/30 18:40:50 dkernen Exp $
+# $Id: basic.t,v 19991216.17 2000/11/10 22:08:15 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -191,8 +191,8 @@ BEGIN {
 		} else {
 			print "not ok ",++$test,"\n";	#
 		}
+		unlink "$file" or warn "$! unlinking $file\n";
 	};
-	unlink $file;
 	}						# wrap up closure
 
 	push @tests, sub {	# 20, 21, 22, 23, 24, 25 26
@@ -234,12 +234,39 @@ BEGIN {
 		} else {
 			print "not ok ",++$test,"\n";
 		}
+		eval { $imap->deny_seeing(@seen)  };
+		my $subject;
+		eval { $imap->Peek(1) };
+		eval { $subject = $imap->parse_headers($seen[0],"Subject")->{Subject}[0] };
+		if ( join("",$imap->flags($seen[0])) =~ /\\Seen/i ) { 	# 27 test "Peek = 1"
+			print "not ok ",++$test,"\n";	
+		} 	else {
+			print "ok ",++$test,"\n";	
+		}
+		eval { $imap->deny_seeing(@seen)  };
+		eval { $imap->Peek(0) };
+		eval { $subject = $imap->parse_headers($seen[0],"Subject")->{Subject}[0] };
+		if ( join("",$imap->flags($seen[0])) =~ /\\Seen/i ) { 	# 28 test "Peek = 0"
+			print "ok ",++$test,"\n";	
+		}	else {
+			print "not ok ",++$test,"\n";	
+		}
+		eval { $imap->deny_seeing(@seen)  };
+		eval { $imap->Peek(undef) };
+		eval { $subject = $imap->parse_headers($seen[0],"Subject")->{Subject}[0] };
+		if ( join("",$imap->flags($seen[0])) =~ /\\Seen/i ) { 	# 29 test "Peek = undef"
+			print "not ok ",++$test,"\n";	
+		}	else {
+			print "ok ",++$test,"\n";	
+		}
+		
 		
 	};
-	# Add dummy tests to come up to 26 test routines:
-	push @tests, sub { 21 }, sub { 22 }, sub { 23 } , sub { 24 }, sub { 25 }, sub { 26 };
+	# Add dummy tests to come up to 29 test routines:
+	push @tests, 	sub { 21 }, sub { 22 }, sub { 23 } , sub { 24 }, sub { 25 }, sub { 26 }, sub {27},
+			sub {28}, sub {29};
 
-	push @tests, sub {	# 27
+	push @tests, sub {	# 30
 		if ( eval { my $uid2 = $imap->copy($target2,1)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -248,7 +275,7 @@ BEGIN {
 	};
 
 	
-	push @tests, sub {	# 28
+	push @tests, sub {	# 31
 		my @res;
 		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
 			print "ok ",++$test,"\n";
@@ -257,7 +284,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 29
+	push @tests, sub {	# 32
 		my $h;
 		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
 			and $h->{Subject}[0] =~ /^Testing from pid/o } ) {
@@ -272,7 +299,7 @@ BEGIN {
 	};
 
 	my @hits = ();
-	push @tests, sub {	# 30
+	push @tests, sub {	# 33
 		$imap->select("$target");
 		eval { @hits = $imap->search('SUBJECT','Testing') } ;
 		if ( scalar(@hits) == 1 ) {
@@ -284,7 +311,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 31, 32
+	push @tests, sub {	# 34, 35
 		if ( $imap->delete_message(@hits) ) {
 			print "ok ",++$test,"\n";
 			my $flaghash = $imap->flags(\@hits);
@@ -301,9 +328,9 @@ BEGIN {
 			print "not ok ",++$test,"\n";
 			print "not ok ",++$test,"\n";
 		}
-	}, sub { return "Dummy test 32"} ;
+	}, sub { return "Dummy test 35"} ;
 
-	push @tests, sub {	# 33
+	push @tests, sub {	# 36
 		$imap->select($target2);
 		if ( $imap->delete_message($imap->search("ALL")) and $imap->delete($target2) ) {
 			print "ok ",++$test,"\n";
@@ -313,7 +340,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 34
+	push @tests, sub {	# 37
 		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
 		unless ( scalar(@hits)  ) {
 			print "ok ",++$test,"\n";
@@ -322,7 +349,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 35, 36
+	push @tests, sub {	# 38, 39
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";
@@ -339,7 +366,7 @@ BEGIN {
 				print "not ok ",++$test,"\n";
 			}
 		}
-	}, sub { "Dummy 36" } ; 	
+	}, sub { "Dummy 39" } ; 	
 
 	if ( -f "./test.txt" ) { 
 		print "1..${\(scalar @tests)}\n";  # update here if adding test to existing sub
@@ -364,8 +391,8 @@ BEGIN {
 }
 $db = IO::File->new(">/tmp/de.bug");
 local *TMP = $db ;
-#open(STDERR,">&TMP");
-#select(((select($db),$|=1))[0]);
+open(STDERR,">&TMP");
+select(((select($db),$|=1))[0]);
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -374,7 +401,7 @@ eval { $imap = Mail::IMAPClient->new(
 		Clear   => 0,
 		Timeout => 30,
 		Debug   => 0,
-		# Debug_fh   => $db,
+		Debug_fh   => $db,
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 ) 	or 
@@ -384,7 +411,7 @@ eval { $imap = Mail::IMAPClient->new(
 
 
 for my $test (@tests) { $test->(); }
-# print $db $imap->Report,"\n";
+print $db $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}
@@ -403,6 +430,15 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.17  2000/11/10 22:08:15  dkernen
+#
+# Modified Files: Changes IMAPClient.pm Makefile t/basic.t -- to add Peek parm and to make several bug fixes
+#
+# Revision 19991216.16  2000/10/30 21:04:11  dkernen
+#
+# Modified Files: Changes IMAPClient.pm  -- to update documentation
+# Modified Files: basic.t -- added tests for message_to_string.
+#
 # Revision 19991216.15  2000/10/30 18:40:50  dkernen
 #
 # Modified Files: Changes IMAPClient.pm INSTALL MANIFEST Makefile README test.txt  -- for 2.0.1
