@@ -1,4 +1,8 @@
 Revision history for Perl extension IMAPClient.
+Changes in version 1.15
+-----------------------
+Fixes the test suite, which in v1.14 had an "exit" stmt that caused early termination of the tests.
+(I had put that "exit" in there on purpose, and left it in there by accident.)
 
 Changes in version 1.14
 -----------------------
@@ -424,4 +428,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.15 2000/05/22 20:10:24 dkernen Exp $
+# $Id: Changes,v 19991216.16 2000/06/21 21:07:36 dkernen Exp $

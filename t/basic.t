@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.10 2000/04/27 18:00:15 dkernen Exp $
+# $Id: basic.t,v 19991216.11 2000/06/21 21:07:44 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -200,7 +200,6 @@ BEGIN {
 			print "Found ",scalar(@hits), 
 			  " hits (",join(", ",@hits),")-- expected 2\n";
 			print $imap->Report;
-			exit;
 		}
 	};
 	push @tests, sub {	# 19, 20
@@ -320,6 +319,11 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.11  2000/06/21 21:07:44  dkernen
+#
+# Modified Files: Changes IMAPClient.pm Makefile
+# Modified Files: basic.t
+#
 # Revision 19991216.10  2000/04/27 18:00:15  dkernen
 # Modified Files: basic.t
 #

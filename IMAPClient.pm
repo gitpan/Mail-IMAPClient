@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.14 2000/05/22 20:10:25 dkernen Exp $
+# $Id: IMAPClient.pm,v 19991216.15 2000/06/21 21:07:37 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.14';
-$Mail::IMAPClient::VERSION = '1.14';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.15';
+$Mail::IMAPClient::VERSION = '1.15';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -2761,6 +2761,10 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 19991216.15  2000/06/21 21:07:37  dkernen
+#
+# Modified Files: Changes IMAPClient.pm Makefile
+#
 # Revision 19991216.14  2000/05/22 20:10:25  dkernen
 #
 # Modified Files: Changes IMAPClient.pm
