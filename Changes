@@ -1,7 +1,24 @@
 Revision History for Perl extension Mail::IMAPClient.
 
-Changes in version 2.0.8
+Changes in version 2.1.0
 ------------------------
+
+Fixed a serious bug introduced in 2.0.9 when appending large messages.
+
+Made minor changes to improve the cyrus_expunge.pl example script.
+
+Made the set_flags routine RFC2060-compliant. Previously it prepended flag names with backslashes, even
+if the flags were not reserved flags. This broke support for user-defined flags, which I didn't realize 
+was supposed to even be there until Scott Renner clued me in. (Thanks, Scott.)
+
+Promoted the release level to "1". 
+
+Added a new 'internaldate' method. (Thanks to the folks at jwm3.org for donating the code!)
+
+Added a new example, cyrus_expire.pl.
+
+Changes in version 2.0.8/2.0.9
+------------------------------
 Made minor changes to the tests in t/basic.t so that folders are explicitly closed before they 
 are deleted. (Don't worry, only folders created by the tests are deleted. :-) Thanks go to Alan 
 Young for reporting that some servers require this.
@@ -734,4 +751,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.7 2001/01/09 19:24:28 dkernen Exp $
+# $Id: Changes,v 20001010.8 2001/02/07 20:19:49 dkernen Exp $

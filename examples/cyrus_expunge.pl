@@ -6,14 +6,14 @@ use IO::File;
 # Change the following line (or replace it with something better):
 my($h,$u,$p) = ('cyrus_host','cyrus_admin_id','cyrus_admin_pswd');
 
-my $imap = Mail::IMAPClient->new(	Server  => "$h",			# "nsusmsg02.net.bms.com",
+my $imap = Mail::IMAPClient->new(	Server  => "$h",			# imap host
 					User    => "$u",			# $u,	
 					Password=> "$p",			# $p,
-					Uid	=> 0,				# True value
-					Port    => 2143,			# Cyrus
+					Uid	=> 1,				# True value
+					Port    => 143,				# Cyrus
 					Debug	=> 0,				# True value
-					Buffer	=> 4096*10,				# True value
-					Fast_io	=> 0,				# True value
+					Buffer	=> 4096*10,			# True value
+					Fast_io	=> 1,				# True value
 					Timeout	=> 30,				# True value
 					# Debug_fh=> IO::File->new(">out.db"),	# fhandle
 				) 

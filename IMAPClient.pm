@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.8 2001/01/09 19:24:29 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.9 2001/02/07 20:19:50 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.0.9';
-$Mail::IMAPClient::VERSION = '2.0.9';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.1.0';
+$Mail::IMAPClient::VERSION = '2.1.0';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -749,7 +749,12 @@ sub _send_line {
 	if ( $string =~ /^[^\n{]*\{(\d+)\}\r\n/ ) {
 		my($p1,$p2,$len) ;
 		if ( ($p1,$len)   = $string =~ /^([^\n{]*\{(\d+)\}\r\n)/ 		# } for vi
-			and ($p2) = $string =~ /^[^\n{]*\{\d+\}\r\n(.{$len}.*\r\n)/ 	# } for vi
+			and  (
+				$len < 32766 ? 
+				( ($p2) = $string =~ /^[^\n{]*\{\d+\}\r\n(.{$len}.*\r\n)/  ) :	
+				( ($p2) = $string =~ /^[^\n{]*\{\d+\}\r\n(.*\r\n)/ and length($p2) == $len  )
+				# }} for vi
+			)
 		) {
 			$self->_debug("Sending literal string in two parts: $p1\n\tthen: $p2\n");
 			$self->_send_line($p1) or return undef;
@@ -779,6 +784,7 @@ sub _send_line {
 		_debug $self, "Sending: $dstring\n" if $self->Debug;
 	}
 	my $total = 0;
+	my $temperrs = 0;
 	until ($total >= length($string)) {
 		my $ret =	syswrite(	
 					$self->Socket, 
@@ -786,7 +792,18 @@ sub _send_line {
 					length($string)-$total, 
 					$total
 					);
-		return undef unless(defined $ret);	# avoid infinite loops on syswrite error
+		if ($! =~ /Resource temporarily unavailable/i ) {
+			if ( $temperrs++ > 10 ) {
+				$self->LastError("Persistent '${!}' errors\n");
+				$self->_debug("Persistent '${!}' errors\n");
+				return undef;
+			}
+			CORE::select(undef, undef, undef, .25);
+		} else {
+			# avoid infinite loops on syswrite error
+			return undef unless(defined $ret);	 
+		}
+		
 		$total += $ret;
 	}
 	_debug $self,"Sent $total bytes\n" if $self->Debug;
@@ -1880,6 +1897,17 @@ sub namespace {
 	return wantarray ? @ns : \@ns;
 }
 
+# Contributed by jwm3
+sub internaldate {
+        my $self = shift;
+        my $msg  = shift;
+        $self->_imap_command( ( $self->Uid ? "UID " : "" ) . "FETCH $msg INTERNALDATE") or return undef;
+        my $internalDate = join("", $self->History($self->Count));
+        $internalDate =~ s/^.*INTERNALDATE "//si;
+        $internalDate =~ s/\"\).*$//s;
+        return $internalDate;
+}
+
 sub is_parent {
 	my ($self, $folder) = (shift, shift);
 	# $self->_debug("Checking parentage " . ( $folder ? "for folder $folder" : "" ) . "\n");
@@ -2088,7 +2116,7 @@ sub append_file {
 			return undef;
 		}
 		_debug $self, "control points to $$control\n" if ref($control) and $self->Debug;
-		$/ = 	$control ? 	$control : 	"\n";	
+		$/ = 	ref($control) ?  "\n" : $control ? $control : 	"\n";	
 		while (defined($text = <$fh>)) {
 			$text =~ s/\r?\n/\r\n/g;
 			$self->_record(	$count,
@@ -2258,7 +2286,8 @@ sub move {
 sub set_flag {
 	my($self, $flag, @msgs) = @_;
 	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
-	$flag =~ /^\\/ or $flag = "\\" . $flag ;
+	$flag =~ /^\\/ or $flag = "\\" . $flag 
+		if $flag =~ /^(Answered|Flagged|Deleted|Seen|Draft)$/i;
 	$self->store( join(",",@msgs), "+FLAGS.SILENT (" . $flag . ")" );
 }
 
@@ -3184,6 +3213,11 @@ successful if the object is in the B<Authenticated> or B<Selected> states.
 Returns true if the IMAP server to which the B<IMAPClient> object is connected has the capability
 specified as an argument to B<has_capability>.
 
+=item internaldate()
+
+B<internaldate> accepts one argument, a message id (or UID if the Uid parameter is true), and returns 
+that message's internal date.
+
 =item is_parent()
 
 The B<is_parent> method accepts one argument, the name of a folder. It returns a value
@@ -4047,6 +4081,10 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 20001010.9  2001/02/07 20:19:50  dkernen
+#
+# Modified Files: Changes IMAPClient.pm MANIFEST Makefile test.txt  -- up to version 2.1.0
+#
 # Revision 20001010.8  2001/01/09 19:24:29  dkernen
 #
 # Modified Files:

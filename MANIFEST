@@ -18,6 +18,7 @@ examples/build_ldif.pl
 examples/find_dup_msgs.pl
 examples/copy_folder.pl
 examples/cyrus_expunge.pl
+examples/cyrus_expire.pl
 test_template.txt
 sample.perldb
 docs/rfc1731.txt

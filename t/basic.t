@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.19 2001/01/09 19:24:37 dkernen Exp $
+# $Id: basic.t,v 19991216.20 2001/02/07 20:20:43 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -460,6 +460,13 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.20  2001/02/07 20:20:43  dkernen
+#
+# Modified Files: Changes IMAPClient.pm MANIFEST Makefile test.txt  -- up to version 2.1.0
+# Added Files: cyrus_expunge.pl -- a new example script
+# Modified Files:  	basic.t -- to close folders before trying to delete them
+# Added Files: 		uidfast.t -- a new test suite
+#
 # Revision 19991216.19  2001/01/09 19:24:37  dkernen
 #
 # Modified Files:
