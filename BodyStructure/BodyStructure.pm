@@ -1,5 +1,5 @@
 package Mail::IMAPClient::BodyStructure;
-#$Id: BodyStructure.pm,v 1.2 2002/09/26 17:56:14 dkernen Exp $
+#$Id: BodyStructure.pm,v 1.3 2003/06/12 21:41:37 dkernen Exp $
 #use Parse::RecDescent;
 use Mail::IMAPClient;
 use Mail::IMAPClient::BodyStructure::Parse;
@@ -699,6 +699,18 @@ to understand the internals of this module.
 
 # History: 
 # $Log: BodyStructure.pm,v $
+# Revision 1.3  2003/06/12 21:41:37  dkernen
+# Cleaning up cvs repository
+#
+# Revision 1.1  2003/06/12 21:37:03  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+#
 # Revision 1.2  2002/09/26 17:56:14  dkernen
 #
 # Modified Files:

@@ -1,4 +1,5 @@
 Changes
+COPYRIGHT
 Todo
 IMAPClient.pm
 IMAPClient.pod
@@ -30,6 +31,7 @@ examples/migrate_mbox.pl
 examples/migrate_mail2.pl
 examples/populate_mailbox.pl
 examples/sharedFolder.pl
+examples/imtestExample.pl
 test_template.txt
 sample.perldb
 docs/rfc1731.txt
@@ -70,3 +72,8 @@ Thread/t/thread.t
 MessageSet/Makefile.PL
 MessageSet/MessageSet.pm
 MessageSet/t/range.t
+BodyStructure/COPYRIGHT
+Thread/COPYRIGHT
+docs/COPYRIGHT
+examples/COPYRIGHT
+MessageSet/COPYRIGHT

@@ -28,8 +28,8 @@ while (my $input = <$fh>) {
 	my($k,$v) = split(/=/,$input,2);
 	$conf{$k}=$v;
 }
-my $imap = Mail::IMAPClient->new(Server=>$conf{server},User=>$conf{user},Password=>$conf{passed})
-	or die "Connecting to $conf{server}: $! $@\n";
+my $imap = Mail::IMAPClient->new(Server=>$conf{server},User=>$conf{user},
+	Password=>$conf{passed}) or die "Connecting to $conf{server}: $! $@\n";
 
 for my $f ( grep(/^IMAPClient_/,$imap->folders) ) {
 	print "Deleting $f\n";
@@ -38,3 +38,27 @@ for my $f ( grep(/^IMAPClient_/,$imap->folders) ) {
 	$imap->close($f);
 	$imap->delete($f);
 }
+
+
+=head1 AUTHOR 
+	
+David J. Kernen
+
+The Kernen Group, Inc.
+
+imap@kernengroup.com
+
+=head1 COPYRIGHT
+
+This example and Mail::IMAPClient are Copyright (c) 2003 
+by The Kernen Group, Inc. All rights reserved.
+
+This example is distributed with Mail::IMAPClient and 
+subject to the same licensing requirements as Mail::IMAPClient.
+
+imtest is a utility distributed with Cyrus IMAP server, 
+Copyright (c) 1994-2000 Carnegie Mellon University.  
+All rights reserved. 
+
+=cut
+

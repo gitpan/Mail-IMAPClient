@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-# $Id: find_dup_msgs.pl,v 19991216.4 2002/08/23 14:34:51 dkernen Exp $
+# $Id: find_dup_msgs.pl,v 19991216.5 2003/06/12 21:38:32 dkernen Exp $
 
 use Mail::IMAPClient;
 use Mozilla::LDAP::Conn;
@@ -124,8 +124,59 @@ sub usage {
 		"\n" ;
 }
 
+
+=head1 AUTHOR 
+	
+David J. Kernen
+
+The Kernen Group, Inc.
+
+imap@kernengroup.com
+
+=head1 COPYRIGHT
+
+This example and Mail::IMAPClient are Copyright (c) 2003 
+by The Kernen Group, Inc. All rights reserved.
+
+This example is distributed with Mail::IMAPClient and 
+subject to the same licensing requirements as Mail::IMAPClient.
+
+imtest is a utility distributed with Cyrus IMAP server, 
+Copyright (c) 1994-2000 Carnegie Mellon University.  
+All rights reserved. 
+
+=cut
+
 # History:
 # $Log: find_dup_msgs.pl,v $
+# Revision 19991216.5  2003/06/12 21:38:32  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+# 	Parse.grammar Parse.pod
+#  	range.t
+#  	Thread.grammar
+#  	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+#  	rfc2221.txt rfc2359.txt rfc2683.txt
+#
+# Revision 1.1  2003/06/12 21:38:14  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+# 	Parse.grammar Parse.pod
+#  	range.t
+#  	Thread.grammar
+#  	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+#  	rfc2221.txt rfc2359.txt rfc2683.txt
+#
 # Revision 19991216.4  2002/08/23 14:34:51  dkernen
 #
 # Modified Files:	Changes IMAPClient.pm Makefile Makefile.PL test.txt for version 2.2.0

@@ -1,4 +1,5 @@
 #!/usr/local/bin/perl
+#$Id: sharedFolder.pl,v 19991216.1 2003/06/12 21:38:35 dkernen Exp $
 
 use Mail::IMAPClient;
 use Getopt::Std;
@@ -44,3 +45,44 @@ print "Ok: $target has ", $imap->message_count($target)," messages.\n";
 
 $imap->logout;
 exit;
+
+
+=head1 AUTHOR 
+	
+David J. Kernen
+
+The Kernen Group, Inc.
+
+imap@kernengroup.com
+
+=head1 COPYRIGHT
+
+This example and Mail::IMAPClient are Copyright (c) 2003 
+by The Kernen Group, Inc. All rights reserved.
+
+This example is distributed with Mail::IMAPClient and 
+subject to the same licensing requirements as Mail::IMAPClient.
+
+imtest is a utility distributed with Cyrus IMAP server, 
+Copyright (c) 1994-2000 Carnegie Mellon University.  
+All rights reserved. 
+
+=cut
+
+#
+#$Log: sharedFolder.pl,v $
+#Revision 19991216.1  2003/06/12 21:38:35  dkernen
+#
+#Preparing 2.2.8
+#Added Files: COPYRIGHT
+#Modified Files: Parse.grammar
+#Added Files: Makefile.old
+#	Makefile.PL Todo sample.perldb
+#	BodyStructure.pm
+#	Parse.grammar Parse.pod
+# 	range.t
+# 	Thread.grammar
+# 	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+# 	rfc2221.txt rfc2359.txt rfc2683.txt
+#
+#

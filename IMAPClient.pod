@@ -1,6 +1,6 @@
 package Mail::IMAPClient;
 
-# $Id$
+# $Id: IMAPClient.pod,v 20001010.1 2003/06/12 21:35:53 dkernen Exp $
 
 $Mail::IMAPClient::VERSION = '2.2.7';
 $Mail::IMAPClient::VERSION = '2.2.7';  	# do it twice to make sure it takes
@@ -42,6 +42,152 @@ server connection is made and after it has ended. This differs slightly
 from RFC2060, which does not define a pre-connection status. For a
 discussion of the methods available for examining the B<IMAPClient>
 object's status, see the section labeled L<"Status Methods">, below.
+
+=head2 Advanced Authentication Mechanisms
+
+RFC2060 defines two commands for authenticating to an IMAP server: LOGIN for
+plain text authentication and AUTHENTICATE for more secure authentication
+mechanisms. Currently Mail::IMAPClient supports CRAM-MD5 and plain text 
+authentication. There are also a number of methods and parameters that you 
+can use to build your own authentication mechanism. Since this topic is a source
+of many questions, I will provide a quick overview here. All of the methods and
+parameters discussed here are described in more detail elsewhere in this document;
+this section is meant to help you get started.
+
+First of all, if you just want to do plain text authentication and your server is
+okay with that idea then you don't even need to read this section. 
+
+Second of all, the intent of this section is to help you implement the authentication
+mechanism of your choice, but you will have to understand how that mechanism works.
+There are I<lots> of authentication mechanisms and most of them are not available to
+me to test with for one reason or another. Even if this section does not answer
+all of your authentication questions it I<does> contain all the answers that I have,
+which I admit are scant.
+
+Third of all, if you manage to get any advanced authentication mechanisms to work then
+consider please donating them to this module. I don't quite have a framework visualized
+for how different authentication mechanisms could "plug in" to this module but I would
+like to eventually see this module distributed with a number of helper modules to 
+implement various authentication schemes.
+
+The B<Mail::IMAPClient>'s support for add-on authentication mechanisms is pretty straight
+forward and is built upon several assumptions. Basically you create a callback to be used to
+provide the response to the server's challenge. The I<Authcallback> parameter contains a 
+reference to the callback, which  can be an anonymous subroutine or a named subroutine. 
+Then, you identify your authentication mechanism, either via the I<Authmechanism> parameter 
+or as an argument to L<authenticate>. 
+
+You may also need to provide a subroutine to encrypt (or whatever) data before it is sent
+to the server. The I<Prewritemethod> parameter must contain a reference to this subroutine.
+And, you will need to decrypt data from the server; a reference to the subroutine that 
+does this must be stored in the I<Readmethod> parameter.
+
+This framework is based on the assumptions that a) the mechanism you are using requires
+a challenge-response exchange, and b) the mechanism does not fundamentally alter the 
+exchange between client and server but merely wraps the exchange in a layer of 
+encryption. It particularly assumes that the line-oriented nature of the IMAP conversation
+is preserved; authentication mechanisms that break up messages into blocks of a 
+predetermined size may still be possible but will certainly be more difficult to implement.
+
+Alternatively, if you have access to B<imtest>, a utility included in the Cyrus IMAP
+distribution, you can use that utility to broker your communications with the IMAP server.
+This is quite easy to implement. An example, L<examples/imtestExample.pl>, can be found in 
+the C<examples> subdirectory of the source distribution. 
+
+The following list summarizes the methods and parameters that you may find useful in 
+implementing advanced autentication:
+
+=over 4
+
+=item authenticate method
+
+This method implements the AUTHENTICATE IMAP client command as documented in RFC2060.
+If you have set the I<Authmechanism> parameter then the L<login> method will call
+L<authenticate> instead of doing a clear text login, which is its normal behavior.
+If you don't want B<login> to call B<authenticate> on your behalf then you can call
+it yourself. Instead of setting an I<Authmechanism> you can just pass the authmechanism
+as the first argument to AUTHENTICATE. 
+
+=item Socket Parameter
+
+The I<Socket> parameter holds a reference to the socket connection. Normally this
+is set for you by the L<connect> method, but if you are implementing an advanced 
+authentication technique you may choose to set up your own socket connection and then
+set this parameter manually, bypassing the B<connect> method completely.
+
+=item State, Server, Password, and User Parameters
+
+If you need to make your own connection to the server and perform your authentication
+manually, then you can set these parameters to keep your B<Mail::IMAPClient> object
+in sync with its actual status. Of these, only the I<State> parameter is always necessary.
+The others need to be set only if you think your program will need them later.
+
+=item Authmechanism 
+
+Set this to the value that AUTHENTICATE should send to the server as the authentication
+mechanism. If you are brokering your own authentication then this parameter may be less
+useful. It is also not needed by the L<authenticate> method. It exists solely so that you
+can set it when you call L<new> to instantiate your object. The B<new> method will call
+L<connect>, who will call L<login>. If B<login> sees that you've set an I<Authmechanism>
+then it will call B<authenticate>, using your I<Authmechanism> and I<Authcallback> 
+parameters as arguments.
+
+=item Authcallback 
+
+The I<Authcallback> parameter, if set, should contain a pointer to a subroutine. The
+L<login> method will use this as the callback argument to the B<authenticate> method
+if the I<Authmechanism> and I<Authcallback> parameters are both set. If you set
+I<Authmechanism> but not I<Authcallback> then the default callback for your mechanism
+will be used. Unfortunately only the CRAM-MD5 authentication mechanism has a default
+callback; in every other case not supplying the callback results in an error.
+
+Most advanced authentication mechanisms require a challenge-response exchange. After the
+L<authenticate> method sends "<tag> AUTHENTICATE <Authmechanism>\r\n"  to the IMAP 
+server, the server replies with a challenge. The authenticate then invokes the code 
+whose reference is stored in the I<Authcallback> parameter as follows:
+
+	$Authcallback->($challenge,$imap)
+
+where C<$Authcallback> is the code reference stored in the I<Authcallback> parameter,
+C<$challenge> is the challenge received from the IMAP server, and C<$imap> is a pointer
+to the B<Mail::IMAPClient> object. The return value from the I<Authcallback> routine 
+should be the response to the challenge, and that return value will be sent by the 
+L<authenticate> method to the server.
+
+=item Readmethod 
+
+The I<Readmethod> parameter points to a routine that will read data from the socket
+connection. This read method will replace the B<sysread> that would otherwise be
+performed by B<Mail::IMAPClient>. The replacement method is called with five 
+arguments. The first is a pointer to the B<Mail::IMAPClient> object; the rest
+are the four arguments required by the B<sysread> function. Note the third argument
+(which corresponds to the second argument to B<sysread>) is a buffer to read into;
+this will be a pointer to a scalar. So for example if your I<Readmethod> were just 
+going to replace B<sysread> without any intervening processing (which would be silly
+but this is just an example after all) then you would set your I<Readmethod> like this:
+
+	$imap->Readmethod( 
+		sub { 
+			my($self) = shift; 
+			my($handle,$buffer,$count,$offset) = @_;
+			return sysread( $handle, $$buffer, $count, $offset);
+		}
+	);
+
+Note particularly the double dollar signs in C<$$buffer> in the B<sysread> call; this
+is not a typo!
+
+=item Prewritemethod
+
+The I<Prewritemethod>, if defined, should contain a pointer to a subroutine.
+It is called immediately prior to writing to the
+socket connection. It is called by B<Mail::IMAPClient> with two arguments:
+a reference to the B<Mail::IMAPClient> object and the ASCII text string to be written. 
+It should return another string that will be the actual string sent to the IMAP server. 
+The idea here is that your I<Prewritemethod> will do whatever encryption is necessary 
+and then return the result to the caller so it in turn can be sent to the server.
+
+=back
 
 =head2 Errors
 
@@ -569,10 +715,17 @@ to the code or subroutine referenced in the second argument. The return
 value from the 2nd argument's code is written to the server as is,
 except that a <CR><NL> sequence is appended if neccessary.
 
-If you do not specify a second argument, then the first argument must be
+If one or both of the arguments are not specified in the call to
+B<authenticate> but their corresponding parameters have been set
+(I<Authmechanism> and I<Authcallback>, respectively) then the parameter
+values are used. Arguments provided to the method call however will
+override parameter settings.
+
+If you do not specify a second argument and you have not set the 
+I<Authcallback> parameter, then the first argument must be
 one of the authentication mechanisms for which B<Mail::IMAPClient> has
-built in support. Currently there is built in support for CRAM-MD5, and
-I hope to add more in future releases. 
+built in support. Currently there is only built in support for CRAM-MD5, 
+but I hope to add more in future releases. 
 
 If you are interested in doing NTLM authentication then please see Mark
 Bush's L<Authen::NTLM>, which can work with B<Mail::IMAPClient> to
@@ -3100,6 +3253,21 @@ method.
 
 =cut
 
+=head2 Showcredentials
+
+Normally debugging output will mask the login credentials when the plain text
+login mechanism is used. Setting I<Showcredentials> to a true value will suppress
+this, so that you can see the string being passed back and forth during plain text
+login. Only set this to true when you are debugging problems with the IMAP LOGIN 
+command, and then turn it off right away when you're finished working on that problem.
+
+Example:
+
+	print "This is very risky!\n" if $imap->Showcredentials();
+	# or:
+	$imap->Showcredentials(0);	# mask credentials again
+
+
 =head2 Socket
 
 Example:
@@ -3491,12 +3659,12 @@ if you have a question and you can't find an answer in any of the
 documentation (including the RFC's, which are included in this distribution
 for a reason), then you can e-mail me at the following address:
 
-	comment-Mail-IMAPClient@rt.cpan.org
+	DJKERNEN@cpan.org
 
 Please note that this address is for questions, suggestions, and other comments
 about B<Mail::IMAPClient>. It's not for reporting bugs, it's not for general 
 correspondence, and it's especially not for selling porn, mortgages, Viagra, 
-or anything else.
+penis enlargment pills, DVD copying software, or anything else.
 
 =head1 AUTHOR
 

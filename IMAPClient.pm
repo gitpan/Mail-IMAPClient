@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.18 2002/12/13 18:08:39 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.19 2003/06/12 21:35:50 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.2.7';
-$Mail::IMAPClient::VERSION = '2.2.7';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.2.8';
+$Mail::IMAPClient::VERSION = '2.2.8';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -13,7 +13,6 @@ use IO::File();
 use Carp qw(carp);
 #use Data::Dumper;
 use Errno qw/EAGAIN/;
-
 
 #print "Found Fcntl in $INC{'Fcntl.pm'}\n";
 #Fcntl->import;
@@ -113,8 +112,8 @@ BEGIN {
 			Debug LastError Count Uid Debug_fh Maxtemperrors
 			EnableServerResponseInLiteral
 			Authmechanism Authcallback Ranges
-			Readmethod Writemethod
-			Postreadmethod Prewritemethod
+			Readmethod Showcredentials
+			Prewritemethod
 		)
  ) {
         no strict 'refs';
@@ -227,6 +226,7 @@ sub new {
 	$self->State(Unconnected);
 
 	$self->{Debug_fh} ||= \*STDERR;
+	select((select($self->{Debug_fh}),$|++)[0]) ;
  	$self->_debug("Using Mail::IMAPClient version $Mail::IMAPClient::VERSION " .
 		"and perl version " . (defined $^V ? join(".",unpack("CCC",$^V)) : "") . 
 		" ($])\n") if $self->Debug;
@@ -303,7 +303,8 @@ sub login {
 	my $id   = $self->User;
 	my $has_quotes = $id =~ /^".*"$/ ? 1 : 0;
 	my $string = 	"Login " . ( $has_quotes ? $id : qq("$id") ) . " " . 
-			$self->Massage($self->Password,1) ;
+			"{" . length($self->Password) . 
+			"}\r\n".$self->Password."\r\n";
 	$self->_imap_command($string) 
 		and $self->State(Authenticated);
 	# $self->folders and $self->separator unless $self->NoAutoList;
@@ -321,13 +322,13 @@ sub separator {
 	my $target = shift ; 
 
 	unless ( defined($target) ) {
-		my $sep ;
+		my $sep = "";
 		# 	separator is namespace's 1st thing's 1st thing's 2nd thing:
 		eval { 	$sep = $self->namespace->[0][0][1] } 	;
 		return $sep if $sep;
 	}	
 		
-	defined($target) or $target = "INBOX";
+	defined($target) or $target = "";
 	$target ||= '""' ;
 	
 	
@@ -335,10 +336,10 @@ sub separator {
 	# The fact that the response might end with {123} doesn't really matter here:
 
 	unless (exists $self->{"$target${;}SEPARATOR"}) {
-		my $list = (grep(/^\*\s+LIST\s+/, $self->list(undef,$target) ))[0] || 
+		my $list = (grep(/^\*\s+LIST\s+/,($self->list(undef,$target)||("NO")) ))[0] || 
 				qq("/");
 		my $s = (split(/\s+/,$list))[3];
-		$self->{"$target${;}SEPARATOR"} = 
+		defined($s) and $self->{"$target${;}SEPARATOR"} = 
 				( $s eq 'NIL' ? 'NIL' : substr($s, 1,length($s)-2) );
 	}
 	return $self->{$target,'SEPARATOR'};
@@ -731,7 +732,7 @@ sub migrate {
 		" $range\n");
 		# ( ref($msgs) ? join(", ",@$msgs) : $msgs) );
 
-	#MIGMSG:	foreach my $mid ( ref($msgs) ? @$msgs : (split(/,\s*/,$msgs)) ) {
+	#MIGMSG:	foreach my $mid ( ref($msgs) ? @$msgs : (split(/,\s*/,$msgs)) ) {#}
 	MIGMSG:	foreach my $mid ( @$range ) {
 		# Set up counters for size of msg and portion of msg remaining to
 		# process:
@@ -742,6 +743,7 @@ sub migrate {
 		# fetch internaldate and flags of original message:
 		my $intDate = '"' . $self->internaldate($mid) . '"' ;
 		my $flags   = "(" . join(" ",grep(!/\\Recent/i,$self->flags($mid)) ) . ")" ;
+		$flags = "" if  $flags eq "()" ;
 
 		# set up transaction numbers for from and to connections:
 		my $trans       = $self->Count($self->Count+1);
@@ -751,7 +753,7 @@ sub migrate {
 		# transaction:
 		if ( $size <= $bufferSize ) {
 			my $new_mid = $peer->append_string($peer->Massage($folder),
-					$self->message_string($mid) ,undef,
+					$self->message_string($mid) ,$flags,
 					$intDate) ;
 		        $self->_debug("Copied message $mid in folder $folder to " . 
 				    $peer->User .
@@ -775,28 +777,32 @@ sub migrate {
 			$cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
 			$pattern = sub {
                                 #$self->_debug("Data fed to pattern: $_[0]<END>\n");
-                                $_[0] =~ /\(.*BODY\[\]<\d+> \{(\d+)\}/i 	; # ;-)
+                                my($one) = $_[0] =~ /\(.*BODY\[\]<\d+> \{(\d+)\}/i ; # ;-)
 					# or $self->_debug("Didn't match pattern\n") ; 
                                 #$self->_debug("Returning from pattern: $1\n") if defined($1);
-				return $1 ;
+				return $one ;
                         } ;
 		} else {
 			# older imaps use (deprecated) FETCH RFC822:
 			$cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822' ;
 			$pattern = sub {
-				shift =~ /\(RFC822\[\]<\d+> \{(\d+)\}/i; 
-				return $1 ;
+				my($one) = shift =~ /\(RFC822\[\]<\d+> \{(\d+)\}/i; 
+				return $one ;
 			};
 		}
 
 
 		# Now let's warn the peer that there's a message coming:
 
-		my $pstring = 	"$ptrans APPEND " . $self->Massage($folder) .  
-				" $flags $intDate {" . $size . "}"  ;
+		my $pstring = 	"$ptrans APPEND " . 
+				$self->Massage($folder). 
+				" " . 
+				( $flags ? "$flags " : () ) . 
+				( $intDate ? "$intDate " : () ) . 
+				"{" . $size . "}"  ;
 
-		$peer->_debug("About to issue APPEND command to peer for msg $mid\n")
-			if $peer->Debug;
+		$self->_debug("About to issue APPEND command to peer " .
+			"for msg $mid\n") 		if $self->Debug;
 
 		my $feedback2 = $peer->_send_line( $pstring ) ;
 
@@ -816,14 +822,14 @@ sub migrate {
 		  $readSoFar += sysread($toSock,$fromBuffer,1,$readSoFar)||0
 			until $fromBuffer =~ /\x0d\x0a/;
 
-		  $peer->_debug("migrate: response from target server: $fromBuffer<END>\n")
-			if $peer->Debug;
+		  #$peer->_debug("migrate: response from target server: " .
+		  #	"$fromBuffer<END>\n") 	if $peer->Debug;
 
-		  ($code)= $fromBuffer =~ /^(\+)/ ;
+		  ($code)= $fromBuffer =~ /^(\+)|^(?:\d+\s(?:BAD|NO))/ ;
 		  $code ||=0;
 
-		  #$peer->_debug( "$folder: received $fromBuffer from server\n") 
-		  #if $self->Debug;
+		  $peer->_debug( "$folder: received $fromBuffer from server\n") 
+		  if $peer->Debug;
 
 	  	  # ... and log it in the history buffers
 		  $self->_record($trans,[ 
@@ -917,7 +923,7 @@ sub migrate {
 		 #);
 
 		 until ( $wroteSoFar >= $readSoFar ) {
-
+		    $!=0;
 		    my $ret = syswrite(
 				$toSock,
 				$fromBuffer,
@@ -949,6 +955,7 @@ sub migrate {
 		    # minus a little bit to prevent it from
 		    # emptying completely and wasting time in the select call.
 		    if ($optimize) {
+		        my $waittime = .02; 
 		    	$maxwrite = $ret if $maxwrite < $ret;
 		    	push( @last5writes, $ret );
 		    	shift( @last5writes ) if $#last5writes > 5;
@@ -973,7 +980,7 @@ sub migrate {
 		    if ( defined($ret) ) {
 			$temperrs = 0  ;
 		    }
-		    $peer->_debug("Chunk $chunkCount: " +
+		    $peer->_debug("Chunk $chunkCount: " .
 			"Wrote $wroteSoFar bytes (out of $chunk)\n");
 		   }
 		}
@@ -1015,6 +1022,7 @@ sub migrate {
 	   {
 	    my $wroteSoFar = 0;
 	    $fromBuffer = "\x0d\x0a";
+	    $!=0;
 	    $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar)||0 
 	    		until $wroteSoFar >= 2;
 
@@ -1343,7 +1351,9 @@ sub _record {
 	#	join(":",caller()) . "\n",@$array));
 	
       if (    #       $array->[DATA] and 
-              $array->[DATA] =~ /^\d+ LOGIN/i ) { 
+              $array->[DATA] =~ /^\d+ LOGIN/i and
+		! $self->Showcredentials
+      ) { 
 
               $array->[DATA] =~ s/LOGIN.*/LOGIN XXXXXXXX XXXXXXXX/i ;
 	}
@@ -1446,12 +1456,15 @@ sub _send_line {
 	_debug $self, "Sending: $string\n" if $self->Debug and $self->Prewritemethod;
 
 	until ($total >= length($string)) {
-		my $ret =	syswrite(	
+		my $ret = 0;
+	        $!=0;
+		$ret =	syswrite(	
 					$self->Socket, 
 					$string, 
 					length($string)-$total, 
 					$total
 					);
+		$ret||=0;
 		if ($! == &EAGAIN ) {
 			if ( 	$self->{Maxtemperrors} !~ /^unlimited/i
 			    	and $temperrs++ > ($self->{Maxtemperrors}||10) 
@@ -1799,6 +1812,8 @@ sub _sysread {
 	}
 }
 
+=begin obsolete
+
 sub old_read_line {
 	my $self 	= shift;	
 	my $sh		= $self->Socket;
@@ -2046,6 +2061,11 @@ sub old_read_line {
 	return scalar(@$oBuffer) ? $oBuffer : undef ;
 }
 
+=end obsolete
+
+=cut
+
+
 sub Report {
 	my $self = shift;
 #	$self->_debug( "Dumper: " . Data::Dumper::Dumper($self) . 
@@ -2208,7 +2228,57 @@ sub get_bodystructure {
 	return $bs;
 }
 
+# Updated to handle embedded literal strings 
 sub get_envelope {
+	my($self,$msg) = @_;
+	unless ( eval {require Mail::IMAPClient::BodyStructure ; 1 } ) {
+		$self->LastError("Unable to use get_envelope: $@\n");
+		return undef;
+	}
+	my @out = $self->fetch($msg,"ENVELOPE");
+	my $bs = "";
+	my $output = grep(	
+		/ENVELOPE \(/i,  @out	 # Wee! ;-)
+	); 
+	if ( $output =~ /\r\n$/ ) {
+		eval { 
+		 $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output)
+		};
+	} else {
+		$self->_debug("get_envelope: " .
+			"reassembling original response\n");
+		my $start = 0;
+		foreach my $o (@{$self->{"History"}{$self->Transaction}}) {
+			next unless $self->_is_output_or_literal($o);
+			$self->_debug("o->[DATA] is ".$o->[DATA]."\n");
+			next unless $start or 
+				$o->[DATA] =~ /ENVELOPE \(/i and ++$start;
+				# Hi, vi! ;-)
+			if ( length($output) and $self->_is_literal($o) ) {
+				my $data = $o->[DATA];
+				$data =~ s/"/\\"/g;
+				$data =~ s/\(/\\\(/g;
+				$data =~ s/\)/\\\)/g;
+				$output .= '"'.$data.'"';
+			} else {
+				$output .= $o->[DATA] ;
+			}
+			$self->_debug("get_envelope: " .
+				"reassembled output=$output<END>\n");
+		}
+		eval { 
+		  $bs=Mail::IMAPClient::BodyStructure::Envelope->new($output)
+		};  
+	}
+	$self->_debug("get_envelope: msg $msg returns this ref: ". 
+		( $bs ? " $bs" : " UNDEF" ) 
+		."\n");
+	return $bs;
+}
+
+=begin obsolete
+
+sub old_get_envelope {
 	my($self,$msg) = @_;
 	unless ( eval {require Mail::IMAPClient::BodyStructure ; 1 } ) {
 		$self->LastError("Unable to use get_envelope: $@\n");
@@ -2247,7 +2317,12 @@ sub get_envelope {
 		."\n");
 	return $bs;
 }
-	
+
+=end obsolete
+
+=cut
+
+
 sub fetch {
 
 	my $self = shift;
@@ -2469,17 +2544,21 @@ sub flags {
 
 	# Parse results, setting entry in result hash for each line
  	foreach my $resultline ($self->Results) {
+		$self->_debug("flags: line = '$resultline'\n") ;
 		if (	$resultline =~ 
-			/	\*\s+(\d+)\s+FETCH\s+	# * nnn FETCH 
-				\(			# ( 
-				(?:\s?UID\s(\d+)\s?)?	# optional: UID nnn <space>
-				FLAGS\s?\((.*)\)\s?	# FLAGS (\Flag1 \Flag2) <space>
-				(?:\s?UID\s(\d+))?	# optional: UID nnn
-				\) 			# )
+			/\*\s+(\d+)\s+FETCH\s+	# * nnn FETCH 
+			 \(			# open-paren
+			 (?:\s?UID\s(\d+)\s?)?	# optional: UID nnn <space>
+			 FLAGS\s?\((.*)\)\s?	# FLAGS (\Flag1 \Flag2) <space>
+			 (?:\s?UID\s(\d+))?	# optional: UID nnn
+			 \) 			# close-paren
 			/x
 		) {
-			#$self->_debug("flags: line = '$resultline' and 1,2,3,4 = $1,$2,$3,$4\n") 
-			#		if $self->Debug;
+			{ local($^W=0);
+			 $self->_debug("flags: line = '$resultline' " .
+			   "and 1,2,3,4 = $1,$2,$3,$4\n") 
+			 if $self->Debug;
+			}
 			my $mailid = $u_f ? ( $2||$4) : $1;
 			my $flagsString = $3 ;
 			my @flags = map { s/\s+$//; $_ } split(/\s+/, $flagsString);
@@ -2944,6 +3023,7 @@ sub capability {
 sub has_capability {
 	my $self = shift;
 	$self->capability;
+	local($^W)=0;
 	return $self->{CAPABILITY}{uc($_[0])};
 }
 
@@ -2957,21 +3037,22 @@ sub imap4rev1 {
 sub namespace {
 	# Returns a (reference to a?) nested list as follows:
 	# [ 
-	#	[
-	#		[ $user_prefix, $user_delim ] ( , [ $user_prefix2, $user_delim] , [etc, etc] ) ,
-	#	],
-	#	[
-	#		[ $shared_prefix, $shared_delim ] ( , [ $shared_prefix2, $shared_delim] , [etc, etc] ) ,
-	#	],
-	#	[
-	#		[ $public_prefix, $public_delim ] ( , [ $public_prefix2, $public_delim] , [etc, etc] ) ,
-	#	],
+	#  [
+	#   [ $user_prefix,  $user_delim  ] (,[$user_prefix2  ,$user_delim  ], [etc,etc] ),
+	#  ],
+	#  [
+	#   [ $shared_prefix,$shared_delim] (,[$shared_prefix2,$shared_delim], [etc,etc] ),
+	#  ],
+	#  [
+	#   [$public_prefix, $public_delim] (,[$public_prefix2,$public_delim], [etc,etc] ),
+	#  ],
 	# ] ;
 		
 	my $self = shift;
 	unless ( $self->has_capability("NAMESPACE") ) {
 			my $error = $self->Count . " NO NAMESPACE not supported by " . $self->Server ;
 			$self->LastError("$error\n") ;
+			$self->_debug("$error\n") ;
 			$@ = $error;
 			carp "$@" if $^W;
 			return undef;
@@ -3012,13 +3093,15 @@ sub internaldate {
 
 sub is_parent {
 	my ($self, $folder) = (shift, shift);
-	# $self->_debug("Checking parentage " . ( $folder ? "for folder $folder" : "" ) . "\n");
-        my $list = $self->list(undef, $folder);
-	my $line;
+	# $self->_debug("Checking parentage ".( $folder ? "for folder $folder" : "" )."\n");
+        my $list = $self->list(undef, $folder)||"NO NO BAD BAD";
+	my $line = '';
 
         for (my $m = 0; $m < scalar(@$list); $m++ ) {
 		#$self->_debug("Judging whether or not $list->[$m] is fit for parenthood\n");
-		return undef if $list->[$m] =~ /NoInferior/i; 	# let's not beat around the bush
+		return undef 
+		  if $list->[$m] =~ /NoInferior/i;       # let's not beat around the bush!
+
                 if ($list->[$m]  =~ s/(\{\d+\})\x0d\x0a$// ) {
                         $list->[$m] .= $list->[$m+1];
                         $list->[$m+1] = "";
@@ -3032,6 +3115,10 @@ sub is_parent {
                                 (?:"([^"]*)"|(.*))\x0d\x0a$  # Name or "Folder name"
                         /x;
 	}	
+	if ( $line eq "" ) {
+		$self->_debug("Warning: separator method found no correct o/p in:\n\t" .
+			join("\t",@list)."\n");
+	}
 	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\s*\)/ if $line;
 	return  1 if $f =~ /HasChildren/i ;
 	return 0 if $f =~ /HasNoChildren/i ;
@@ -3315,7 +3402,9 @@ sub authenticate {
         my $self 	= shift;
         my $scheme 	= shift;
         my $response 	= shift;
-
+	
+	$scheme   ||= $self->Authmechanism;
+	$response ||= $self->Authcallback;
         my $clear = $self->Clear;
 
         $self->Clear($clear)
@@ -3326,7 +3415,8 @@ sub authenticate {
 
         my $string = "$count AUTHENTICATE $scheme";
 
-        $self->_record($count,[ $self->_next_index($self->Transaction), "INPUT", "$string\x0d\x0a"] );
+        $self->_record($count,[ $self->_next_index($self->Transaction), 
+				"INPUT", "$string\x0d\x0a"] );
 
 	my $feedback = $self->_send_line("$string");
 

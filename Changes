@@ -1,5 +1,48 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
+Changes in version 2.2.8
+------------------------
+Change the login method so that it always send password as a literal to get around
+problem 2544 reported by Phil Tracy which caused passwords containing asterisks to 
+fail on some systems (but not any of mine...). Good catch, Phil.
+
+Added a new example that demonstrates the use of imtest (a utility that comes with
+Cyrus IMAP) and Mail::IMAPClient together. The example uses imtest to do secure 
+authentication and then "passes" the connection over to Mail::IMAPClient (but
+imtest is still brokering the encryption/decryption). This example comes from 
+an idea of Tara L. Andrews', whose brainstorm it was to use imtest to broker secure 
+connections.  (But I still want to get encryption working with Mail::IMAPClient some 
+day!)
+
+Fixed an error in which a "+" was used as a conncatenation error instead of a ".".
+Thanks to Andrew Bramble for reporting this, even though he mistakenly identified 
+it as a "typo". It is not a typo; a plus sign is the correct concatenation operator,
+as any decent Java book will tell you ;-)
+
+Fixed an error in the login method when the password contains a special character
+(such as an asterisk.) Thanks to Phil Tracey for reporting this bug.
+
+Fixed some bugs in _send_line (the "O" side of the I/O engine) that were
+reported by Danny Smith.
+
+Fixed a bug in the migrate method in the optimization code (which 
+gets called when socket writes are delayed due to a slow or busy target 
+host, aka EAGAIN errors). Thanks to Pedro Carvalho for identifying 
+this bug and its cause.
+
+Fixed a bug in migrate that caused migration of unread messages to fail. 
+This was due to the way Mail::IMAPClient's migrate method would try to send 
+an empty list of flags to the target server in the APPEND. Thanks to 
+Stephen Fralich at Syracuse University and for reporting this bug. 
+
+Fixed another bug in the migrate method that caused flags to get lost. Thanks
+go to Jean-Michel Besnard for reporting this.
+
+Fixed a bug in migrate that caused
+Fixed a bug in get_envelope that caused it to fail under certain conditions.
+Thanks go to Bob Brown for reporting this bug.
+
+
 Changes in version 2.2.7
 ------------------------
 
@@ -1241,4 +1284,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.17 2002/12/13 18:08:37 dkernen Exp $
+# $Id: Changes,v 20001010.18 2003/06/12 21:35:48 dkernen Exp $

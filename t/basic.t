@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.26 2002/12/13 18:08:50 dkernen Exp $
+# $Id: basic.t,v 19991216.27 2003/06/12 21:38:35 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -20,7 +20,7 @@ $fast||=0;
 $range||=0;
 $uidplus||=0;
 $authmech||=0;
-use vars qw/*TMP/;
+use vars qw/*TMP $imap/;
 
 BEGIN {
 	$^W++;
@@ -452,13 +452,13 @@ BEGIN {
                 	User    => "$parms{user}"  || scalar(getpwuid($<)),
                 	( $authmech ? ( Authmechanism  => $authmech) : 
 				( $parms{authmechanism} eq "LOGIN" ? () : 
-				  Authmechanism => $parms{authmechanism}||undef )
+				  ( Authmechanism => $parms{authmechanism}||undef ) )
 			),
                 	Password=> "$parms{passed}"|| scalar(getpwuid($<)),
                 	Clear   => 0,
                 	Timeout => 30,
                 	Debug   => $ARGV[0],
-                	#Debug_fh   => $ARGV[0]?IO::File->new(">./imap2.debug"):undef,
+                	Debug_fh   => ($ARGV[0]?IO::File->new(">./imap2.debug"):undef),
                 	Fast_IO => $fast,
                 	Uid     => $uidplus,
 		)       or
@@ -593,20 +593,22 @@ exit unless		%parms
 	and 	length 	$parms{server}
 	and 	length 	$parms{user}
 	and 	length 	$parms{passed} ;
+
 # print "Uid=$uidplus and Fast = $fast\n";
+
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
 		User 	=> "$parms{user}"  || scalar(getpwuid($<)),
                 ( $authmech ? ( Authmechanism  => $authmech) : 
-			( $parms{authmechanism} eq "LOGIN" ? () : 
-			  Authmechanism => $parms{authmechanism}||undef )
+			( $parms{authmechanism}&&$parms{authmechanism} eq "LOGIN" ? () : 
+			  ( Authmechanism => $parms{authmechanism}||undef) )
 		),
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Timeout => 30,
 		Debug   => $ARGV[0],
-		Debug_fh   => 	$ARGV[0]?IO::File->new(">imap1.debug"):undef,
+		Debug_fh   => ($ARGV[0]?IO::File->new(">imap1.debug"):undef),
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 		Range 	=> $range,
@@ -636,6 +638,20 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.27  2003/06/12 21:38:35  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+# 	Parse.grammar Parse.pod
+#  	range.t
+#  	Thread.grammar
+#  	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+#  	rfc2221.txt rfc2359.txt rfc2683.txt
+#
 # Revision 19991216.26  2002/12/13 18:08:50  dkernen
 # Made changes for version 2.2.6 (see Changes file for more info)
 #

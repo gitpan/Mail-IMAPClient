@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.25 2002/11/08 15:49:05 dkernen Exp $
+# $Id: cram-md5.t,v 19991216.1 2003/06/12 21:38:36 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -49,8 +49,6 @@ exit unless		%parms
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
-		User 	=> "$parms{user}"  || scalar(getpwuid($<)),
-		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Timeout => 30,
 		Debug   => $ARGV[0],
@@ -59,7 +57,8 @@ eval { $imap = Mail::IMAPClient->new(
 		Uid 	=> 1,
                 Authmechanism  => $parms{authmechanism}||undef,
 ) 	or 
-	print STDERR "\nCannot log into $parms{server} as $parms{user}. Are server/user/password correct?\n" 
+	print STDERR 	"\nCannot connect to $parms{server} to get capabilities. ",
+			"Are server/user/password correct?\n" 
 	and exit
 } ;
 
@@ -75,5 +74,33 @@ if ( $imap->has_capability("AUTH=CRAM-MD5") ) {
 }
 
 # History:
-# $Log$
+# $Log: cram-md5.t,v $
+# Revision 19991216.1  2003/06/12 21:38:36  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+# 	Parse.grammar Parse.pod
+#  	range.t
+#  	Thread.grammar
+#  	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+#  	rfc2221.txt rfc2359.txt rfc2683.txt
+#
+# Revision 1.1  2003/06/12 21:38:17  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+# 	Parse.grammar Parse.pod
+#  	range.t
+#  	Thread.grammar
+#  	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+#  	rfc2221.txt rfc2359.txt rfc2683.txt
+#
 #

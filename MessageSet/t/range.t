@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl 
-#$Id: range.t,v 1.1 2002/10/23 20:46:00 dkernen Exp $
+#$Id: range.t,v 1.2 2003/06/12 21:42:17 dkernen Exp $
 
 END {print "not ok 1\n" unless $main::loaded;}
 use Mail::IMAPClient::MessageSet;
@@ -61,6 +61,20 @@ exit;
 
 # History:
 # $Log: range.t,v $
+# Revision 1.2  2003/06/12 21:42:17  dkernen
+# Cleaning up cvs repository
+#
+# Revision 1.1  2003/06/12 21:37:24  dkernen
+#
+# Preparing 2.2.8
+# Added Files: COPYRIGHT
+# Modified Files: Parse.grammar
+# Added Files: Makefile.old
+# 	Makefile.PL Todo sample.perldb
+# 	BodyStructure.pm
+# 	Parse.grammar Parse.pod
+#  	range.t
+#
 # Revision 1.1  2002/10/23 20:46:00  dkernen
 #
 # Modified Files: Changes IMAPClient.pm MANIFEST Makefile.PL

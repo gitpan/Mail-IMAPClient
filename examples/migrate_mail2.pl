@@ -1,4 +1,5 @@
 #!/usr/local/bin/perl
+#$Id: migrate_mail2.pl,v 19991216.4 2003/06/12 21:38:33 dkernen Exp $
 #
 # An example of how to migrate from a Netscape server
 # (which uses a slash as a separator and which does
@@ -74,10 +75,11 @@ use vars qw/ 	$opt_B $opt_D $opt_T $opt_U
 		$opt_W $opt_b $opt_d $opt_h
 		$opt_t $opt_u $opt_w $opt_v
 		$opt_s $opt_S $opt_W $opt_p
-		$opt_P $opt_f $opt_F 
+		$opt_P $opt_f $opt_F $opt_m 
+		$opt_M
 /;
 
-getopts('vs:S:u:U:d:D:b:B:f:F:w:W:p:P:t:T:h');
+getopts('vs:S:u:U:dDb:B:f:F:w:W:p:P:t:T:hm:M:');
 
 if ( $opt_h ) {
 	print STDERR <<"HELP";
@@ -86,14 +88,17 @@ $0 - 	an example script demonstrating the use of the Mail::IMAPClient's
 	migrate method.
 
 Syntax:
-	$0 -s source_server -u source_user -w source_password -p source_port 		 \
-	   -d debug_source -f source_debugging_file -b source_buffsize -t source_timeout \
-	   -S target_server -U target_user -W target_password -P target_port 		 \
-	   -D debug_target -F target_debugging_file -B target_buffsize  -T target_timeout \
+	$0 -s source_server -u source_user -w source_password -p source_port \
+	   -d debug_source -f source_debugging_file -b source_buffsize       \
+	   -t source_timeout -m source_auth_mechanism                        \
+	   -S target_server -U target_user -W target_password -P target_port \
+	   -D debug_target -F target_debugging_file -B target_buffsize       \
+	   -T target_timeout -M target_auth_mechanism                        \
 	   -v
 
-where "source" refers to the "copied from" mailbox, target is the "copied to" mailbox, and 
--v turns on verbose output.
+where "source" refers to the "copied from" mailbox, target is the 
+"copied to" mailbox, and -v turns on verbose output.
+Authentication mechanisms default to "PLAIN".
 
 HELP
 	exit;
@@ -114,7 +119,8 @@ my $imap = Mail::IMAPClient->new(
 				Debug	=> $opt_d||0,
 				Buffer	=> $opt_b||4096,
 				Fast_io	=> 1,
-				Timeout	=> $opt_t,			  # True value
+				( $opt_m ? ( Authmechanism => $opt_m) : () ),
+				Timeout	=> $opt_t,	 
 				($opt_f ? ( Debug_fh=>IO::File->new(">$opt_f" )) : ()),
 ) or die "$@";
 
@@ -126,6 +132,7 @@ my $imap2 = Mail::IMAPClient->new(
 				Port	=> $opt_P,
 				Uid	=> 1,	
 				Debug	=> $opt_D||0,
+				( $opt_M ? ( Authmechanism => $opt_M) : () ),
 				($opt_F ? ( Debug_fh=>IO::File->new(">$opt_F")) : ()),
 				Buffer	=> $opt_B||4096,
 				Fast_io	=> 1,
@@ -242,6 +249,7 @@ for my $f ($imap->folders) {
 		my $ret = 0 ; my $h2 = [];
 
 		# Make sure we didn't already migrate the message in a previous pass:
+		$imap2->select($targF);
 		if ( 	$tsize and $h and $h2 = $imap2->search( 
 					HEADER 	=> 'Message-id'	=> $imap2->Quote($h),
 					NOT 	=>  SMALLER 	=> $tsize, 
@@ -255,6 +263,7 @@ for my $f ($imap->folders) {
 				"is already on the server. ",
 				"\n" 
 			if $opt_v;
+			$imap2->close;
 
 		} else {
 
@@ -263,6 +272,7 @@ for my $f ($imap->folders) {
 				"Message #$count of $expectedTotal has ",
 				$tsize , " bytes.",
 				"\n" if $opt_v;
+			$imap2->close;
 
 			# Migrate the message:
 			my $ret = $imap->migrate($imap2,$msg,"$targF") ;
@@ -275,3 +285,42 @@ for my $f ($imap->folders) {
 print "$0: Finished migrating $totalMsgs messages and $totalBytes bytes at ",scalar(localtime),"\n" 
 	if $opt_v;
 exit;
+
+
+=head1 AUTHOR 
+	
+David J. Kernen
+
+The Kernen Group, Inc.
+
+imap@kernengroup.com
+
+=head1 COPYRIGHT
+
+This example and Mail::IMAPClient are Copyright (c) 2003 
+by The Kernen Group, Inc. All rights reserved.
+
+This example is distributed with Mail::IMAPClient and 
+subject to the same licensing requirements as Mail::IMAPClient.
+
+imtest is a utility distributed with Cyrus IMAP server, 
+Copyright (c) 1994-2000 Carnegie Mellon University.  
+All rights reserved. 
+
+=cut
+
+#$Log: migrate_mail2.pl,v $
+#Revision 19991216.4  2003/06/12 21:38:33  dkernen
+#
+#Preparing 2.2.8
+#Added Files: COPYRIGHT
+#Modified Files: Parse.grammar
+#Added Files: Makefile.old
+#	Makefile.PL Todo sample.perldb
+#	BodyStructure.pm
+#	Parse.grammar Parse.pod
+# 	range.t
+# 	Thread.grammar
+# 	draft-crispin-imapv-17.txt rfc1731.txt rfc2060.txt rfc2062.txt
+# 	rfc2221.txt rfc2359.txt rfc2683.txt
+#
