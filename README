@@ -66,7 +66,8 @@ It also uses Fcntl (for faster I/O) and IO::Select, IO::File, Data::Dumper, and 
 You can verify that your system has a sufficient perl installation by 
 entering on the command line:
 
-perl -e 'use Socket; use IO::Socket; use IO::File; use IO::Select; use Fcntl; use Carp; use Data::Dumper;'
+perl -e "use constant; use Socket; use IO::Socket; use IO::File; use IO::Select; use Fcntl; \
+	use Carp; use Data::Dumper;"
 
 If you get compile errors then you'll have trouble using Mail::IMAPClient.
 

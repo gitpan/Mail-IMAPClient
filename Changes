@@ -1,5 +1,55 @@
 Revision History for Perl extension Mail::IMAPClient.
 
+Changes in version 2.1.2
+------------------------
+
+Fixed a bug in the is_parent method which made it inaccurate on some servers.
+
+Added new method "sort", which implements the SORT extenstion and which was contributed by 
+Josh Rotenberg. The SORT extension is documented at 
+http://search.ietf.org/internet-drafts/draft-ietf-imapext-sort-06.txt. A copy of the draft is 
+also included with the Mail::IMAPClient distribution, which means I also:
+
+Added draft-ietf-imapext-sort-06.txt to the docs subdirectory of the distribution.
+
+Fixed a bug in the folders method and the subscribed method (same bug, appeared twice) 
+which broke these methods under some conditions. Thanks again Josh Rotenberg for supplying the fix.
+
+Fixed bugs in getacl and listacl. Changed the interface for getacl significantly; existing scripts using 
+getacl will not behave the same way. But then on the other hand, getacl was never documented before, 
+so how could you be using it? 
+
+Implemented improvements to reduce memory usage by up to 30%. Thanks go Paul Linder, who developed the 
+memory usage patch after a considerable amount of analysis. The improvements include the use of 'use constant',
+so your perl needs to support that pragma in order to use Mail::IMAPClient.
+
+Added a new parameter, MaxTempErrors, which allows the programmer to control the number of consecutive 
+"Resource Temporarily Unavailable" errors that can occur before a write to the server will fail. Also 
+changed the behavior of the client when one of these errors occurs. Previously, Mail::IMAPClient waited
+.25 seconds (a quarter of one second) before retrying the read operation. Now it will wait (.25 * the 
+number of consecutive temporary errors) seconds before retrying the read. 
+
+Documented the "Buffer" parameter, which has been secretly available for some time. I just forgot to 
+document it. It sets the size of the read buffer when Fast_io is turned on.
+
+Updated the Todo file. It was nice to see that a number of lines in the "Todo" file were now deletable. It
+was depressing to see that a number of original lines need to stay in there. 
+
+
+Changes in version 2.1.1
+------------------------
+Added the "mark", "unmark", and imap4rev1 methods.
+
+Updated the documentation to include the new methods and to document "create", "store", and "delete".
+
+Updated "message_string" to be smart about whether you're using IMAP4 or IMAP4REV1.
+
+Updated "message_to_file" to be smart about whether you're using IMAP4 or IMAP4REV1.
+
+Added several bug fixes to authenticate method. Many thanks to Daniel Wright who reported these 
+bugs and provided the information necessary to fix them.
+
+
 Changes in version 2.1.0
 ------------------------
 

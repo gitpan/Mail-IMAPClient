@@ -2,15 +2,15 @@ package Mail::IMAPClient;
 
 # $Id: IMAPClient.pm,v 20001010.9 2001/02/07 20:19:50 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.1.0';
-$Mail::IMAPClient::VERSION = '2.1.0';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.1.2';
+$Mail::IMAPClient::VERSION = '2.1.2';  	# do it twice to make sure it takes
 
-use Fcntl qw(:DEFAULT);
-use Socket;
-use IO::Socket;
-use IO::Select;
-use IO::File;
-use Carp;
+use Fcntl qw(F_GETFL F_SETFL);
+use Socket();
+use IO::Socket();
+use IO::Select();
+use IO::File();
+use Carp qw(carp);
 use Data::Dumper;
 
 
@@ -23,13 +23,13 @@ Mail::IMAPClient - An IMAP Client API
 
 =cut
 
-sub Unconnected   ()	{ return 0 ; }		# Object not connected
-sub Connected 	  ()	{ return 1 ; } 		# connected; not logged in
-sub Authenticated ()	{ return 2 ; }		# logged in; no mailbox selected
-sub Selected 	  ()	{ return 3 ; }		# mailbox selected
-sub _INDEX	  ()    { return 0 ; }		# Array index for output line number
-sub _TYPE	  ()    { return 1 ; }		# Array index for output line type (OUTPUT,INPUT, or LITERAL)
-sub _DATA	  ()    { return 2 ; }		# Array index for output line data
+use constant Unconnected => 0;
+use constant Connected         => 1;         	# connected; not logged in
+use constant Authenticated => 2;      		# logged in; no mailbox selected
+use constant Selected => 3;   		        # mailbox selected
+use constant INDEX => 0;              		# Array index for output line number
+use constant TYPE => 1;               		# Array index for output line type (OUTPUT,INPUT, or LITERAL)
+use constant DATA => 2;                       	# Array index for output line data
 
 sub _debug {
 	my $self = shift;
@@ -38,55 +38,63 @@ sub _debug {
 	print $fh @_;
 }
 
+
+# This function is used by the accessor methods
+#
+sub _do_accessor {
+  my $datum = shift;
+
+  if ( defined($_[1]) and $datum eq 'Fast_io' and ref($_[0]->{Socket})) {
+    if ($_[1]) {                      # Passed the "True" flag
+      my $fcntl = 0;
+      eval { $fcntl=fcntl($_[0]->{Socket}, F_GETFL, 0) } ;
+      if ($@) {
+      $_[0]->{Fast_io} = 0;
+      warn ref($_[0]) . " not using Fast_IO; not available on this platform.\n"
+        if ( $^W or $_[0]->Debug);
+      } else {
+      $_[0]->{Fast_io} = 1;
+      $_[0]->{_fcntl} = $fcntl;
+      my $newflags = $fcntl;
+      $newflags |= O_NONBLOCK;
+      fcntl($_[0]->{Socket}, F_SETFL, $newflags) ;
+      
+      }
+    } else {
+      fcntl($_[0]->{Socket}, F_SETFL, $_[0]->{_fcntl}) ;
+      $_[0]->{Fast_io} = 0;
+      delete $_[0]->{_fcntl};
+    }
+  } elsif ( defined($_[1]) and $datum eq 'Socket' ) {
+    
+    # Get rid of fcntl settings for obsolete socket handles:
+    delete $_[0]->{_fcntl} ;
+    # Register this handle in a select vector:
+    $_[0]->{_select} = IO::Select->new($_[1]) ;
+  }
+  
+  if (scalar(@_) > 1) {
+    $@ = $_[1] if $datum eq 'LastError';
+    return $_[0]->{$datum} = $_[1] ;
+  } else {
+    return $_[0]->{$datum};
+  }
+}
+
 # the following for loop sets up eponymous accessor methods for 
 # the object's parameters:
 
-{
+BEGIN {
  for my $datum (
 		qw( 	State Port Server Folder Fast_io Peek
 			User Password Socket Timeout Buffer
-			Debug LastError Count Uid Debug_fh
+			Debug LastError Count Uid Debug_fh MaxTempErrors
 		)
  ) {
-	no strict 'refs';
-        *$datum = sub {
-		if ( defined($_[1]) and $datum eq 'Fast_io' and ref($_[0]->{Socket})) {
-			if ($_[1]) {			# Passed the "True" flag
-				my $fcntl = 0;
-				eval { $fcntl=fcntl($_[0]->{Socket}, F_GETFL, 0) } ;
-				if ($@) {
-					$_[0]->{Fast_io} = 0;
-					warn ref($_[0]) . " not using Fast_IO; not available on this platform.\n"
-						if ( $^W or $_[0]->Debug);
-				} else {
-					$_[0]->{Fast_io} = 1;
-					$_[0]->{_fcntl} = $fcntl;
-					my $newflags = $fcntl;
-					$newflags |= O_NONBLOCK;
-					fcntl($_[0]->{Socket}, F_SETFL, $newflags) ;
-					
-				}
-			} else {
-					fcntl($_[0]->{Socket}, F_SETFL, $_[0]->{_fcntl}) ;
-					$_[0]->{Fast_io} = 0;
-					delete $_[0]->{_fcntl};
-			}
-		} elsif ( defined($_[1]) and $datum eq 'Socket' ) {
-
-			# Get rid of fcntl settings for obsolete socket handles:
-			delete $_[0]->{_fcntl} ;
-			# Register this handle in a select vector:
-			$_[0]->{_select} = IO::Select->new($_[1]) ;
-		}
-
-                if (scalar(@_) > 1) {
-			$@ = $_[1] if $datum eq 'LastError';
-                        return $_[0]->{$datum} = $_[1] ;
-                } else {
-                        return $_[0]->{$datum};
-                }
-        };
+        no strict 'refs';
+        *$datum = sub { _do_accessor($datum, @_); };
  }
+
 }
 
 sub Wrap { 	shift->Clear(@_); 	}
@@ -227,8 +235,8 @@ sub connect {
                 for my $o (@$output) {
 			$self->_debug("Connect: Received this from readline: " . join("/",@$o) . "\n");
                         $self->_record($self->Count,$o);	# $o is a ref
-			next unless $o->[_TYPE] eq "OUTPUT";
-        		($code) = $o->[_DATA] =~ /^\*\s+(OK|BAD|NO)/i  ;
+                      next unless $o->[TYPE] eq "OUTPUT";
+                      ($code) = $o->[DATA] =~ /^\*\s+(OK|BAD|NO)/i  ;
                 }
 
         }
@@ -291,6 +299,25 @@ sub separator {
 	return $self->{$target,'SEPARATOR'};
 }
 
+sub sort {
+    my $self = shift;
+    my @hits;
+    my @a = @_;
+    $a[-1] = $self->Massage($a[-1]) if scalar(@a) > 1; # massage
+    $a[0] = "($a[0])" unless $a[0] =~ /^\(.*\)$/;      # wrap criteria in parens
+    $self->_imap_command( ( $self->Uid ? "UID " : "" ) . "SORT ". join(' ',@a))
+         or return wantarray ? @hits : \@hits ;
+    my @results =  $self->History($self->Count);
+
+    for my $r (@results) {
+        chomp $r;
+        $r =~ s/\r$//;
+        $r =~ s/^\*\s+SORT\s+// or next;   
+        push @hits, grep(/\d/,(split(/\s+/,$r)));
+    }
+    return wantarray ? @hits : \@hits;     
+}
+
 sub list {
 	my $self = shift;
 	my ($reference, $target) = (shift, shift);
@@ -300,7 +327,7 @@ sub list {
 	my $string 	=  qq(LIST "$reference" $target);
 	$self->_imap_command($string)  or return undef;
 	return wantarray ? 	$self->History($self->Count) 		: 
-				[ map { $_->[_DATA] } @{$self->{'History'}{$self->Count}} ]	;
+                              [ map { $_->[DATA] } @{$self->{'History'}{$self->Count}} ]      ;
 }
 
 sub lsub {
@@ -312,7 +339,7 @@ sub lsub {
 	my $string      =  qq(LSUB "$reference" $target);
 	$self->_imap_command($string)  or return undef;
 	return wantarray ?      $self->History($self->Count)            : 
-				[ map { $_->[_DATA] } @{$self->{'History'}{$self->Count}}	] ;
+                              [ map { $_->[DATA] } @{$self->{'History'}{$self->Count}}        ] ;
 }
 
 sub subscribed {
@@ -324,7 +351,7 @@ sub subscribed {
 	my @list = $self->lsub(undef,( $what? "$what" . $self->separator($what) . "*" : undef ) );
 	push @list, $self->lsub(undef, $what) if $what and $self->exists($what) ;
 
-	# my @list = map { $self->_debug("Pushing $_->[${\(_DATA)}] \n"); $_->[_DATA] } @$output;
+      # my @list = map { $self->_debug("Pushing $_->[${\(DATA)}] \n"); $_->[DATA] } @$output;
 
 	my $m;
 
@@ -339,17 +366,18 @@ sub subscribed {
 
 		push @folders, $1||$2 
 			if $list[$m] =~
-                        /       ^\*\s+LSUB              # * LSUB
-                                \s+\([^\)]*\)\s+            # (Flags)
-                                "[^"]*"\s+              # "delimiter"
+                        /       ^\*\s+LSUB               # * LSUB
+                                \s+\([^\)]*\)\s+         # (Flags)
+                                (?:"[^"]*"|NIL)\s+	 # "delimiter" or NIL
                                 (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
                         /ix;
 
         } 
 
         # for my $f (@folders) { $f =~ s/^\\FOLDER LITERAL:://;}
-
-        return wantarray ? @folders : \@folders ;
+	my @clean = () ; my %memory = (); 
+	foreach my $f (@folders) { push @clean, $f unless $memory{$f}++ }
+        return wantarray ? @clean : \@clean ;
 }
 
 
@@ -363,7 +391,7 @@ sub deleteacl {
 	$self->_imap_command($string)  or return undef;
 
 	return wantarray ? 	$self->History($self->Count) 				: 
-				[ map {$_->[_DATA] } @{$self->{'History'}{$self->Count}}] ;
+                              [ map {$_->[DATA] } @{$self->{'History'}{$self->Count}}] ;
 }
 
 sub setacl {
@@ -378,20 +406,40 @@ sub setacl {
         $acl              =~ s/"/\\"/g;
         my $string      =  qq(SETACL $target "$user" "$acl");
         $self->_imap_command($string)  or return undef;
-        return wantarray?$self->History($self->Count):[map{$_->[_DATA]}@{$self->{'History'}{$self->Count}}];
+        return wantarray?$self->History($self->Count):[map{$_->[DATA]}@{$self->{'History'}{$self->Count}}];
 }
+
 
 sub getacl {
         my $self = shift;
         my ($target) = @_;
         $target = $self->Folder unless defined($target);
-        $target           = $self->Massage($target);
-        my $string      =  qq(GETACL $target);
+        my $mtarget           = $self->Massage($target);
+        my $string      =  qq(GETACL $mtarget);
         $self->_imap_command($string)  or return undef;
-        my $perm = (grep(/^\* ACL/,     @{$self->History($self->Count)}))[0]
-                        or return undef;
-        $perm = (split(/\s+/,$perm))[-1];
-        return $perm;
+	my @history = $self->History($self->Count);
+	#$self->_debug("Getacl history: " . join("|",@history) . ">>>End of History<<<" ) ;
+	my $perm = ""; 
+	my $hash = {};
+	for ( my $x = 0; $x < scalar(@history) ; $x++ ) {
+        	if ( $history[$x] =~ /^\* ACL/ ) {
+			
+			$perm = $history[$x] =~ /^\* ACL $/ ? $history[++$x].$history[++$x] : 
+				$history[$x];		
+			$perm =~ s/\s?\r\n$//;
+			piece:  until ( $perm =~ /\Q$target\E"?$/ or !$perm) {
+				#$self->_debug(qq(Piece: permline=$perm and pattern = /\Q$target\E"? \$/));
+				$perm =~ s/\s([^\s]+)\s?$// or last piece;
+				my($p) = $1;
+				$perm =~ s/\s([^\s]+)\s?$// or last piece;
+				my($u) = $1;
+				$hash->{$u} = $p;
+				$self->_debug("Permissions: $u => $p \n");
+			}
+		
+		}
+	}
+        return $hash;
 }
 
 sub listrights {
@@ -402,10 +450,13 @@ sub listrights {
 	$target 	  = $self->Massage($target);
 	$user		  =~ s/^"(.*)"$/$1/;
 	$user 	  	  =~ s/"/\\"/g;
-	my $string 	=  qq(GETACL $target "$user");
+	my $string 	=  qq(LISTRIGHTS $target "$user");
 	$self->_imap_command($string)  or return undef;
-	my $rights = ( grep(s/.*$target"?\s+"?$user"?\s+//, $self->History($self->Count) ) );
-	$rights =~ s/\s+//g;	
+	my $resp = ( grep(/^\* LISTRIGHTS/, $self->History($self->Count) ) )[0];
+	my @rights = split(/\s/,$resp);	
+	shift @rights, shift @rights, shift @rights, shift @rights;
+	my $rights = join("",@rights);
+	$rights =~ s/"//g;	
 	return wantarray ? split(//,$rights) : $rights ;
 }
 
@@ -433,14 +484,16 @@ sub message_string {
 	my $msg  = shift;
 	my $expected_size = $self->size($msg);
 	return undef unless(defined $expected_size);	# unable to get size
-	my $cmd  = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]' ;
+	my $cmd  =  	$self->has_capability('IMAP4REV1') 				? 
+				"BODY" . ( $self->Peek ? '.PEEK[]' : '[]' ) 		: 
+				"RFC822" .  ( $self->Peek ? '.PEEK' : ''  )		;
 
 	$self->fetch($msg,$cmd) or return undef;
 	
 	my $string = "";
 
 	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
-		$string .= $result->[_DATA] if $self->_is_literal($result) ;
+              $string .= $result->[DATA] if $self->_is_literal($result) ;
 	}      
 	# BUG? should probably return undef if length != expected
 	if ( length($string) != $expected_size ) { 
@@ -478,7 +531,8 @@ sub message_to_file {
         my $clear = "";
         $clear = $self->Clear;
 	my $cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
-
+	$cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822' unless $self->imap4rev1;
+	
 	my $string = ( $self->Uid ? "UID " : "" ) . "FETCH " . join(",",@msgs) . " $cmd";
 
         $self->Clear($clear)
@@ -505,10 +559,10 @@ sub message_to_file {
                 $output = $self->_read_line($handle) or return undef; # avoid possible infinite loop
                 for my $o (@$output) {
                         $self->_record($trans,$o);	# $o is a ref
-                        # $self->_debug("Received from readline: ${\($o->[_DATA])}<<END OF RESULT>>\n");
+                        # $self->_debug("Received from readline: ${\($o->[DATA])}<<END OF RESULT>>\n");
                         next unless $self->_is_output($o);
-                        ($code) = $o->[_DATA] =~ /^$trans (OK|BAD|NO)/mi ;
-                        if ($o->[_DATA] =~ /^\*\s+BYE/im) {
+                        ($code) = $o->[DATA] =~ /^$trans (OK|BAD|NO)/mi ;
+                        if ($o->[DATA] =~ /^\*\s+BYE/im) {
                                 $self->State(Unconnected);
                                 return undef ;
                         }
@@ -532,14 +586,14 @@ sub message_uid {
 	return $uid;
 }
 
-sub old_body_string {
-	my $self = shift;
-	my $msg  = shift;
-	my @torso = $self->fetch($msg,"RFC822.TEXT");
-	$torso[0] =~ s/.*FETCH \(.*RFC822\.TEXT //i;
-	pop @torso and pop @torso;
-	return join("",@torso);
-}
+#sub old_body_string {
+#     my $self = shift;
+#     my $msg  = shift;
+#     my @torso = $self->fetch($msg,"RFC822.TEXT");
+#     $torso[0] =~ s/.*FETCH \(.*RFC822\.TEXT //i;
+#     pop @torso and pop @torso;
+#     return join("",@torso);
+#}
 
 
 sub body_string {
@@ -549,7 +603,7 @@ sub body_string {
 
         my $string = "";
     	foreach my $result  (@{$ref}) 	{ 
-                $string .= $result->[_DATA] if $self->_is_literal($result) ;
+                $string .= $result->[DATA] if $self->_is_literal($result) ;
         }
 	return $string if $string;
 
@@ -641,10 +695,10 @@ sub _imap_command {
               $output = $self->_read_line or return undef; # escape infinite loop if read_line never returns any data
 		for my $o (@$output) { 
 			$self->_record($count,$o);	# $o is a ref
-			# $self->_debug("Received from readline: ${\($o->[_DATA])}<<END OF RESULT>>\n");
+                      # $self->_debug("Received from readline: ${\($o->[DATA])}<<END OF RESULT>>\n");
 			next unless $self->_is_output($o);
-			($code) = $o->[_DATA] =~ /^$count (OK|BAD|NO|$good)/mi ;
-			if ($o->[_DATA] =~ /^\*\s+BYE/im) {
+                      ($code) = $o->[DATA] =~ /^$count (OK|BAD|NO|$good)/mi ;
+                      if ($o->[DATA] =~ /^\*\s+BYE/im) {
 				$self->State(Unconnected);
 				return undef ;
 			}
@@ -694,8 +748,8 @@ sub run {
 		for my $o (@$output) { 
 			$self->_record($count,$o);	# $o is a ref
 			next unless $self->_is_output($o);
-			($code) = $o->[_DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$good)/m  ;
-			if ($o->[_DATA] =~ /^\*\s+BYE/) {
+                      ($code) = $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$good)/m  ;
+                      if ($o->[DATA] =~ /^\*\s+BYE/) {
 				$self->State(Unconnected);
 			}
 		}
@@ -704,6 +758,8 @@ sub run {
 	return $code =~ /^OK|$good/ ? @{$self->Results} : undef ;
 
 }
+#sub bodystruct {	# return bodystruct 
+#}
 
 # _record saves the conversation into the History structure:
 sub _record {
@@ -714,18 +770,18 @@ sub _record {
 	#$self->_debug(sprintf("in _record: count is $count, values are %s/%s/%s and caller is " . 
 	#	join(":",caller()) . "\n",@$array));
 	
-	if ( 	# 	$array->[_DATA] and 
-		$array->[_DATA] =~ /^\d+ LOGIN/i ) { 
+      if (    #       $array->[DATA] and 
+              $array->[DATA] =~ /^\d+ LOGIN/i ) { 
 
-		$array->[_DATA] =~ s/LOGIN.*/LOGIN XXXXXXXX XXXXXXXX/i ;
+              $array->[DATA] =~ s/LOGIN.*/LOGIN XXXXXXXX XXXXXXXX/i ;
 	}
 
 	push @{$self->{"History"}{$count}}, $array;
 
-	if ( $array->[_DATA] =~ /^\d+\s+(BAD|NO)\s/im ) {
-		$self->LastError("$array->[_DATA]") ;
-		$@ = $array->[_DATA];
-		carp "$array->[_DATA]" if $^W ;
+      if ( $array->[DATA] =~ /^\d+\s+(BAD|NO)\s/im ) {
+              $self->LastError("$array->[DATA]") ;
+              $@ = $array->[DATA];
+              carp "$array->[DATA]" if $^W ;
 	}
 	return $self;
 }
@@ -761,12 +817,12 @@ sub _send_line {
 			$output = $self->_read_line or return undef;
 			foreach my $o (@$output) {
 				$self->_record($self->Count,$o);              # $o is already an array ref
-				($code) = $o->[_DATA] =~ /(^\+|NO|BAD)/i;
-				if ($o->[_DATA] =~ /^\*\s+BYE/) {
+                              ($code) = $o->[DATA] =~ /(^\+|NO|BAD)/i;
+                              if ($o->[DATA] =~ /^\*\s+BYE/) {
 					$self->State(Unconnected);
 					close $fh;
 					return undef ;
-				} elsif ( $o->[_DATA]=~ /^\d+\s+(NO|BAD)/i ) {
+                              } elsif ( $o->[DATA]=~ /^\d+\s+(NO|BAD)/i ) {
 					close $fh;
 					return undef;
 				}
@@ -793,12 +849,12 @@ sub _send_line {
 					$total
 					);
 		if ($! =~ /Resource temporarily unavailable/i ) {
-			if ( $temperrs++ > 10 ) {
+			if ( $temperrs++ > $self->{MaxTempErrors}||10 ) {
 				$self->LastError("Persistent '${!}' errors\n");
 				$self->_debug("Persistent '${!}' errors\n");
 				return undef;
 			}
-			CORE::select(undef, undef, undef, .25);
+			CORE::select(undef, undef, undef, .25 * $temperrs);
 		} else {
 			# avoid infinite loops on syswrite error
 			return undef unless(defined $ret);	 
@@ -811,111 +867,113 @@ sub _send_line {
 }
 
 #_read_line reads from the socket:
-sub _old_read_line {
-	
-	my $self 	= shift;	
-	my $sh		= $self->Socket;
-	
-	my $buffer	= ""; 
-	my $count	= ""; $count = 0;
-	my $rvec 	= my $ready = my $errors = 0; 
-	my $timeout	= $self->Timeout;
 
-	my $readlen 	= 1;
-	my $fcntl 	= '';
-	my($flags,$in_literal) 	= ('0',0);
+# sub _old_read_line {
+	
+#     my $self        = shift;        
+#     my $sh          = $self->Socket;
+	
+#     my $buffer      = ""; 
+#     my $count       = ""; $count = 0;
+#     my $rvec        = my $ready = my $errors = 0; 
+#     my $timeout     = $self->Timeout;
 
-	if ( $self->Fast_io ) {
-		eval { $fcntl=fcntl($sh, F_GETFL, $flags) } ;
-		# _debug $self, STDERR 
-		# "Setfl = ",F_SETFL," and GETFL = ",F_GETFL," and NONBLOCK = ",O_NONBLOCK,"\n";
-		# _debug $self, STDERR "Fcntl flag is now $fcntl\n";
-		if ($@) {
-			$self->Fast_io(0);
-			carp ref($self) . " not using Fast_IO; not available on this platform.\n" 
-				if ( $^W or $self->Debug);
-		} else {
+#     my $readlen     = 1;
+#     my $fcntl       = '';
+#     my($flags,$in_literal)  = ('0',0);
+
+#     if ( $self->Fast_io ) {
+#             eval { $fcntl=fcntl($sh, F_GETFL, $flags) } ;
+#             # _debug $self, STDERR 
+#             # "Setfl = ",F_SETFL," and GETFL = ",F_GETFL," and NONBLOCK = ",O_NONBLOCK,"\n";
+#             # _debug $self, STDERR "Fcntl flag is now $fcntl\n";
+#             if ($@) {
+#                     $self->Fast_io(0);
+#                     carp ref($self) . " not using Fast_IO; not available on this platform.\n" 
+#                             if ( $^W or $self->Debug);
+#             } else {
  
-			my $newflags = $fcntl;
-			$newflags |= O_NONBLOCK;
-			fcntl($sh, F_SETFL, $newflags) and $readlen = ($self->{Buffer}||4096);
-		}
-	}
-	my $offset = 0;
+#                     my $newflags = $fcntl;
+#                     $newflags |= O_NONBLOCK;
+#                     fcntl($sh, F_SETFL, $newflags) and $readlen = ($self->{Buffer}||4096);
+#             }
+#     }
+#     my $offset = 0;
 
-	until ($buffer =~ /\r?\n$/ ) {
-		# _debug $self,"Entering read engine.\n" if $self->Debug;
-		if ($timeout) {
-			vec($rvec, fileno($self->Socket), 1) = 1;
-			CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ;
-			unless ( vec ( $ready, fileno($self->Socket), 1 ) ) {
-				$self->LastError("Tag " . $self->Transaction . 
-					": Timeout waiting for data from server\n");	
-				fcntl($sh, F_SETFL, $fcntl) 
-					if $self->Fast_io and defined($fcntl);
-				$self->_record($self->Transaction,
-					[ 	$self->_next_index($self->Transaction),
-						"ERROR",
-						$self->Transaction . "* NO Timeout during read from server\r\n"
-					]
-				);
-				$@ = "Timeout during read from server\r\n";
-				return undef;
-			}
-		}
-		# _debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
-		local($^W) = undef;
-		$count += sysread(
-					$sh,
-					$buffer,
-					$readlen,
-					$offset
-		) ;
-		$offset = $count ;
-		pos $buffer = 1;
-		LITERAL: while ( $buffer =~ /\{(\d+)\}\r\n/g and ! $in_literal ) {
-			my $len = $1 ;
-			$in_literal++;
-			_debug $self, 	"Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
-			$offset = $count - length($buffer) ;
-			$count -= length("{" . "$len" . "}\r\n" ) ;
+#     until ($buffer =~ /\r?\n$/ ) {
+#             # _debug $self,"Entering read engine.\n" if $self->Debug;
+#             if ($timeout) {
+#                     vec($rvec, fileno($self->Socket), 1) = 1;
+#                     CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ;
+#                     unless ( vec ( $ready, fileno($self->Socket), 1 ) ) {
+#                             $self->LastError("Tag " . $self->Transaction . 
+#                                     ": Timeout waiting for data from server\n");    
+#                             fcntl($sh, F_SETFL, $fcntl) 
+#                                     if $self->Fast_io and defined($fcntl);
+#                             $self->_record($self->Transaction,
+#                                     [       $self->_next_index($self->Transaction),
+#                                             "ERROR",
+#                                             $self->Transaction . "* NO Timeout during read from server\r\n"
+#                                     ]
+#                             );
+#                             $@ = "Timeout during read from server\r\n";
+#                             return undef;
+#                     }
+#             }
+#             # _debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
+#             local($^W) = undef;
+#             $count += sysread(
+#                                     $sh,
+#                                     $buffer,
+#                                     $readlen,
+#                                     $offset
+#             ) ;
+#             $offset = $count ;
+#             pos $buffer = 1;
+#             LITERAL: while ( $buffer =~ /\{(\d+)\}\r\n/g and ! $in_literal ) {
+#                     my $len = $1 ;
+#                     $in_literal++;
+#                     _debug $self,   "Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
+#                     $offset = $count - length($buffer) ;
+#                     $count -= length("{" . "$len" . "}\r\n" ) ;
 
-			# _debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
+#                     # _debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
 
-			# If I used anything from the buffer for my literal then it needs to come
-			# out of the buffer now:		(use substr to avoid regexp overhead)
+#                     # If I used anything from the buffer for my literal then it needs to come
+#                     # out of the buffer now:                (use substr to avoid regexp overhead)
 
-			substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
+#                     substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
 				
 
-			if ($timeout) {
-				vec($rvec, fileno($self->Socket), 1) = 1;
-				unless ( CORE::select( $ready = $rvec, 
-							undef, 
-							$errors = $rvec, 
-							$timeout) 
-				) {
-					$self->LastError("Tag " . $self->Transaction . 
-						": Timeout waiting for literal data from server\n");	
-					return undef;
-				}	
-			}
-			until ( $offset >= $len ) {
-				# _debug $self, "Reading literal data\n";
-				$offset += sysread($sh,$buffer,$len-$offset, $count+$offset) ;
-			}
-			$count += $offset;
-			pos $buffer = 1;
-		}
-		$offset = length($buffer);
+#                     if ($timeout) {
+#                             vec($rvec, fileno($self->Socket), 1) = 1;
+#                             unless ( CORE::select( $ready = $rvec, 
+#                                                     undef, 
+#                                                     $errors = $rvec, 
+#                                                     $timeout) 
+#                             ) {
+#                                     $self->LastError("Tag " . $self->Transaction . 
+#                                             ": Timeout waiting for literal data from server\n");    
+#                                     return undef;
+#                             }       
+#                     }
+#                     until ( $offset >= $len ) {
+#                             # _debug $self, "Reading literal data\n";
+#                             $offset += sysread($sh,$buffer,$len-$offset, $count+$offset) ;
+#                     }
+#                     $count += $offset;
+#                     pos $buffer = 1;
+#             }
+#             $offset = length($buffer);
 
-		pos $buffer = 1;
-	}
-	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
-	#	_debug $self, "Buffer is now $buffer\n";
-	_debug $self, "Read: $buffer\n" if $self->Debug;
-	return defined($buffer) ? $buffer : undef ;
-}
+#             pos $buffer = 1;
+#     }
+#     fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
+#     #       _debug $self, "Buffer is now $buffer\n";
+#     _debug $self, "Read: $buffer\n" if $self->Debug;
+#     return defined($buffer) ? $buffer : undef ;
+# }
+
 
 # _read_line reads from the socket. It is called by:
 # 	append	append_file	authenticate	connect		_imap_command
@@ -934,7 +992,6 @@ sub _old_read_line {
 #	];
 
 sub _read_line {
-	
 	my $self 	= shift;	
 	my $sh		= $self->Socket;
 	my $literal_callback    = shift;
@@ -963,8 +1020,8 @@ sub _read_line {
 		$readlen = $self->{Buffer}||4096;
 	}
 	until (		scalar(@$oBuffer) 			and 	# stuff in output buffer
-			$oBuffer->[-1][_DATA] 	=~ /\r\n$/ 	and 	# the last thing there has cr-lf
-			$oBuffer->[-1][_TYPE] 	eq "OUTPUT" 	and	# that thing is an output line
+                      $oBuffer->[-1][DATA]    =~ /\r\n$/      and     # the last thing there has cr-lf
+                      $oBuffer->[-1][TYPE]    eq "OUTPUT"     and     # that thing is an output line
 			$iBuffer		eq "" 		# and	# and the input buffer has been MT'ed
 	) {
               my $transno = $self->Transaction;                       # used below in several places
@@ -1127,7 +1184,7 @@ sub _read_line {
 		#$self->_debug("iBuffer is now: $iBuffer<<END OF BUFFER>>\n");
 	}
 	#	_debug $self, "Buffer is now $buffer\n";
-	_debug $self, "Read: " . join("",map {$_->[_DATA]} @$oBuffer) ."\n" if $self->Debug;
+      _debug $self, "Read: " . join("",map {$_->[DATA]} @$oBuffer) ."\n" if $self->Debug;
 	return scalar(@$oBuffer) ? $oBuffer : undef ;
 }
 
@@ -1136,7 +1193,7 @@ sub Report {
 #	$self->_debug( "Dumper: " . Data::Dumper::Dumper($self) . 
 #			"\nReporting on following keys: " . join(", ",keys %{$self->{'History'}}). "\n");
 	return 	map { 
-			map { $_->[_DATA] } @{$self->{"History"}{$_}} 
+                      map { $_->[DATA] } @{$self->{"History"}{$_}} 
 	}		sort { $a <=> $b } keys %{$self->{"History"}}
 	;
 }
@@ -1147,19 +1204,19 @@ sub Results {
 	my $transaction = shift||$self->Count;
 	
 	return wantarray 							? 
-		map {$_->[_DATA] } 	@{$self->{"History"}{$transaction}}	: 
-		[ map {$_->[_DATA] }  	@{$self->{"History"}{$transaction}} ]	;
+              map {$_->[DATA] }       @{$self->{"History"}{$transaction}}     : 
+              [ map {$_->[DATA] }     @{$self->{"History"}{$transaction}} ]   ;
 }
 
 
 sub LastIMAPCommand {
-	my @a = map { $_->[_DATA] } @{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}};
+      my @a = map { $_->[DATA] } @{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}};
 	return shift @a;
 }
 
 
 sub History {
-	my @a = map { $_->[_DATA] } @{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}};
+      my @a = map { $_->[DATA] } @{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}};
 	shift @a;
 	return wantarray ? @a : \@a ;
 
@@ -1172,6 +1229,7 @@ sub logout {
 	$self->_imap_command($string) ; 
 	$self->State(Unconnected);
 	$self->{Folders} = undef;
+	$self->{_IMAP4REV1} = undef;
 	$self->Socket->close ; $self->{Socket} = undef;
 	return $self;
 }
@@ -1204,19 +1262,20 @@ sub folders {
 
 		push @folders, $1||$2 
 			if $list[$m] =~
-                        /       ^\*\s+LIST              # * LIST
-                                \s+\([^\)]*\)\s+            # (Flags)
-                                "[^"]*"\s+              # "delimiter"
+                        /       ^\*\s+LIST               # * LIST
+                                \s+\([^\)]*\)\s+         # (Flags)
+                                (?:"[^"]*"|NIL)\s+	 # "delimiter" or NIL
                                 (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
                         /ix;
 		# $self->_debug("folders: line $list[$m]: 1=$1 and 2=$2\n");
         } 
 
         # for my $f (@folders) { $f =~ s/^\\FOLDER LITERAL:://;}
+	my @clean = (); my %memory = ();
+	foreach my $f (@folders) { push @clean, $f unless $memory{$f}++ }
+        $self->{Folders} = \@clean unless $what;
 
-        $self->{Folders} = \@folders unless $what;
-
-        return wantarray ? @folders : \@folders ;
+        return wantarray ? @clean : \@clean ;
 }
 
 
@@ -1236,7 +1295,7 @@ sub fetch {
 				"FETCH $what" . ( @_ ? " " . join(" ",@_) : '' )
 	) 	 					or return undef;
 	return wantarray ? 	$self->History($self->Count) 	: 
-				[ map { $_->[_DATA] } @{$self->{'History'}{$self->Count}} ];
+                              [ map { $_->[DATA] } @{$self->{'History'}{$self->Count}} ];
 
 }
 	
@@ -1293,7 +1352,7 @@ sub AUTOLOAD {
 			$self->select($old);
 			return undef unless $succ;
 			return wantarray ? 	$self->History($self->Count) 	: 
-						map {$_->[_DATA]}@{$self->{'History'}{$self->Count}}	;
+                                              map {$_->[DATA]}@{$self->{'History'}{$self->Count}}     ;
 			
 		}
 		_debug $self, "Autoloading: $Mail::IMAPClient::AUTOLOAD " . join(" ",@a) ,"\n" if $self->Debug;
@@ -1303,7 +1362,7 @@ sub AUTOLOAD {
 		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD/) or return undef;
 	}
 	return wantarray ? 	$self->History($self->Count) 	: 
-				[map {$_->[_DATA] } @{$self->{'History'}{$self->Count}}]	;
+                              [map {$_->[DATA] } @{$self->{'History'}{$self->Count}}] ;
 
 }
 
@@ -1332,7 +1391,7 @@ sub status {
 	my @pieces = @_;
 	$self->_imap_command("STATUS $box (". (join(" ",@_)||'MESSAGES'). ")") or return undef;
 	return wantarray ? 	$self->History($self->Count) 	: 
-				[map{$_->[_DATA]}@{$self->{'History'}{$self->Count}}];
+                              [map{$_->[DATA]}@{$self->{'History'}{$self->Count}}];
 
 }
 
@@ -1648,7 +1707,7 @@ sub message_count {
 	
 	$self->status($folder, 'MESSAGES') or return undef;
         foreach my $result  (@{$self->{"History"}{$self->Transaction}}) {
-		return $1 if $result->[_DATA] =~	/\(MESSAGES\s+(\d+)\s*\)/ ;
+              return $1 if $result->[DATA] =~ /\(MESSAGES\s+(\d+)\s*\)/ ;
         }
 
 	return undef;
@@ -1853,6 +1912,13 @@ sub has_capability {
 	return $self->{CAPABILITY}{uc($_[0])};
 }
 
+sub imap4rev1 {
+	my $self = shift;
+	return exists($self->{_IMAP4REV1}) ?  
+		$self->{_IMAP4REV1} : 
+		$self->{_IMAP4REV1} = $self->has_capability(IMAP4REV1) ;
+}
+
 sub namespace {
 	# Returns a (reference to a?) nested list as follows:
 	# [ 
@@ -1916,7 +1982,7 @@ sub is_parent {
 
         for (my $m = 0; $m < scalar(@$list); $m++ ) {
 		#$self->_debug("Judging whether or not $list->[$m] is fit for parenthood\n");
-		return undef if $list->[$m] =~ /NoInferior/i; # let's not beat around the bush
+		return undef if $list->[$m] =~ /NoInferior/i; 	# let's not beat around the bush
                 if ($list->[$m]  =~ s/(\{\d+\})\r\n$// ) {
                         $list->[$m] .= $list->[$m+1];
                         $list->[$m+1] = "";
@@ -1931,12 +1997,13 @@ sub is_parent {
                         /x;
 	}	
 	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\s*\)/ if $line;
+	return  1 if $f =~ /HasChildren/i ;
+	return 0 if $f =~ /HasNoChildren/i ;
 	unless ( $f =~ /\\/) {		# no flags at all unless there's a backslash
 		my $sep = $self->separator($folder);
 		return 1 if scalar(grep /^$folder$sep/, $self->folders);
 		return 0;
 	}
-	return  $f =~ /HasChildren/i ? 1 : ( $f =~ /HasNoChildren/i ? 0 : undef ) ;
 }
 
 
@@ -1978,18 +2045,18 @@ sub append {
 			$self->_record($count,$o);	# $o is already an array ref
 			next unless $self->_is_output($o);
 
-			($code) = $o->[_DATA] =~ /(^\+|^\d*\s*NO|^\d*\s*BAD)/i ;
+                      ($code) = $o->[DATA] =~ /(^\+|^\d*\s*NO|^\d*\s*BAD)/i ;
 
-			if ($o->[_DATA] =~ /^\*\s+BYE/i) {
-                		$self->LastError("Error trying to append: " . $o->[_DATA]. "; Disconnected.\n");
-                		$self->_debug("Error trying to append: " . $o->[_DATA]. "; Disconnected.\n");
-				carp("Error trying to append: " . $o->[_DATA] ."; Disconnected") if $^W;
+                      if ($o->[DATA] =~ /^\*\s+BYE/i) {
+                              $self->LastError("Error trying to append: " . $o->[DATA]. "; Disconnected.\n");
+                              $self->_debug("Error trying to append: " . $o->[DATA]. "; Disconnected.\n");
+                              carp("Error trying to append: " . $o->[DATA] ."; Disconnected") if $^W;
 				$self->State(Unconnected);
 
-                      } elsif ( $o->[_DATA] =~ /^\d*\s*(NO|BAD)/i ) { # i and / transposed!!!
-                		$self->LastError("Error trying to append: " . $o->[_DATA]  . "\n");
-				$self->_debug("Error trying to append: " . $o->[_DATA] . "\n");
-				carp("Error trying to append: " . $o->[_DATA]) if $^W;
+                      } elsif ( $o->[DATA] =~ /^\d*\s*(NO|BAD)/i ) { # i and / transposed!!!
+                              $self->LastError("Error trying to append: " . $o->[DATA]  . "\n");
+                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
+                              carp("Error trying to append: " . $o->[DATA]) if $^W;
 				return undef;
 			}
 		}
@@ -2009,29 +2076,29 @@ sub append {
 	# Step 4: Figure out the results:
         until ($code) {
                 $output = $self->_read_line or return undef;
-		$self->_debug("Append results: " . map({ $_->[_DATA] } @$output) . "\n" )
+              $self->_debug("Append results: " . map({ $_->[DATA] } @$output) . "\n" )
 			if $self->Debug;
                 foreach my $o (@$output) {
 			$self->_record($count,$o); # $o is already an array ref
 
-        		($code) = $o->[_DATA] =~ /^(?:$count|\*) (OK|NO|BAD)/im 	;
+                      ($code) = $o->[DATA] =~ /^(?:$count|\*) (OK|NO|BAD)/im  ;
 			
-			if ($o->[_DATA] =~ /^\*\s+BYE/im) {
+                      if ($o->[DATA] =~ /^\*\s+BYE/im) {
 				$self->State(Unconnected);
-                		$self->LastError("Error trying to append: " . $o->[_DATA] . "\n");
-				$self->_debug("Error trying to append: " . $o->[_DATA] . "\n");
-				carp("Error trying to append: " . $o->[_DATA] ) if $^W;
+                              $self->LastError("Error trying to append: " . $o->[DATA] . "\n");
+                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
+                              carp("Error trying to append: " . $o->[DATA] ) if $^W;
 			}
 			if ($code and $code !~ /^OK/im) {
-				$self->LastError("Error trying to append: " . $o->[_DATA] . "\n");
-				$self->_debug("Error trying to append: " . $o->[_DATA] . "\n");
-				carp("Error trying to append: " . $o->[_DATA] ) if $^W;
+                              $self->LastError("Error trying to append: " . $o->[DATA] . "\n");
+                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
+                              carp("Error trying to append: " . $o->[DATA] ) if $^W;
 				return undef;
 			}
         	}
 	}
 
-	my($uid) = join("",map { $_->[_TYPE] eq "OUTPUT" ? $_->[_DATA] : () } @$output ) =~ m#\s+(\d+)\]#;
+      my($uid) = join("",map { $_->[TYPE] eq "OUTPUT" ? $_->[DATA] : () } @$output ) =~ m#\s+(\d+)\]#;
 
         return defined($uid) ? $uid : $self;
 }
@@ -2088,14 +2155,14 @@ sub append_file {
 		$output = $self->_read_line or close $fh, return undef;	
 		foreach my $o (@$output) {
 			$self->_record($count,$o);		# $o is already an array ref
-			($code) = $o->[_DATA] =~ /(^\+|^\d+\sNO|^\d+\sBAD)/i; 
-			if ($o->[_DATA] =~ /^\*\s+BYE/) {
-				carp $o->[_DATA] if $^W;
+                      ($code) = $o->[DATA] =~ /(^\+|^\d+\sNO|^\d+\sBAD)/i; 
+                      if ($o->[DATA] =~ /^\*\s+BYE/) {
+                              carp $o->[DATA] if $^W;
 				$self->State(Unconnected);
 				close $fh;
 				return undef ;
-			} elsif ( $o->[_DATA]=~ /^\d+\s+(NO|BAD)/i ) {
-				carp $o->[_DATA] if $^W;
+                      } elsif ( $o->[DATA]=~ /^\d+\s+(NO|BAD)/i ) {
+                              carp $o->[DATA] if $^W;
 				close $fh;
 				return undef;
 			}
@@ -2147,18 +2214,18 @@ sub append_file {
 		$output = $self->_read_line or return undef;	
 		foreach my $o (@$output) {
 			$self->_record($count,$o);		# $o is already an array ref
-			$self->_debug("append_file: Deciding if " . $o->[_DATA] . " has the code.\n") 
+                      $self->_debug("append_file: Deciding if " . $o->[DATA] . " has the code.\n") 
 				if $self->Debug;
-			($code) = $o->[_DATA]  =~ /^\d+\s(NO|BAD|OK)/i; 
+                      ($code) = $o->[DATA]  =~ /^\d+\s(NO|BAD|OK)/i; 
 			# try to grab new msg's uid from o/p
-			$o->[_DATA]  =~ m#UID\s+\d+\s+(\d+)\]# and $uid = $1; 
-			if ($o->[_DATA] =~ /^\*\s+BYE/) {
-				carp $o->[_DATA] if $^W;
+                      $o->[DATA]  =~ m#UID\s+\d+\s+(\d+)\]# and $uid = $1; 
+                      if ($o->[DATA] =~ /^\*\s+BYE/) {
+                              carp $o->[DATA] if $^W;
 				$self->State(Unconnected);
 				close $fh;
 				return undef ;
-			} elsif ( $o->[_DATA]=~ /^\d+\s+(NO|BAD)/i ) {
-				carp $o->[_DATA] if $^W;
+                      } elsif ( $o->[DATA]=~ /^\d+\s+(NO|BAD)/i ) {
+                              carp $o->[DATA] if $^W;
 				close $fh;
 				return undef;
 			}
@@ -2206,8 +2273,8 @@ sub authenticate {
 		$output = $self->_read_line or return undef;	
 		foreach my $o (@$output) {
 			$self->_record($count,$o);	# $o is a ref
-			($code) = $o->[_DATA] =~ /^\+ (.*)\+$/ ;
-			if ($o->[_DATA] =~ /^\*\s+BYE/) {
+			($code) = $o->[DATA] =~ /^\+ (.*)$/ ;
+			if ($o->[DATA] =~ /^\*\s+BYE/) {
 				$self->State(Unconnected);
 				return undef ;
 			}
@@ -2223,18 +2290,29 @@ sub authenticate {
                 return undef;
         }
 
+	$code = ""; 	# clear code
         until ($code) {
                 $output = $self->_read_line or return undef;
 		foreach my $o (@$output) {
                 	$self->_record($count,$o);	# $o is a ref
-        		$o->[_DATA] =~ /^$count (OK|NO|BAD)/ and $code = $1;
-			if ($o->[_DATA] =~ /^\*\s+BYE/) {
-				$self->State(Unconnected);
-				return undef ;
+			if ( ($code) = $o->[DATA] =~ /^\+ (.*)$/ ) {
+				$feedback = $self->_send_line($response->($code));
+				unless ($feedback) {
+					$self->LastError("Error sending append msg text to IMAP: $!\n");
+					return undef;
+				}
+				$code = "" ;		# Clear code; we're still not finished
+			} else {
+				$o->[DATA] =~ /^$count (OK|NO|BAD)/ and $code = $1;
+				if ($o->[DATA] =~ /^\*\s+BYE/) {
+					$self->State(Unconnected);
+					return undef ;
+				}
 			}
 		}
         }
 
+        $code =~ /^OK/ and $self->State(Authenticated) ;
         return $code =~ /^OK/ ? $self : undef ;
 
 }
@@ -2295,6 +2373,18 @@ sub see {
 	my($self, @msgs) = @_;
 	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
 	$self->set_flag('\\Seen', @msgs);
+}
+
+sub mark {
+	my($self, @msgs) = @_;
+	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
+	$self->set_flag('\\Flagged', @msgs);
+}
+
+sub unmark {
+	my($self, @msgs) = @_;
+	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
+	$self->unset_flag('\\Flagged', @msgs);
 }
 
 sub unset_flag {
@@ -2393,40 +2483,40 @@ sub unseen_count {
 
 # Status Routines:
 
-sub Status 		{ return $_[0]->State 				;	}
-sub IsUnconnected 	{ return ($_[0]->State == Unconnected)	? 1 : 0 ; 	}
-sub IsConnected 	{ return ($_[0]->State >= Connected) 	? 1 : 0 ; 	}
-sub IsAuthenticated 	{ return ($_[0]->State >= Authenticated)? 1 : 0 ; 	}
-sub IsSelected 		{ return ($_[0]->State == Selected) 	? 1 : 0 ; 	}		
+sub Status            { $_[0]->State                          ;       }
+sub IsUnconnected     { ($_[0]->State == Unconnected) ? 1 : 0 ;       }
+sub IsConnected       { ($_[0]->State >= Connected)   ? 1 : 0 ;       }
+sub IsAuthenticated   { ($_[0]->State >= Authenticated)? 1 : 0 ;      }
+sub IsSelected                { ($_[0]->State == Selected)    ? 1 : 0 ;       }               
 
 # The following private methods all work on an output line array.
 # _data returns the data portion of an output array:
-sub _data {  return $_[1]->[_DATA]; }
+sub _data {  $_[1]->[DATA]; }
 
 # _index returns the index portion of an output array:
-sub _index { return $_[1]->[_INDEX]; }
+sub _index { $_[1]->[INDEX]; }
 
 # _type returns the type portion of an output array:
-sub _type {  return $_[1]->[_TYPE]; }
+sub _type {  $_[1]->[TYPE]; }
 
 # _is_literal returns true if this is a literal:
-sub _is_literal { return $_[1]->[_TYPE] eq "LITERAL" };
+sub _is_literal { $_[1]->[TYPE] eq "LITERAL" };
 
 # _is_output_or_literal returns true if this is an 
 #  	output line (or the literal part of one):
 sub _is_output_or_literal { 
-		return 	$_[1]->[_TYPE] eq "OUTPUT" || $_[1]->[_TYPE] eq "LITERAL" 
+              $_[1]->[TYPE] eq "OUTPUT" || $_[1]->[TYPE] eq "LITERAL" 
 };
 
 # _is_output returns true if this is an output line:
-sub _is_output { return $_[1]->[_TYPE] eq "OUTPUT" };
+sub _is_output { $_[1]->[TYPE] eq "OUTPUT" };
 
 # _is_input returns true if this is an input line:
-sub _is_input { return $_[1]->[_TYPE] eq "INPUT" };
+sub _is_input { $_[1]->[TYPE] eq "INPUT" };
 
 # _next_index returns next_index for a transaction; may legitimately return 0 when successful.
 sub _next_index { 
-	return defined(scalar(@{$_[0]->{'History'}{$_[1]||$_[0]->Transaction}}))	? 
+      defined(scalar(@{$_[0]->{'History'}{$_[1]||$_[0]->Transaction}}))       ? 
 		scalar(@{$_[0]->{'History'}{$_[1]||$_[0]->Transaction}}) 		: 0 
 };
 
@@ -2666,6 +2756,12 @@ On the contrary, the available parameters are:
 
 =over 4
 
+=item Buffer()
+
+The I<Buffer> parameter sets the size of a block of I/O. It is ignored unless I<Fast_io>, below,
+is set to a true value. It's value should be the number of bytes to attempt to read in one I/O 
+operation. The default value is 4096.
+
 =item Clear()
 
 The name of this parameter, for historical reasons, is somewhat misleading. It should be named
@@ -2735,6 +2831,19 @@ parameter if you use some mysterious technique of your own for selecting a folde
 won't do.
 
 =cut
+
+=item MaxTempErrors()
+
+The I<MaxTempErrors> parameter specifies the number of times a write operation is allowed to fail on a
+"Resource Temporarily Available" error. These errors can occur from time to time if the server is too 
+busy to empty out its read buffer (which is logically the "other end" of the client's write buffer). By 
+default, B<Mail::IMAPClient> will retry 10 times, but you can adjust this behavior by setting 
+I<MaxTempErrors>. Note that after each temporary error, the server will wait for a number of seconds 
+equal to the number of consecutive temporary errors times .25, so very high values for I<MaxTempErrors>
+can slow you down in a big way if your "temporary error" is not all that temporary.
+
+Generally you won't have to set this value, unless you are doing very large appends on a relatively small,
+slow, or busy server. 
 
 =item Password()
 
@@ -3017,6 +3126,23 @@ messages in the target folder.
 
 =cut
 
+=item create()
+
+The B<create> method accepts one argument, the name of a folder (or what RFC2060 calls a "mailbox") to create. 
+If you specifiy additional arguments to the B<create> method and your server allows additional arguments 
+to the CREATE IMAP client command then the extra argument(s) will be passed to your server. 
+
+If you specifiy additional arguments to the B<create> method and your server does not allow additional arguments 
+to the CREATE IMAP client command then the extra argument(s) will still be passed to your server and the 
+create will fail, so don't do that.
+
+B<create> returns a true value on success and undef on failure, as you've probably guessed.
+
+=item delete()
+
+The B<delete> method accepts a single argument, the name of a folder to delete. It returns a true value on 
+success and undef on failure.
+
 =item delete_message()
 
 The B<delete_message> method accepts a list of arguments. If the I<Uid> parameter is not set to 
@@ -3090,7 +3216,7 @@ default method) to close a folder.  Oh, and don't forget about RFC2060.
 The B<deny_seeing> method accepts a list of one or more message sequence numbers, or a single 
 reference to an array of one or more message sequence numbers, as its argument(s). It then unsets 
 the "\Seen" flag for those messages. Of course, if the I<Uid> parameter is set to a true value then 
-those message sequence numbers had better be unique message id's, but then you already knew that, 
+those message sequence numbers had better be unique message id's.
 didn't you?
 
 Note that specifying C<$imap->deny_seeing(@msgs)> is just a shortcut for specifying 
@@ -3213,10 +3339,23 @@ successful if the object is in the B<Authenticated> or B<Selected> states.
 Returns true if the IMAP server to which the B<IMAPClient> object is connected has the capability
 specified as an argument to B<has_capability>.
 
+=item imap4rev1()
+
+Returns true if the IMAP server to which the B<IMAPClient> object is connected has the IMAP4REV1 capability.
+
 =item internaldate()
 
 B<internaldate> accepts one argument, a message id (or UID if the Uid parameter is true), and returns 
 that message's internal date.
+
+=item getacl()
+
+B<getacl> accepts one argument, the name of a folder. If no argument is provided then the currently selected folder
+is used as the default. It returns a reference to a hash. The keys of the hash are userids that have access to the
+folder, and the value of each element are the permissions for that user. The permissions are listed in a string in 
+the order returned from the server with no whitespace or punctuation between them.
+
+=cut
 
 =item is_parent()
 
@@ -3253,6 +3392,10 @@ see the B<folders> method, above.)
 
 =cut
 
+=item listrights
+
+The B<listrights> method implements the IMAP LISTRIGHTS client command (L<RFC2086>). 
+
 =item login()
 
 The B<login> method uses the IMAP LOGIN client command (as defined in RFC2060) to log into
@@ -3283,6 +3426,19 @@ The array is the unaltered output of the LSUB command. If you want an array of s
 then see the B<subscribed> method, below.
 
 =cut
+
+=item mark()
+
+The B<mark> method accepts a list of one or more messages sequence numbers, or a single reference to an 
+array of one or more message sequence numbers, as its argument(s). It then sets the "\Flagged" flag for 
+those message(s). Of course, if the I<Uid> parameter is set to a true value then those message 
+sequence numbers had better be unique message id's.
+
+Note that specifying C<$imap->see(@msgs)> is just a shortcut for specifying 
+C<$imap->set_flag("Flagged",@msgs)>. 
+
+=cut
+
 
 =item message_count()
 
@@ -3624,7 +3780,7 @@ The B<search> method implements the SEARCH IMAP client command. Any argument sup
 B<search> is prefixed with a space and appended  to the SEARCH IMAP client command. This
 method is another one of those situations where it will really help to have your copy of
 RFC2060 handy, since the SEARCH IMAP client command contains a plethora of options and 
-possible arguments. 
+possible arguments. I'm not going to repeat them here.  
 
 Remember that if your argument needs quotes around it then you must make sure that the
 quotes will be preserved when passing the argument. I.e. use C<qq/"$arg"/> instead of 
@@ -3636,6 +3792,39 @@ will contain message UID's. If B<search> is called in scalar context then a poin
 will be passed, instead of the array itself.
 
 =cut
+
+=item sort()
+
+The B<sort> method is just like the B<search> method, only different. 
+It implements the SORT extension as described in 
+http://search.ietf.org/internet-drafts/draft-ietf-imapext-sort-06.txt.
+It would be wise to use the B<has_capability> method to verify that the SORT 
+capability is available on your server before trying to use the B<sort> method. If you forget 
+to check and you're connecting to a server that doesn't have the SORT capability then 
+B<sort> will return undef. B<LastError> will then say you are "BAD". If your server doesn't 
+support the SORT capability then you'll have to use B<search> and then sort the results yourself.
+
+The first argument to B<sort> is a space-delimited list of sorting criteria. The Internet Draft 
+that describes SORT requires that this list be wrapped in parentheses, even if there is only one 
+sort criterion. If you forget the parentheses then the B<sort> method will add them. But you have 
+to forget both of them, or none. I'm not CMS running under VM!
+
+The second argument is a character set to use for sorting. Different character 
+sets use different sorting orders, so this argument is important. Since all servers 
+must support UTF-8 and US-ASCII if they support the SORT capability at all, use one 
+of those if you don't have some other preferred character set in mind.
+
+The rest of the arguments are searching criteria, just as you would supply to the B<search> method. 
+These are all documented in RFC2060. If you just want all of the messages in the currently selected
+folder returned to you in sorted order, use I<ALL> as your only search criterion.
+
+The B<sort> method returns an array containing sequence numbers of messages that passed the
+SORT IMAP client command's search criteria. If the I<Uid> parameter is true then the array
+will contain message UID's. If B<sort> is called in scalar context then a pointer to the array
+will be passed, instead of the array itself. The message sequence numbers or unique identifiers
+are ordered according to the sort criteria specified. The sort criteria are nested in the order
+specified; that is, items are sorted first by the first criterion, and within the first criterion 
+they are sorted by the second criterion, and so on.
 
 =item see()
 
@@ -3772,6 +3961,18 @@ L<"Status Methods">, below).
 
 =cut
 
+=item store()
+
+The B<store> method accepts a message sequence number or comma-separated list of message sequence numbers
+as a first argument, a message data item name, and a value for the message data item. Currently, data items
+are the word "FLAGS" followed by a space and a list of flags (in parens). The word "FLAGS" can be modified
+by prefixing it with either a "+" or a "-" (to indicate "add these flags" or "remove these flags") and by
+suffixing it with ".SILENT" (which reduces the amount of output from the server; very useful with large message
+sets). Normally you won't need to call B<store> because there are oodles of methods that will invoke store for
+you with the correct arguments. Furthermore, these methods are friendlier and more flexible with regards to 
+how you specify your arguments. See for example L<see>, L<deny_seeing>, L<delete_message>, and 
+L<restore_message>. Or L<mark>, L<unmark>, L<set_flag>, and L<unset_flag>.
+
 =item subscribed()
 
 The B<subscribed> method works like the B<folders> method, above, except that the returned list (or
@@ -3801,6 +4002,18 @@ that is the next available message UID for that folder.
 
 The B<uidvalidity> method accepts one argument, the name of a folder, and returns the numeric string
 that is the unique identifier validity value for the folder.
+
+=item unmark()
+
+The B<unmark> method accepts a list of one or more messages sequence numbers, or a single reference to an 
+array of one or more message sequence numbers, as its argument(s). It then unsets the "\Flagged" flag for 
+those message(s). Of course, if the I<Uid> parameter is set to a true value then those message 
+sequence numbers should really be unique message id's.
+
+Note that specifying C<$imap->see(@msgs)> is just a shortcut for specifying 
+C<$imap->unset_flag("Flagged",@msgs)>. 
+
+=cut
 
 =item unseen()
 
@@ -3859,13 +4072,10 @@ Notice that we used an uppercase method name "FOO" so as not to conflict with fu
 IMAP command. If you run your script with warnings turned on (always a good idea, at least during testing),
 then you will receive warnings whenever you use a lowercase method name that has not been implemented. An 
 exception to this is when you use certain common (yet unimplemented) methods that, if ever explicitly implemented,
-are guaranteed to behave just like the default method. To date, these are:
+are guaranteed to behave just like the default method. To date, those methods are either documented in the section
+labeled L<Object Methods>, above, or listed here:
 
 =over 8
-
-=item store("$msg[,$msg2,$msg_n]", $flags)
-
-Invoke the STORE IMAP Client command to update a message's status on the server. 
 
 =item copy($msg,$folder)
 
@@ -3874,18 +4084,6 @@ Copy a message into a folder.
 =item subscribe($folder)
 
 Subscribe to a folder
-
-=item create($folder)
-
-Create a new folder.
-
-=item delete($folder)
-
-Delete a folder (and its contents).
-
-=item expunge
-
-Remove messages previously marked as deleted. (This is also documented under L<"object methods">, above.)
 
 =back
 
@@ -3898,11 +4096,11 @@ the Class method and accessor method namespace. For example, if you don't want t
 method's behavior (which returns a list of message numbers) but would rather have an array
 of raw data returned from your B<search> operation, you can issue the following snippet:
 	
-	@raw = $imap->SEARCH("SUBJECT","Whatever...");
+	my @raw = $imap->SEARCH("SUBJECT","Whatever...");
 
 which is slightly more efficient than the equivalent:
 
-	my @msgs = $imap->search("SUBJECT","Whatever...");
+	$imap->search("SUBJECT","Whatever...");
 
 	my @raw = $imap->Results;
 

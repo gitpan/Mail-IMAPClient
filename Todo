@@ -1,6 +1,8 @@
 The following is a list of some items that I hope to include in a future 
 release:
 
+- Support for THREADS
+
 - Better support for converting a message into a structure that is based upon
 the message's BODYSTRUCTURE. 
 
@@ -32,17 +34,8 @@ partially addresses this issue.)
 - Support for other authentication mechanisms, such as NTLM. (NOTE: Ditto 
 above in re the recent AUTHENTICATE method.)
 
-- Support for a "Peek" mode, which will cause the client to use "peeking" commands (i.e. commands that
-do not set the "\Seen" flag) wherever possible and appropriate. The parse_headers method already does its 
-thing in peek mode; message_string does not. (Of course if you've just gobbled up a whole message into a
-string, then that's more than just a peek, isn't it?) Anyway, I'd like to create a new parameter ("Peek?")
-that, if set, will force Mail::IMAPClient to either peek or not peek.
-
 - Support for piping output from (some?) imap commands directly to a thingy of some sort
 (perhaps a coderef, a filehandle, or both). 
-
-- A message_to_file method, which would be much like the append_from_file method except it would be the 
-opposite. (If you can parse IMAP output then you should be able to parse the previous sentence. ;-)
 
 - Your thingy here!!! Send me your request, and I'll do it in the order of ( $popularity/$difficulty ).
 
