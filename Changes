@@ -1,5 +1,35 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.12
+-----------------------
+Fixed a bug in the folders method when called with a second arg then once without a second arg.
+
+Tested sucessfully with perl-5.6.0. 
+
+Added a section to the pod documentation on how to report bugs. I've had to ask for output from 
+scripts with "Debug => 1" so many times that I eventually decided to include the procedure for 
+documenting bugs in the distribution. (Duh! It only took me 11 releases to come up with that 
+brainstorm.) Often following the procedures to obtain the documentation is enough; once people 
+see what's going on (by turning on Debug =>1) they no longer want to report a bug. 
+
+Did I mention it's a good idea to turn on debugging when trying to figure out why a script 
+isn't working? (It is.)
+
+In order to make the Debug parameter friendlier, it now prints to STDERR by default. You can override
+this by supplying the spanking brand new Debug_fh parameter, which if supplied had better well point
+to a filehandle (either by glob or by reference), and by 'filehandle' I mean something besides STDIN!
+
+Debugging mode will now also X-out the login credentials used to login. This will make it easier
+to share your debugging output.
+
+Added documentation for the State parameter, which must be set manually by programmers who are 
+not using Mail::IMAPClient's connect and/or login methods but who are instead making their own
+connections and then using the Socket parameter to turn their connections into IMAP clients.
+
+Fixed bug in parse_headers with Uid turned on.
+
+Fixed bug in parse_headers when using the argument "ALL".
+
 Changes in version 1.11
 -----------------------
 Added new example script, copy_folder.pl, to demonstrate one way to copy entire folders between
@@ -40,7 +70,7 @@ Mark Keisler for pointing out some bugs in the error handling code in this metho
 Added the append_file method, which is like the append method but it works on files instead of strings.
 The file provided to append must contain an RFC822-formatted message. Use of the append_file method
 avoids having to stuff huge messages into variables before appending them. Thanks to Jim Martin
-(jwm3@jwm3.org) for suggesting this method.
+(http://jwm3.org) for suggesting this method.
 
 Changed the flags method and the parse_headers method so that a reference to an array of 
 message sequence numbers (or message UIDS if the Uid parameter is turned on) can optionally be passed 
@@ -376,4 +406,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.13 2000/03/16 14:55:22 dkernen Exp $
+# $Id: Changes,v 19991216.14 2000/04/27 17:59:44 dkernen Exp $

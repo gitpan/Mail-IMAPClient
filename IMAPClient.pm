@@ -1,14 +1,15 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.12 2000/03/16 14:55:23 dkernen Exp $
+# $Id: IMAPClient.pm,v 19991216.13 2000/04/27 17:59:45 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.11';
-$Mail::IMAPClient::VERSION = '1.11';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.12';
+$Mail::IMAPClient::VERSION = '1.12';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
 use IO::Socket;
 use IO::File;
+
 
 #print "Found Fcntl in $INC{'Fcntl.pm'}\n";
 #Fcntl->import;
@@ -19,10 +20,16 @@ Mail::IMAPClient - An IMAP Client API
 
 =cut
 
-sub Unconnected 	{ return 0 ; }		# Object not connected
-sub Connected 		{ return 1 ; } 		# connected; not logged in
-sub Authenticated 	{ return 2 ; }		# logged in; no mailbox selected
-sub Selected 		{ return 3 ; }		# mailbox selected
+sub Unconnected   ()	{ return 0 ; }		# Object not connected
+sub Connected 	  ()	{ return 1 ; } 		# connected; not logged in
+sub Authenticated ()	{ return 2 ; }		# logged in; no mailbox selected
+sub Selected 	  ()	{ return 3 ; }		# mailbox selected
+
+sub _debug {
+	my $self = shift;
+	my $fh = $self->{Debug_fh} || \*STDERR; 
+	print $fh @_;
+}
 
 # the following for loop sets up eponymous accessor methods for 
 # the object's parameters:
@@ -31,7 +38,7 @@ sub Selected 		{ return 3 ; }		# mailbox selected
  for my $datum (
 		qw( 	State Port Server Folder Fast_io
 			User Password Socket Timeout
-			Debug LastError Count Uid
+			Debug LastError Count Uid Debug_fh
 		)
  ) {
 	no strict 'refs';
@@ -105,7 +112,9 @@ sub new {
 			$self->$k($v);
 		}
 	}	
+	$self->{Debug_fh} ||= \*STDERR;
 	$self->Clear(5) unless exists $self->{'Clear'};
+	$self->LastError(0);
 	return $self->connect if $self->Server and !$self->Socket;
 	return $self;
 }
@@ -336,9 +345,9 @@ sub message_string {
 	shift @head and pop @head and pop @head;
 	shift @torso and pop @torso and pop @torso;
 	local($^W) = undef;
-	# print "Last header is $head[$#head]";
+	# $self->_debug "Last header is $head[$#head]";
 	until ($head[-1] =~ /\r\n\r\n$/) { $head[-1] .= "\r\n"} ;
-	# print "Last header is $head[$#head]";
+	# _debug $self, "Last header is $head[$#head]";
 	return join("",@head) . join("",@torso);
 }
 
@@ -422,7 +431,7 @@ sub _imap_command {
 	$output = "";
 
 	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/mi ) {
-		# print "Line +$output \t not '$count OK or BAD or NO or $good'\n" 
+		# _debug $self, "Line +$output \t not '$count OK or BAD or NO or $good'\n" 
 		#	if $self->Debug;
 		$output = $self->_read_line;	
 		for my $o (split(/\r?\n/,$output)) { 
@@ -493,7 +502,7 @@ sub _record {
 
 	push @{$self->{"History"}{$count}}, $line;
 
-	$self->LastError("$line") if $line =~ /^\S+\s+(BAD|NO)/im;
+	$self->LastError("$line") if $line =~ /^\d+\s+(BAD|NO)\s/im;
 
 	return $self;
 }
@@ -509,7 +518,14 @@ sub _send_line {
 		$string .= "\n" ;
 	}
 
-	print "Sending: $string\n" if $self->Debug;
+	if ($self->Debug) {
+		my $dstring = $string;
+		if ( $dstring =~ m[\d+\s+Login\s+]i) {
+			$dstring =~ 	s	(\b(?:$self->{Password}|$self->{User})\b)
+						('X' x length($self->{Password}))eg;
+		}
+		_debug $self, "Sending: $dstring\n" ;
+	}
 	return	syswrite(	
 				$self->Socket, 
 				$string, 
@@ -533,9 +549,9 @@ sub _read_line {
 	my $flags 	= '0';
 
 	if ( $self->Fast_io and $fcntl=fcntl($sh, F_GETFL, $flags) ) {
-		# print STDERR 
+		# _debug $self, STDERR 
 		# "Setfl = ",F_SETFL," and GETFL = ",F_GETFL," and NONBLOCK = ",O_NONBLOCK,"\n";
-		# print STDERR "Fcntl flag is now $fcntl\n";
+		# _debug $self, STDERR "Fcntl flag is now $fcntl\n";
 		my $newflags = $fcntl;
 		$newflags |= O_NONBLOCK;
 		fcntl($sh, F_SETFL, $newflags) and $readlen = 4096;
@@ -563,13 +579,13 @@ sub _read_line {
 					$newcount
 		) ;
 		$^W = $oldW;
-		# print "Read so far: $buffer\n" if $self->Debug;
+		# _debug $self, "Read so far: $buffer\n" if $self->Debug;
 
 	}
 	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
-	#	print "Buffer is now $buffer\n";
+	#	_debug $self, "Buffer is now $buffer\n";
 	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
-		# print "in literal logic\n";
+		# _debug $self, "in literal logic\n";
 		my $len = $1 ;
 		my $newcount = 0;
 		if ($timeout) {
@@ -585,7 +601,7 @@ sub _read_line {
 			until $newcount >= $len;
 		sysread($sh,$buffer,2,$count+$newcount) unless $buffer =~ /\r\n$/;
 	}
-	print "Read: $buffer\n" if $self->Debug;
+	_debug $self, "Read: $buffer\n" if $self->Debug;
 	return defined($buffer) ? $buffer : undef ;
 }
 
@@ -656,7 +672,7 @@ sub folders {
 
         for my $f (@folders) { $f =~ s/^\\FOLDER LITERAL:://;}
 
-        $self->{Folders} = \@folders;
+        $self->{Folders} = \@folders unless $what;
 
         return wantarray ? @folders : \@folders ;
 }
@@ -699,7 +715,7 @@ sub AUTOLOAD {
 			$Mail::IMAPClient::AUTOLOAD = "UID $Mail::IMAPClient::AUTOLOAD"
 				if $self->Uid;
 		}
-		print "Running: $Mail::IMAPClient::AUTOLOAD " . join(" ",@a) ,"\n" if $self->Debug;
+		_debug $self, "Running: $Mail::IMAPClient::AUTOLOAD " . join(" ",@a) ,"\n" if $self->Debug;
 		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD / . join(" ",@a) )  or return undef;
 	} else {
 		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD/) or return undef;
@@ -745,7 +761,7 @@ sub status {
 #
 #	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
 #
-#		$string = 	"$msg rfc822.header" 	; 
+#		$string = 	"$msg body[header]" 	; 
 #	} else {
 #		$string	= 	"$msg body[header.fields (" 	. 
 #				join(" ",@fields) 		. ')]' ;
@@ -856,7 +872,7 @@ sub parse_headers {
 
 	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
 
-		$string = 	"$msg rfc822.header" 	; 
+		$string = 	"$msg body[header]" 	; 
 	} else {
 		$string	= 	"$msg body[header.fields (" 	. 
 				join(" ",@fields) 		. ')]' ;
@@ -868,8 +884,12 @@ sub parse_headers {
 	my $h = 0;		# reference to hash of current message id, or 0 for between messages
 	
        	for my $header (@raw) {
-               	if ($header =~ /^\*\s(\d*)/) {	  # start of new message header
-			my $msgid = $1;
+		local($^W) = undef;
+		my $pattern = $self->Uid ? 'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
+               	if (	my($msgid) = $header =~ /$pattern/ 
+			and $header =~ /BODY\[HEADER(?:\]|\.FIELDS)/i
+		) {	  
+			# start of new message header:
 			$h = {};		  # new hash for headers for this mail
 			$headers->{$msgid} = $h;  # store in results, against this message
 			next;
@@ -888,19 +908,34 @@ sub parse_headers {
                		chomp $hdr;
                		$hdr =~ s/\r$//;   
                		if ($hdr =~ s/^(\S+): //) { 
-                       		$field = $fieldmap{lc($1)} ;
+                       		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
                        		push @{$h->{$field}} , $hdr ;
-               		} else {
-                       		$h->{$field}[-1] .= $hdr if ref($h->{$field}) eq 'ARRAY';
+               		} elsif ( ref($h->{$field}) eq 'ARRAY') {
+			        
+					$hdr =~ s/^\s+/ /;
+                       			$h->{$field}[-1] .= $hdr ;
                		}
 		}
 	}
-
+	my $candump = 0;
+	if ($self->Debug) {
+		eval {
+			require Data::Dumper;
+			Data::Dumper->import;
+		};
+		$candump++ unless $@;
+	}
 	# if we asked for one message, just return its hash,
 	# otherwise, return hash of numbers => header hash
 	if (ref($msgspec) eq 'ARRAY') {
+		_debug $self,"Structure from parse_headers:\n", 
+			Dumper($headers) 
+			if $self->Debug;
 		return $headers;
 	} else {
+		_debug $self, "Structure from parse_headers:\n", 
+			Dumper($headers->{$msgspec}) 
+			if $self->Debug;
 		return $headers->{$msgspec};
 	}
 }
@@ -1002,7 +1037,7 @@ for my $datum (
 		       $r =~ s/\r$//;
 		       $r =~ s/^\*\s+SEARCH\s+//i or next;
 		       push @hits, grep(/\d/,(split(/\s+/,$r)));
-			print "Hits are now: ",join(',',@hits),"\n";
+			_debug $self, "Hits are now: ",join(',',@hits),"\n";
 		}
 
 		return wantarray ? @hits : \@hits;
@@ -1189,7 +1224,7 @@ sub append {
 		} elsif ( $output =~ /^\d*\s*(NO|BAD)i/ ) {
 			return undef;
 		}
-		# print "Output so far = $output\n";
+		# _debug $self, "Output so far = $output\n";
 	}	
 	
         if ( $output =~ /^\d+\s+(BAD|NO)/i ) { 
@@ -1208,7 +1243,7 @@ sub append {
 
         until (($code) = $output =~ /^$count (OK|NO|BAD)/im) {
                 $output = $self->_read_line;
-		print "Append results: $output\n" if $self->Debug;
+		_debug $self, "Append results: $output\n" if $self->Debug;
                 $self->_record($count,$output);
                 if ($output =~ /^\*\s+BYE/im) {
                         $self->State(Unconnected);
@@ -1286,7 +1321,7 @@ sub append_file {
 			$self->LastError("Error sending append msg text to IMAP: $!\n");
 			return undef;
 		}
-		print "control points to $$control\n" if ref($control);
+		_debug $self, "control points to $$control\n" if ref($control);
 		$/ = 	$control ? 	$control : 	"\n";	
 		while ($text = <$fh>) {
 			$text =~ s/\r?\n/\r\n/g;
@@ -1679,8 +1714,39 @@ On the contrary, the available parameters are:
 =item Debug
 
 Sets the debugging flag to either a true or false value. Can be supplied with the B<new>
-method call or separately by calling the B<Debug> object method.
+method call or separately by calling the B<Debug> object method. Use of this parameter is
+strongly recommended when debugging scripts and required when reporting bugs.
 
+=item Debug_fh
+
+Specifies the filehandle to which debugging information should be printed. It can either a
+filehandle object reference or a filehandle glob. The default is to print debugging info to
+STDERR.
+
+For example, you can:
+
+	use Mail::IMAPClient;
+	use IO::File;
+	# set $user, $pass, and $server here
+	my $dh = IO::File->new(">debugging.output") 
+		or die "Can't open debugging.output: $!\n";
+	my $imap = Mail::IMAPClient->new(	User=>$user, Password=>$pass, 
+						Server=>$server, Debug=> "yes, please",
+						Debug_fh => $dh
+	);
+	
+Or you can:
+
+
+	use Mail::IMAPClient;
+	# set $user, $pass, and $server here
+	open(DBG,">debugging.output") 
+		or die "Can't open debugging.output: $!\n";
+	my $imap = Mail::IMAPClient->new(	User=>$user, Password=>$pass, 
+						Server=>$server, Debug=> 1,
+						Debug_fh => *DBG
+	);
+	
 =item Port
 
 Specifies the port on which the IMAP server is listening. The default is 143, which is the 
@@ -1770,6 +1836,7 @@ The methods currently affected by turning on the I<Uid> flag are:
 	message_string 	message_uid
 	body_string 	flags
 	move 		size
+	parse_headers
 
 Note that if for some reason you only want the I<Uid> parameter turned on for one command, then
 you can choose between the following two snippets, which are equivalent:
@@ -1777,22 +1844,22 @@ you can choose between the following two snippets, which are equivalent:
 Example 1:
 
 	$imap->Uid(1);
-	my @hits = $imap->search('SUBJECT',"Just a silly test");
+	my @uids = $imap->search('SUBJECT',"Just a silly test"); # 
 	$imap->Uid(0);
 
 Example 2:
 
-	my @hits 
+	my @uids; 
        	foreach $r ($imap->uid("SEARCH","SUBJECT","Just a silly test") {
 	       chomp $r;
 	       $r =~ s/\r$//;
 	       $r =~ s/^\*\s+SEARCH\s+// or next;
-	       push @hits, grep(/\d/,(split(/\s+/,$r)));
+	       push @uids, grep(/\d/,(split(/\s+/,$r)));
 	}
 
 In the second example, we used the default method to issue the UID IMAP Client command, being 
-careful to use different case so as not to inadvertently call the I<Uid> accessor method. Then
-we parsed out the message UID's manually, since we don't have the benefit of the built-in 
+careful to use lowercase method name so as not to inadvertently call the I<Uid> accessor method. 
+Then we parsed out the message UID's manually, since we don't have the benefit of the built-in 
 B<search> method doing it for us.
 	
 Please be very careful when turning the I<Uid> parameter on and off throughout a script. If you loose
@@ -1820,7 +1887,9 @@ or by doing something like:
 
 then it will be up to you to establish the connection AND to authenticate, either via the B<login>
 method, or the fancier B<authenticate>, or, since you know so much anyway, by just doing raw I/O 
-against the socket.
+against the socket until you're logged in. If you do any of this then you should also set the 
+I<State> parameter yourself to reflect the current state of the object (i.e. Connected, 
+Authenticated, etc).
 
 =back
 
@@ -2549,6 +2618,17 @@ a single B<new> method invocation. The status methods are:
 
 =over 8
 
+=item 1. State 
+
+returns a numerical value that indicates the current status of the B<IMAPClient> object. If invoked
+with an argument, it will set the object's state to that value. If invoked without an argument, it
+behaves just like B<Status>, below. 
+
+Normally you will not have to invoke this function. An exception is if you are bypassing the
+B<Mail::IMAPClient> module's B<connect> and/or B<login> modules to set up your own connection
+(say, for example, over a secure socket), in which case you must manually do what the B<connect>
+and B<login> methods would otherwise do for you.
+
 =item 1. Status 
 
 returns a numerical value that indicates the current status of the B<IMAPClient> object. (Not to
@@ -2612,6 +2692,26 @@ array reference rather than an array.
 
 =cut
 
+=head1 REPORTING BUGS
+
+Please feel free to e-mail the author at the below address if you encounter any strange behaviors. 
+When reporting a bug, please be sure to include the following:
+
+- As much information about your environment as possible. I especially need to know which version 
+of Mail::IMAPClient you are running and the type/version of IMAP server to which you are connecting.
+
+- As detailed a description of the problem as possible. (What are you doing? What happens?)
+
+- An example script that demonstrates the problem (preferably with as few lines of code as possible!) 
+and which calls the Mail::IMAPClient's B<new> method with the I<Debug> parameter set to "1".
+
+- Output from the example script when it's running with the Debug parameter turned on. You can 
+edit the output to remove (or preferably to "X" out) sensitive data, such as hostnames, user 
+names, and passwords, but PLEASE do not remove the text that identifies the TYPE of IMAP server 
+to which you are connecting. Note that in the latest versions of Mail::IMAPClient, debugging does
+not print out the user or password from the login command line. However, if you use some other means
+of authenticating then you may need to edit the debugging output with an eye to security.
+
 =head1 AUTHOR
 
 	David J. Kernen
@@ -2651,6 +2751,16 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 19991216.13  2000/04/27 17:59:45  dkernen
+#
+# Modified Files:
+# 	Changes IMAPClient.pm INSTALL MANIFEST Makefile README
+# 	test.txt
+# Added Files:
+# 	.uwtest45 .uwtest47
+# Removed Files:
+# 	.uwtest
+#
 # Revision 19991216.12  2000/03/16 14:55:23  dkernen
 #
 # Changes 	- to document changes
