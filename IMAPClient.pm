@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$Mail::IMAPClient::VERSION = '1.04';
-$Mail::IMAPClient::VERSION = '1.04';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.05';
+$Mail::IMAPClient::VERSION = '1.05';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;

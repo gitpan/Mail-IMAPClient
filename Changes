@@ -1,5 +1,29 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.05
+-----------------------
+
+Patched the 'make test' basic test to work correctly on systems that do not
+support double quotes in folder names. Thanks to Rex Walters for this fix.
+
+Added a new example script, build_dist.pl, that rumages through a folder 
+(specified on the command line) and collects the "From:" address, and then 
+appends a message to that folder with all those addresses in both the To: field 
+and the text, to facilitate cuting and pasting (or dragging and dropping) 
+into address books and so forth. (Note that the message doesn't actually get 
+sent to all those people; it just kind of looks that way.)
+
+Also added another example, build_ldif.pl, that is similar to build_dist.pl 
+except that instead of listing addresses in the message text, it creates a 
+MIME attachment and attaches a text file in LDIF format, which can then be
+imported into any address book that supports LDIF as an import file format.
+This example requires the MIME::Lite module. MIME::Lite was written by Eryq 
+(okay, Erik Dorfman is his legal name), and is totally available on CPAN. 
+
+This distribution has now been tested on Mirapoint Message Server Appliances
+(versions 1.6.1 and 1.7.1). Many thanks to Rex Walters for certifying this
+platform and for providing a test account for future releases.
+
 Changes in version 1.04
 -----------------------
 

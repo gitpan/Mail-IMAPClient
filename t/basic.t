@@ -78,16 +78,16 @@ BEGIN {
 				print "ok ",++$test,"\n";
 			} else {
                           if ($imap->LastError =~ /NO Invalid.*name/) {
-                                print "skipping ",++$test,
+                                print "ok skipping ",++$test,
 				 " $parms{server} doesn't support quotes in folder names--",
 				 "skipping next 2 tests\n";
-                                print "skipping ",++$test,"\n";
-                                print "skipping ",++$test,"\n";
+                                print "ok ", ++$test," (skipped)\n";
+                                print "ok ", ++$test," (skipped)\n";
                                 return;
                           } else {
                                 print "not ok ",++$test,"\n";
-                                print "skipping ",++$test,"\n";
-                                print "skipping ",++$test,"\n";
+                                print "ok ", ++$test," (skipped)\n";
+                                print "ok ", ++$test," (skipped)\n";
 				return;
                           }
 
