@@ -1,14 +1,21 @@
 Revision history for Perl extension IMAPClient.
 
-Changes in version 1.0
-----------------------
-Cosmetic changes to documentation
+Changes in version 1.01
+-----------------------
+Fixed a bug in test.pl that caused tests to fail if the extended tests were not used.
 
-Fixed a bug introduced into the 'folders' method in .99
+Added method 'parse_header' to parse the header fields of a message in the IMAP store into
+a perl data structure.
+
+Changes in version 1.00
+-----------------------
+Made cosmetic changes to documentation.
+
+Fixed a bug introduced into the 'folders' method in .99.
 
 Changed 'new' method so that it returns undef if an implicit connection or login is 
 attempted but fails. Previous releases returned a Mail::IMAPClient object that was
-not connected or not logged in, depending on what failed. 
+not connected or not logged in, depending on what failed.
 
 Changed installation script so that it reuses the parameter file for test.pl if it 
 finds one. Installation can be run in the background if the .test file exists. Touching

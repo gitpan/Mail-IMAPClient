@@ -19,4 +19,6 @@ authentication mechanisms... :-(
 
 - Support for other authentication mechanisms, such as NTLM.
 
+- Better support for the UID Imap Client command.
+
 

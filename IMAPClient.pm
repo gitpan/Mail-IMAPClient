@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$Mail::IMAPClient::VERSION = '1.00';
-$Mail::IMAPClient::VERSION = '1.00';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.01';
+$Mail::IMAPClient::VERSION = '1.01';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -375,6 +375,36 @@ sub status {
 	return wantarray ? 	$self->History($self->Count) 	: 
 				$self->{"History"}{$self->Count}	;
 
+}
+
+sub parse_headers {
+
+	my($self,$msg,@fields) = @_;
+	my $string;
+
+	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
+
+		$string = 	"$msg rfc822.header" 	; 
+	} else {
+		$string	= 	"$msg body[header.fields (" 	. 
+				join(" ",@fields) 		. ')]' ;
+	}
+	my @raw=$self->fetch(	$string	) or return undef;
+	
+	my $h = {};
+	for my $header (@raw) {
+		next if $header =~ /^\*/;
+		last if $header =~ /^\(/;	# ) for vi
+		chomp $header;
+		$header =~ s/\r$//;	
+		if ($header =~ s/^(\S+): //) { 
+			$field = $1 ;
+			push @{$h->{$field}} , $header;
+		} else {
+			$h->{$field}[-1] .= $header;
+		}	
+	}
+	return $h;
 }
 
 sub recent_count {
@@ -1119,6 +1149,45 @@ in the first argument to B<move>.  The rest of the arguments should be either:
 If the target folder does not exist then it will be created.
 
 =cut
+
+=item parse_headers 
+
+The B<parse_headers> method accepts as arguments a message sequence number and a list of header
+fields. It returns a hash reference in which the keys are the header field names (without the colon) 
+and the values are references to arrays of values. A picture would look something like this:
+
+   $hashref = $imap->parse_headers(1,"Date","Received","Subject","To");
+   $hashref = {
+	"Date" 	 	=> [ "Thu, 09 Sep 1999 09:49:04 -0400" ]  ,
+        "Received"	=> [ q/
+	   	from mailhub ([111.11.111.111]) by mailhost.bigco.com 
+	   	(Netscape Messaging Server 3.6)  with ESMTP id AAA527D for 
+	   	<bigshot@bigco.com>; Fri, 18 Jun 1999 16:29:07 +0000
+	   	/, q/
+	   	from directory-daemon by mailhub.bigco.com (PMDF V5.2-31 #38473)
+ 	   	id <0FDJ0010174HF7@mailhub.bigco.com> for bigshot@bigco.com
+ 	   	(ORCPT rfc822;big.shot@bigco.com); Fri, 18 Jun 1999 16:29:05 +0000 (GMT)
+	   	/, q/
+	   	from someplace ([999.9.99.99]) by smtp-relay.bigco.com (PMDF V5.2-31 #38473) 
+	        with ESMTP id <0FDJ0000P74H0W@smtp-relay.bigco.com> for big.shot@bigco.com; Fri,
+	   	18 Jun 1999 16:29:05 +0000 (GMT)
+	   	/] ,
+	"Subject" 	=> [ qw/ Help! I've fallen and I can't get up!/ ] ,
+	"To"		=> [ "Big Shot <big.shot@bigco.com> ] ,
+	} ;
+
+The text in the example for the "Received" array has been formated to make reading the
+example easier. The actual values returned are just strings of words separated by spaces and 
+with newlines and carriage returns stripped off. The I<Received> header is probably the main reason 
+that the B<parse_headers> method creates a hash of lists rather than a hash of values. 
+
+If the second argument to B<parse_headers> is 'ALL' or if it is unspecified then all available headers
+are included in the returned hash of lists.
+
+If you're not emotionally prepared to deal with a hash of lists then you can always call the 
+B<fetch> method yourself with the appropriate parameters and parse the data out any way you want to.
+
+Currently, specifying a range of message numbers as the first argument is not supported. 
 
 =item recent
 

@@ -7,9 +7,7 @@
 # (It may become useful if the test is moved to ./t subdirectory.)
 
 END {print "not ok 1\n" unless $loaded;}
-use IMAPClient;
-$loaded = 1;
-print "ok 1\n";
+use Mail::IMAPClient;
 
 
 ######################### End of black magic.
@@ -24,17 +22,6 @@ my $imap;
 my @tests;
 
 BEGIN { 
-	$| = 1; 
-
-	unless ( -f "./.test" ) { exit;}
-
-	open TST,"./.test" or exit;
-	while (defined(my $l = <TST>)) {
-		my($p,$v)=split(/=/,$l);
-		chomp $v;
-		$parms{$p}=$v;
-	}
-	close TST;
 
 	push @tests, sub {
 		if ($imap) {
@@ -86,6 +73,16 @@ BEGIN {
 		}
 	};
 
+	push @tests, sub {
+		my $h;
+		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
+			and $h->{Subject}[0] =~ /^Testing from pid/} ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
 	my @hits = ();
 	push @tests, sub {
 		sleep 3;
@@ -113,9 +110,27 @@ BEGIN {
 		}
 	};
 
-	print "1..@{[scalar(@tests)+1]}\n"; 
-}
+	if ( -f "./.test" ) { 
+		print "1..@{[scalar(@tests)+1]}\n"; 
+	} else {		
+		print "1..1\n"; 	
+	}	
 
+	$loaded = 1;
+	print "ok 1\n";
+	$| = 1; 
+
+	unless ( -f "./.test" ) { exit;}
+
+	open TST,"./.test" or exit;
+	while (defined(my $l = <TST>)) {
+		my($p,$v)=split(/=/,$l);
+		chomp $v;
+		$parms{$p}=$v;
+	}
+	close TST;
+
+}
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
