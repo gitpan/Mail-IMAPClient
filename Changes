@@ -2,21 +2,61 @@ Revision history for Perl extension IMAPClient.
 
 Changes in version 1.08
 -----------------------
+
+Fixed bug in pod that failed to mention constraints on when the append method will return the uid
+of the appended message. (This feature only works with servers that have the UIDPLUS capability.)
+
+Added/improved documentation somewhat.
+
+The copy method now returns a comma-separated list of uids if successful and if the IMAP server
+supports UIDPLUS extentions. The move method now works similarly.
+
+Added new method uidnext, which accepts the name of a folder as an argument and returns the next
+available message UID for that folder.
+
+The exists and append methods now will handle unquoted foldernames with embedded spaces or quotes
+or whatever. Including quotes as part of the argument string is no longer required but is still
+supported for backwards compatibility reasons. In other words, $imap->exists(q("Some Folder")) is
+now no longer necessary (but will still work). $imap->exists(some folder) is good enough.
+
+Mail::IMAPClient has been tested successfully on Mirapoint 2.0.2. (Thanks to Jim Hickstein.)
+
+I've now installed the UW imapd IMAP4rev1 v12.264 on one of my machines so I'm better able to 
+certify that platform. All the tests in 'make test' work there (or are at least gently skipped). 
+
+Fixed bug in getacl in which folder names were quoted twice. (Thanks to Albert Chin for 
+squashing this bug.) Similar bugs existed in the other ACL methods and were similarly 
+fixed.
+
+Fixed a bug in message_uid that basically caused it to not work. Muchos gracias to Luvox (aka 
+fluvoxamine hydrochloride) for providing me with just the help I needed to discover and fix this 
+bug. 
+
+Enhanced folders method to allow an argument. If an argument is supplied, then the folders method
+will restrict its results to subfolders of the supplied argument (which should be the name of a 
+parent folder, IMHO). This is implemented by supplying arguments to the LIST IMAP Client command 
+so we are optimizing network I/O at the expense of possible server incompatibilities.  If you 
+find server incompatibilities with this then please let me know, and in the meantime you can 
+always grep(/^parent/,$imap->folders) or something. Or re-implement the folders method yourself.
+
+
+Changes in version 1.07
+-----------------------
 Added a new parameter, Fast_io, which, if set to a true value, will attempt to implement a faster
 I/O engine. USE THIS AT YOUR OWN RISK. It is alpha code. I don't even know yet if it even helps.
 
 Added support for spaces in folder names for the autoloaded subscribe method.
 
-Added new methods setacl, getacl, deleteacl, and listrights. These methods are not yet fully tested 
-and should be considered beta for this release.
+Added new methods setacl, getacl, deleteacl, and listrights. These methods are not yet fully 
+tested and should be considered beta for this release.
 
 Enhanced support for the myrights method (which is implemented via the default method).
 
-Changes in version 1.07
------------------------
+Fixed bug in append method that caused it to hang if server replied to original APPEND with
+a NO (because, say, the mailbox's quota has been exceeded).
 
-Removed the autodiscovery of the folder hierarchy from the login method. This will speed up logging
-in but may delay certain other methods later (but see the next item, below).
+Removed the autodiscovery of the folder hierarchy from the login method. This will speed up 
+logging in but may delay certain other methods later (but see the next item, below).
 
 Updated the exists method to issue a "STATUS" IMAP Client command, rather than depend on the 
 folder hierarchy being discovered via 'LIST "" "*"'. Apparently this speeds things up a lot for

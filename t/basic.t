@@ -139,25 +139,35 @@ BEGIN {
 	push @tests, sub {	# 13, 14
 		unless ($imap->has_capability(UIDPLUS)) {
 		      	print "ok ", ++$test," (skipped)\n";
-                      	print "ok ", ++$test," (skipped)\n";
-			return;
+                       	print "ok ", ++$test," (skipped)\n";
+		 	return;
 		}
 		my $m1 ; 
-		eval { $imap->Uid(1); $m1 = $imap->message_string($uid) ; $imap->Uid(0)} ;
-		if ( !$? ) {
+		eval { 
+		$imap->Uid(1); $m1 = $imap->message_string($uid) ; $imap->Uid(0)} ;
+		if ( !$? ) {	# 13
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 		}
 	
-		if ( length($m1))	{
+		if ( length($m1))	{	# 14
 			print "ok ",++$test,"\n";
 		} else {
 			print "not ok ",++$test,"\n";
 		}
 	};
-	
+
 	push @tests, sub {	# 15
+		if ( eval { my $uid2 = $imap->copy("$target",1)} ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+
+	
+	push @tests, sub {	# 16
 		my @res;
 		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
 			print "ok ",++$test,"\n";
@@ -166,7 +176,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 16
+	push @tests, sub {	# 17
 		my $h;
 		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
 			and $h->{Subject}[0] =~ /^Testing from pid/} ) {
@@ -181,21 +191,27 @@ BEGIN {
 	};
 
 	my @hits = ();
-	push @tests, sub {	# 17
+	push @tests, sub {	# 18
+		$imap->select("$target");
 		eval { @hits = $imap->search('SUBJECT','Testing') } ;
-		if ( scalar(@hits) == 1 ) {
+		if ( scalar(@hits) == 2 ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 			print "Found ",scalar(@hits), 
-			  " hits (",join(", ",@hits),")-- expected 1\n";
-			# print $imap->Results;
+			  " hits (",join(", ",@hits),")-- expected 2\n";
+			print $imap->Report;
 			exit;
 		}
 	};
-	push @tests, sub {	# 18, 19
+	push @tests, sub {	# 19, 20
+		unless ( $imap->has_capability("UIDPLUS") ) {
+			print "ok ",++$test," (skipped)\n";
+			print "ok ",++$test," (skipped)\n";
+			return;
+		}
 		eval { $imap->Uid(1); @uidhits = $imap->search('SUBJECT','Testing') } ;
-		if ( scalar(@uidhits) == 1 ) {
+		if ( scalar(@uidhits) == 2 ) {
 			print "ok ",++$test,"\n";
 			if ($uidhits[0] == $uid) { 
 				print "ok ",++$test,"\n" ;
@@ -209,7 +225,7 @@ BEGIN {
 		eval { $imap->Uid(0) };
 	};
 
-	push @tests, sub {	# 20
+	push @tests, sub {	# 21
 		if ( $imap->delete_message(@hits) ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -217,7 +233,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 21
+	push @tests, sub {	# 22
 		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
 		unless ( scalar(@hits)  ) {
 			print "ok ",++$test,"\n";
@@ -230,7 +246,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 22,23
+	push @tests, sub {	# 23,24
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";

@@ -37,11 +37,15 @@ features (assuming that the programmer knows what those features are).
 To date, I know that the test suite runs successfully with the following IMAP 
 servers:
 
--Netscape Messenger v3.6
--Netscape Messenger v4.1
+-Netscape Messenging Server v4.x
+-Netscape Messenging Server v3.x
 -UW-IMAP (I think it was 4.5)
 -Cyrus IMAP4 v1.5.19
--Mirapoint Message Server Appliances (OS versions 1.6.1 and 1.7.1)
+-Mirapoint Message Server Appliances (OS versions 1.6.1, 1.7.1, and 2.0.2)
+
+If your server requires the use of the AUTHENTICATE IMAP client command (say,
+for strong authentication) then you can still use this module, provided you can come 
+up with the appropriate responses to any challenges offered by your server. 
 
 DEPENDENCIES
 

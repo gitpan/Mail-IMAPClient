@@ -197,7 +197,7 @@ sub deleteacl {
 	$target 	  = $self->Massage($target);
 	$user		  =~ s/^"(.*)"$/$1/;
 	$user 	  	  =~ s/"/\\"/g;
-	my $string 	=  qq(DELETEACL "$target" "$user");
+	my $string 	=  qq(DELETEACL $target "$user");
 	$self->_imap_command($string)  or return undef;
 
 	return wantarray ? 	$self->History($self->Count) 		: 
@@ -214,7 +214,7 @@ sub setacl {
 	$user 	  	  =~ s/"/\\"/g;
 	$acl		  =~ s/^"(.*)"$/$1/;
 	$acl 	  	  =~ s/"/\\"/g;
-	my $string 	=  qq(SETACL "$target" "$user" "$acl");
+	my $string 	=  qq(SETACL $target "$user" "$acl");
 	$self->_imap_command($string)  or return undef;
 	return wantarray ? 	$self->History($self->Count) 		: 
 				$self->{"History"}{$self->Count}	;
@@ -225,7 +225,7 @@ sub getacl {
 	my ($target) = @_;
 	$target = $self->Folder unless defined($target);
 	$target 	  = $self->Massage($target);
-	my $string 	=  qq(GETACL "$target");
+	my $string 	=  qq(GETACL $target);
 	$self->_imap_command($string)  or return undef;
 	return wantarray ? 	$self->History($self->Count) 		: 
 				$self->{"History"}{$self->Count}	;
@@ -239,7 +239,7 @@ sub listrights {
 	$target 	  = $self->Massage($target);
 	$user		  =~ s/^"(.*)"$/$1/;
 	$user 	  	  =~ s/"/\\"/g;
-	my $string 	=  qq(GETACL "$target" "$user");
+	my $string 	=  qq(GETACL $target "$user");
 	$self->_imap_command($string)  or return undef;
 	my $rights = ( grep(s/.*$target"?\s+"?$user"?\s+//, $self->History($self->Count) ) );
 	$rights =~ s/\s+//g;	
@@ -289,7 +289,6 @@ sub message_uid {
 	my $self = shift;
 	my $msg  = shift;
 	my @uid = $self->fetch($msg,"UID");
-	shift @uid and pop @uid and pop @uid;
 	my $uid;
 	while ( my $u = shift @uid and !$uid) {
 		($uid) = $u =~ /\(UID\s+(\d+)\)\r?$/;
@@ -454,7 +453,7 @@ sub _read_line {
 	}
 	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
 	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
-		my $len = $1 + 2;
+		# my $len = $1 + 2;
 		my $newcount = 0;
 		if ($timeout) {
 			vec($rvec, fileno($self->Socket), 1) = 1;
@@ -467,6 +466,7 @@ sub _read_line {
 		$newcount += sysread($sh,$buffer,$len-$newcount, 
 						$count+$newcount)
 			until $newcount >= $len;
+		sysread($sh,$buffer,2,$count+$newcount) unless $buffer =~ /\r\n$/;
 	}
 	print "Read: $buffer\n" if $self->Debug;
 	return defined($buffer) ? $buffer : undef ;
@@ -503,18 +503,20 @@ sub logout {
 	my $string = "LOGOUT";
 	$self->_imap_command($string) ; 
 	$self->State(Unconnected);
+	$self->{Folders} = undef;
 	$self->Socket->close ; $self->Socket(undef);
 	return $self;
 }
 
 sub folders {
         my $self = shift;
+	my $what = shift ;
         return wantarray ?      @{$self->{Folders}} :
                                 $self->{Folders} 
-                if ref($self->{Folders});
+                if ref($self->{Folders}) and !$what;
 	
         my @folders ;  
-	my $list = $self->list;
+	my $list = $self->list(undef,( $what? "$what" . $self->separator . "*" : undef ) );
 	
 	for (my $m = 0; $m < scalar(@$list); $m++ ) {
 	
@@ -544,7 +546,7 @@ sub folders {
 
 sub exists {
 	my ($self,$what) = (shift,shift);
-	return $self if $self->STATUS(qq($what),"(MESSAGES)");
+	return $self if $self->STATUS($self->Massage($what),"(MESSAGES)");
 	return undef;
 }
 	
@@ -794,6 +796,20 @@ sub uidvalidity {
 	return $validity;
 }
 
+# 3 status folder (uidnext)
+# * STATUS folder (UIDNEXT 290)
+
+sub uidnext {
+
+	my $self = shift; my $folder = $self->Massage(shift);
+
+	my $line = (grep(/UIDNEXT/i, $self->status($folder, "UIDNEXT")))[0];
+
+	my($uidnext) = $line =~ /\(UIDNEXT\s+([^\)]+)/;
+
+	return $uidnext;
+}
+
 sub capability {
 
 	my $self = shift;
@@ -846,7 +862,7 @@ sub is_parent {
 sub append {
 
         my $self = shift;
-        my $folder = shift;
+        my $folder = $self->Massage(shift);
 	my $text = join("\n",@_);
 	$text =~ s/\n/\r\n/g;
         my $clear = $self->Clear;
@@ -870,17 +886,24 @@ sub append {
 
 	my ($code, $output) = ("","");	
 	
-	until ( ($code) = $output =~ /^\+/) {
+	until ( ($code) = $output =~ /(^\+|^\d+\sNO|^\d+\sBAD)/) {
 		$output = $self->_read_line;	
 		$self->_record($count,$output);
 		if ($output =~ /^\*\s+BYE/) {
 			$self->State(Unconnected);
 			return undef ;
+		} elsif ( $output =~ /^\d+(NO|BAD)/ ) {
+			return undef;
 		}
 	}	
 	
-        return undef if $code =~ /^BAD|^NO/ ;
+        if ( $output =~ /^\d+\s+(BAD|NO)/ ) { 
+                $output =~ s/^\d+\s+//;
+                $self->LastError("Error trying to append: $output\n");
+                return undef;
+        }
 
+	$self->_record($count,$text);
         $feedback = $self->_send_line("$text\r\n");
 
         unless ($feedback) {
@@ -965,6 +988,35 @@ sub authenticate {
 
 }
 
+# UIDPLUS response from a copy: [COPYUID (uidvalidity) (origuid) (newuid)]
+sub copy {
+
+	my($self, $target, @msgs) = @_;
+
+	$target = $self->Massage($target);
+	@msgs   = sort { $a <=> $b } map { ref($_)? @$_ : split(',',$_) } @msgs;
+
+	$self->_imap_command( 
+	  ( 	$self->Uid ? "UID " : "" ) . 
+		"COPY " . 
+		join(',',map { ref($_)? @$_ : $_ } @msgs) . 
+		" $target"
+	) 			or return undef		;
+	my @results =  $self->History($self->Count) 	;
+	
+	my @uids;
+
+	for my $r (@results) {
+			
+               chomp $r;
+               $r =~ s/\r$//;
+               $r =~ s/^.*\[COPYUID\s+\d+\s+[\d:,]+\s+([\d:,]+)\].*/$1/ or next;
+               push @uids, ( $r =~ /(\d+):(\d+)/ ? $1 ... $2 : split(/,/,$r) ) ;
+
+	}
+
+	return scalar(@uids) ? join(",",@uids) : $self;
+}
 
 sub move {
 
@@ -973,9 +1025,13 @@ sub move {
 	$self->create($target) and $self->subscribe($target) 
 		unless $self->exists($target);
 
-	$self->copy(join(',',@msgs),"$target") or return undef;
+	$target = $self->Massage($target);
+
+	my $uids = $self->copy($target, map { ref($_) ? @{$_} : $_ } @msgs) or return undef;
 
 	$self->delete_message(@msgs);
+	
+	return $uids;
 }
 
 
@@ -988,6 +1044,38 @@ sub size {
 	$size =~ /RFC822\.SIZE\s+(\d+)/;
 	
 	return $1;
+}
+
+sub getquotaroot {
+	my $self = shift;
+	my $what = shift;
+	$what = ( $what ? $self->Massage($what) : "INBOX" ) ;
+	$self->_imap_command("getquotaroot $what") or return undef;
+	return $self->Results;
+}
+
+sub getquota {
+	my $self = shift;
+	my $what = shift;
+	$what = ( $what ? $self->Massage($what) : "user/$self->{User}" ) ;
+	$self->_imap_command("getquota $what") or return undef;
+	return $self->Results;
+}
+
+sub quota 	{
+	my $self = shift;
+	my ($what) = shift||"INBOX";
+	$self->_imap_command("getquota $what")||$self->getquotaroot("$what");
+	return (	map { s/.*STORAGE\s+\d+\s+(\d+).*\n$/$1/ ? $_ : () } $self->Results
+	)[0] ;
+}
+
+sub quota_usage 	{
+	my $self = shift;
+	my ($what) = shift||"INBOX";
+	$self->_imap_command("getquota $what")||$self->getquotaroot("$what");
+	return (	map { s/.*STORAGE\s+(\d+)\s+\d+.*\n$/$1/ ? $_ : () } $self->Results
+	)[0] ;
 }
 
 sub Massage {
@@ -1350,7 +1438,7 @@ name of the folder to append the message to, and the text of the message (includ
 Additional arguments are added to the message text, separated with a newline.
 
 The B<append> method returns the UID of the new message (a true value) if successful, 
-or undef if not.
+or undef if not, if the IMAP server has the UIDPLUS capability.
 
 =cut
 
@@ -1398,6 +1486,18 @@ supplied to the B<new> method then B<connect> is implicitly called during object
 The B<connect> method sets the state of the object to I<connected> if it successfully connects 
 to the server.
 
+=item copy
+
+The B<copy> method requires a folder name as the first argument, and a list of one or more messages
+sequence numbers (or messages UID's, if the I<UID> parameter is set to a true value). The message 
+sequence numbers or UID's should refer to messages in the currenly selected folder. Those messages 
+will be copies into the folder named in the first argument to the B<copy> method.
+
+The B<copy> method returns undef on failure and a true value if successful. If the server to which 
+the current Mail::IMAPClient object is connected supports the UIDPLUS capability then the true value
+returned by B<copy> will be a comma separated list of UID's, which are the UID's of the newly copied 
+messages in the target folder. 
+
 =cut
 
 =item delete_message
@@ -1438,9 +1538,13 @@ The B<IMAPClient> object must be in I<Selected> status to use the B<delete_messa
 
 B<NOTE:> All the messages identified in the input argument(s) must be in the currently 
 selected folder. Failure to comply to this requirement will almost certainly result in the
-wrong message(s) being deleted. This would be a crying shame.
+wrong message(s) being deleted. This would be a crying shame. 
 
-B<See also:> The B<delete> method, to delete a folder.
+B<NOTE SOME MORE:> In the grand tradition of the IMAP protocol, deleting a message doesn't actually
+delete the message. Really. If you want to make sure the message has been deleted, you need to expunge
+the folder (via the B<expunge> method, which is implemented via the default method).
+
+B<See also:> The B<delete> method, to delete a folder, and B<expunge> and B<close> in RFC2060.
 
 =cut
 
@@ -1602,6 +1706,14 @@ If the I<Uid> parameter is true, then the arguments should be:
 
 If the target folder does not exist then it will be created.
 
+If move is sucessful, then it returns a true value. Furthermore, if the B<Mail::IMAPClient> 
+object is connected to a server that has the UIDPLUS capability, then the true value will 
+be the list of UID's for the newly copied messages. The list will be in the order in which the
+messages were moved. (Since B<move> uses the copy method, the messages will be moved in numerical
+order.)
+
+If the move is not successful then B<move> returns undef.
+
 =cut
 
 =item parse_headers 
@@ -1748,9 +1860,14 @@ B<Status Methods>, below).
 
 =cut
 
+=item uidnext
+
+The B<uidnext> method accepts one argument, the name of a folder, and returns the numeric string
+that is the next available message UID for that folder.
+
 =item uidvalidity
 
-The B<uidvalidity> method accepts one argument, the name of a folder, and returns the string
+The B<uidvalidity> method accepts one argument, the name of a folder, and returns the numeric string
 that is the unique identifier validity value for the folder.
 
 =item unseen
@@ -1903,8 +2020,8 @@ a) the "Artistic License" which comes with this Kit, or
 
 =item
 
-b) the GNU General Public License as published by the Free Software Foundation; either versio
-n 1, or (at your option) any later version.
+b) the GNU General Public License as published by the Free Software Foundation; either 
+version 1, or (at your option) any later version.
 
 =back
 

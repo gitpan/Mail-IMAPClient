@@ -1,6 +1,8 @@
 Mail::IMAPClient Installation
 
-The Mail::IMAPClient is written entirely in Perl, so it should install on any version of Perl. 
+The Mail::IMAPClient is written entirely in Perl, so it should install on any reasonably 
+recent version of Perl. 
+
 The installation is standard:
 
 	0) cd to installation directory
@@ -9,20 +11,30 @@ The installation is standard:
 	3) make test 				(optional)
 	4) make install 				
 
-The 'make install' will do step 2 ('make') if you haven't done it already. Currently the test script
-is lame (although not as lame as in the last release!) but I hope to incorporate more thorough testing 
-in a future version. You should at least try it and let me know if your tests fail. 
+The 'make install' and 'make test' will both do step 2 ('make') if you haven't done it 
+already. Currently the test script is lame (although not as lame as in the last release!)
+but I hope to incorporate more thorough testing in a future version. You should at least 
+try it and let me know if your tests fail. 
 
-Version 1.0 changed the installation script so that it reuses the parameter file for test.pl if it
-finds one. Installation can be run in the background if the .test file exists. Touching it is good 
-enough to prevent prompts; having a correctly formatted version (as shown in .test_template) 
-is even better, as it will allow you to do a thorough 'make test'. Invalid date in .test (either 
-from precreating it or from responding inaccurately to prompts) will cause 'make test' to report
-'not ok' results but won't break anything important (like the IMAPClient.pm file).
+Version 1.0 changed the installation script so that it reuses the parameter file for 
+test.pl if it finds one. Installation can be run in the background if the .test file 
+exists. Touching it is good enough to prevent prompts; having a correctly formatted 
+version (as shown in .test_template) is even better, as it will allow you to do a 
+thorough 'make test'. Invalid data in .test (either from precreating it or from 
+responding inaccurately to prompts) will cause 'make test' to report 'not ok' results 
+but won't break anything important (like the IMAPClient.pm file, or your car).
 
-If you don't have a .test file in your installation directory then you will have to answer at 
-least one prompt. If you do have a .test file, and you run 'make clean', then you won't have a
-.test file anymore, so take precautions. 
+If you have tests that fail it may be more illuminating to run the tests by hand. IE:
+perl -I./blib/lib t/basic.t from the installation dir will pinpoint the failing test.
+Better yet, update t/basic.t to change Debug => 0 to Debug => 1 and run it again. E-mail
+me the results.
+
+If you don't have a .test file in your installation directory then you will have to 
+answer at least one prompt. If you do have a .test file, and you run 'make clean', then 
+you won't have a .test file anymore, so take precautions. 
+
+For examples, check out the examples subdirectory. If you have better examples then why
+haven't you e-mailed them to me?
 
 Now go and write IMAP clients.
 
