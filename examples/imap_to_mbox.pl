@@ -53,6 +53,7 @@ sub connect_imap {
 		Password	=> "$PASSWORD",
 		Port		=> "$PORT",
 		Debug		=> "$DEBUG",
+		Uid		=>	'0', 
 		Clear		=>	'1', 
 	)
 	|| die ("Could not connect to $SERVER:$PORT with $USER: $! $?\n");

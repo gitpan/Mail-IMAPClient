@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: build_ldif.pl,v 19991216.9 2000/12/11 21:58:51 dkernen Exp $
+#$Id: build_ldif.pl,v 19991216.10 2002/05/24 15:47:18 dkernen Exp $
 use Mail::IMAPClient;
 use MIME::Lite;
 use Data::Dumper;
@@ -157,8 +157,11 @@ $imap->append($opt_f, $msg->as_string) unless $opt_n;
 print Dumper($imap) if $opt_d;
 $imap->logout;
 
-# $Id: build_ldif.pl,v 19991216.9 2000/12/11 21:58:51 dkernen Exp $
+# $Id: build_ldif.pl,v 19991216.10 2002/05/24 15:47:18 dkernen Exp $
 # $Log: build_ldif.pl,v $
+# Revision 19991216.10  2002/05/24 15:47:18  dkernen
+# Misc fixes
+#
 # Revision 19991216.9  2000/12/11 21:58:51  dkernen
 #
 # Modified Files:

@@ -1,4 +1,52 @@
 Revision History for Perl extension Mail::IMAPClient.
+
+Changes in version 2.1.5
+------------------------
+Fixed the migrate method so now it not only works, but also works as originally
+planned (i.e. without requiring source messages to be read entirely into memory).
+If the message is smaller than the value in the Buffer parameter (default is 4096) then
+a normal $imap2->append($folder,$imap1->message_string) is done. However, if the message
+is over the buffer size then it is retrieved and written a bufferful at a time until the
+whole message has been read and sent. (The receiving server still expects the entire message
+at once, but it will have to wait because the message is being read from the source in 
+smaller chunks and then written to the destination a chunk at a time.) This needs extensive 
+testing before I'd be willing to trust it (or at least extensive logging so you know 
+when something has gone terribly wrong) and I consider this method to be in BETA in this release. 
+(Numerous people wrote complaining that migrate didn't work, and some even included patches 
+to make it work, but the real bug in the last release wasn't that migrate was broken but that 
+I had inadvertently included the pod for the method which I knew perfectly well was not ready 
+to be released. My apologies to anyone who was affected by this.) The migrate method does 
+seem to work okay on iPlanet (i.e. Netscape) Messenger Server 4.x. Please let me know if you have 
+any issues on this or any other platform.
+
+Added a new example, migrate_mbox.pl, which will demonstrate the migrate method.
+
+Fixed a bug that will cause Mail::IMAPClient's message reading methods to misbehave if 
+the last line of the email message starts with a number followed by a space and either 
+"OK", "NO", or "BAD".  This bug was originally introduced in 1.04 as a fix for another 
+bug, but since the fix supports noncompliant behavior I'm disabling this behavior by 
+default.  If your IMAP clients start hanging every time you try to read literal text 
+(i.e. a message's test, or a folder name with spaces or funky characters) then you 
+may want to turn this on with the EnableServerResponseInLiteral parameter. Thanks go 
+to Manpreet Singh for reporting this bug.
+
+Fixed a bug in imap_to_mbox.pl that has been there since 2.0.0 (when the Uid 
+parameter started defaulting to "True"). Thanks to Christoph Viethen for reporting 
+the bug and suggesting the fix. BUT NOTE THIS: I often don't test the example programs,
+so you should think of them as examples and not free production programs. Eventually 
+I would like to add tests to my test suite (either the 'make test' test suite that you
+run or my own more extensive test suite) but it's not a super high priority right now.
+
+Significant improvements to the whole Mail::IMAPClient::BodyStructure module 
+were contributed by Pedro Melo Cunha. It's really much better now.
+
+Bullet-proofing added to some private methods. (Private meaning they are undocumented
+and not part of the module's API. This is perl not java.)
+
+Fix applied to unset_flag to support user-defined flags (thanks to E.Priogov 
+for submitting the bug report and patch).
+
+
 Changes in version 2.1.4
 ------------------------
 Added Paul Warren's bugfix to the sort method.
@@ -75,7 +123,7 @@ likely).
 Enhanced support for DOS systems (and DOS's offspring, such as windows) by removing the "\c\n"s 
 and replacing them with "\x0d\x0a". Thanks go to Marcio Marchini for his help with this effort.
 
-Fixed the listed of symbols imported along with Fcntl.pm. (Paul Linder asked me to put this in 
+Fixed the list of symbols imported along with Fcntl.pm. (Paul Linder asked me to put this in 
 the last release but I forgot.)
 
 
@@ -136,9 +184,9 @@ Fixed a serious bug introduced in 2.0.9 when appending large messages.
 
 Made minor changes to improve the cyrus_expunge.pl example script.
 
-Made the set_flags routine RFC2060-compliant. Previously it prepended flag names with backslashes, even
-if the flags were not reserved flags. This broke support for user-defined flags, which I didn't realize 
-was supposed to even be there until Scott Renner clued me in. (Thanks, Scott.)
+Made the set_flags routine RFC2060-compliant. Previously it prepended flag names with backslashes, 
+even if the flags were not reserved flags. This broke support for user-defined flags, which I didn't 
+realize was supposed to even be there until Scott Renner clued me in. (Thanks, Scott.)
 
 Promoted the release level to "1". 
 
@@ -761,7 +809,7 @@ Changes in version 1.04
 Fixed situation in which servers that include the "<tag> <COMMAND> OK\r\n" line
 as part of a literal (i.e. text delivered via {<length>}\r\n<length> bytes\r\n)
 caused the module to hang. This situation is pretty rare; I've only run across
-one server that does it (UW-IMAP). I'm sure it's a bug; I'm not sure whose. ;-}
+one server that does it. I'm sure it's a bug; I'm not sure whose. ;-}
 Many thanks to Thomas Stromberg for 1) pointing out this bug and 2) providing 
 me with facilities to find and fix it!
 
@@ -880,4 +928,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.8 2001/02/07 20:19:49 dkernen Exp $
+# $Id: Changes,v 20001010.9 2002/05/24 15:34:21 dkernen Exp $

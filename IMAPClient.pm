@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.9 2001/02/07 20:19:50 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.10 2002/05/24 15:34:22 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.1.4';
-$Mail::IMAPClient::VERSION = '2.1.4';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.1.5';
+$Mail::IMAPClient::VERSION = '2.1.5';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -11,7 +11,7 @@ use IO::Socket();
 use IO::Select();
 use IO::File();
 use Carp qw(carp);
-use Data::Dumper;
+#use Data::Dumper;
 use Errno qw/EAGAIN/;
 
 
@@ -95,6 +95,7 @@ BEGIN {
 		qw( 	State Port Server Folder Fast_io Peek
 			User Password Socket Timeout Buffer
 			Debug LastError Count Uid Debug_fh Maxtemperrors
+			EnableServerResponseInLiteral
 		)
  ) {
         no strict 'refs';
@@ -198,6 +199,7 @@ sub new {
 		"and perl version " . ( defined $^V ? join(".",unpack("CCC",$^V)) : "") . 
 		" ($])\n") if $self->Debug;
 	$self->LastError(0);
+	$self->Maxtemperrors or $self->Maxtemperrors("unlimited") ;
 	return $self->connect if $self->Server and !$self->Socket;
 	return $self;
 }
@@ -557,8 +559,7 @@ sub message_to_file {
 		binmode $handle;	# For those of you who need something like this...
 	} 
 
-        my $clear = "";
-        $clear = $self->Clear;
+        my $clear = $self->Clear;
 	my $cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
 	$cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822' unless $self->imap4rev1;
 	
@@ -615,9 +616,9 @@ sub message_uid {
 	return $uid;
 }
 
-sub migrate {
+sub original_migrate {
 	my($self,$peer,$msgs,$folder) = @_;
-	unless ( eval { $peer->isConnected } ) {
+	unless ( eval { $peer->IsConnected } ) {
 		$self->LastError("Invalid or unconnected " . ref($self) . " object used as target for migrate.");
 		return undef;
 	}
@@ -631,10 +632,340 @@ sub migrate {
 				return undef 
 			) ;
 	}			
-	if ( $msgs =~ /^all$/ ) { $msgs = $self->search("ALL") }
+	if ( $msgs =~ /^all$/i ) { $msgs = $self->search("ALL") }
 	foreach my $mid ( ref($msgs) ? @$msgs : $msgs ) {
+		my $uid = $peer->append($folder,$self->message_string($mid));
+		$self->LastError("Trouble appending to peer: " . $peer->LastError . "\n");
 	}
 }
+
+
+sub migrate {
+
+	my($self,$peer,$msgs,$folder) 	= @_;
+	my($toSock,$fromSock) 		= ( $peer->Socket, $self->Socket);
+	my $bufferSize 			= $self->Buffer || 4096;
+	my $fromBuffer 			= "";
+	my $clear 			= $self->Clear;
+
+	unless ( eval { $peer->IsConnected } ) {
+		$self->LastError("Invalid or unconnected " . 
+			ref($self) . " object used as target for migrate. $@");
+		return undef;
+	}
+
+	unless ($folder) {
+		$folder = $self->Folder 	or
+			$self->LastError( "No folder selected on source mailbox.") 
+			and return undef;
+
+		$peer->exists($folder) 		or 
+			$peer->create($folder) 	or 
+			(
+				$self->LastError(
+				  "Unable to created folder $folder on target mailbox: ".
+				  $peer->LastError . "\n"
+				) and return undef 
+			) ;
+	}
+	$msgs or $msgs eq "0" or $msgs = "all";	
+	if ( $msgs =~ /^all$/i ) { $msgs = $self->search("ALL") }
+	$self->_debug("Migrating the following msgs from $folder: " . 
+		( ref($msgs) ? join(", ",@$msgs) : $msgs) );
+
+	MIGMSG:	foreach my $mid ( ref($msgs) ? @$msgs : (split(/,\s*/,$msgs)) ) {
+		# Set up counters for size of msg and portion of msg remaining to
+		# process:
+		$self->_debug("Migrating message $mid in folder $folder\n") 
+			if $self->Debug;
+		my $leftSoFar = my $size = $self->size($mid);
+
+		# fetch internaldate and flags of original message:
+		my $intDate = '"' . $self->internaldate($mid) . '"' ;
+		my $flags   = "(" . join(" ",$self->flags($mid) ) . ")" ;
+
+		# set up transaction numbers for from and to connections:
+		my $trans       = $self->Count($self->Count+1);
+		my $ptrans      = $peer->Count($peer->Count+1);
+
+		# If msg size is less than buffersize then do whole msg in one 
+		# transaction:
+		if ( $size <= $bufferSize ) {
+			my $new_mid = $peer->append($folder,$self->message_string($mid) ) ;
+		        $self->_debug("Copied message $mid in folder $folder to " . $peer->User .
+				    '@' . $peer->Server . ". New Message UID is $new_mid.\n" 
+		        ) if $self->Debug;
+
+		        $peer->_debug("Copied message $mid in folder $folder from " . $self->User .
+				    '@' . $self->Server . ". New Message UID is $new_mid.\n" 
+		        ) if $peer->Debug;
+
+
+			next MIGMSG;
+		}
+
+		# otherwise break it up into digestible pieces:
+		my ($cmd, $pattern);
+		if ( $self->imap4rev1 ) {
+			# imap4rev1 supports FETCH BODY 
+			$cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
+			$pattern = sub {
+                                #$self->_debug("Data fed to pattern: $_[0]<END>\n");
+                                $_[0] =~ /\(.*BODY\[\]<\d+> \{(\d+)\}/i 	; # ;-)
+					# or $self->_debug("Didn't match pattern\n") ; 
+                                #$self->_debug("Returning from pattern: $1\n") if defined($1);
+				return $1 ;
+                        } ;
+		} else {
+			# older imaps use (deprecated) FETCH RFC822:
+			$cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822' ;
+			$pattern = sub {
+				shift =~ /\(RFC822\[\]<\d+> \{(\d+)\}/i; 
+				return $1 ;
+			};
+		}
+
+
+		# Now let's warn the peer that there's a message coming:
+
+		my $pstring = 	"$ptrans APPEND $folder " .  
+				"$flags $intDate {" . $size . "}"  ;
+
+		$peer->_debug("About to issue APPEND command to peer for msg $mid\n")
+			if $peer->Debug;
+
+		my $feedback2 = $peer->_send_line( $pstring ) ;
+
+		$peer->_record($ptrans,[ 
+			0, 
+			"INPUT", 
+			"$pstring" ,
+		] ) ;
+		unless ($feedback2) {
+		   $self->LastError("Error sending '$pstring' to target IMAP: $!\n");
+		   return undef;
+		}
+		# Get the "+ Go ahead" response:
+		my $code = 0;
+		until ($code eq '+'){
+	  	  my $readSoFar = 0 ;
+		  $readSoFar += sysread($toSock,$fromBuffer,1,$readSoFar)||0
+			until $fromBuffer =~ /\x0d\x0a/;
+
+		  $peer->_debug("migrate: response from target server: $fromBuffer<END>\n")
+			if $peer->Debug;
+
+		  ($code)= $fromBuffer =~ /^(\+)/ ;
+		  $code ||=0;
+
+		  #$peer->_debug( "$folder: received $fromBuffer from server\n") 
+		  #if $self->Debug;
+
+	  	  # ... and log it in the history buffers
+		  $self->_record($trans,[ 
+			0, 
+			"OUTPUT", 
+			"Mail::IMAPClient migrating message $mid to $peer->User\@$peer->Server"
+		  ] ) ;
+		  $peer->_record($ptrans,[ 
+			0, 
+			"OUTPUT", 
+			$fromBuffer
+		  ] ) ;
+
+
+		}
+		# Here is where we start sticking in UID if that parameter
+		# is turned on:	
+		my $string = ( $self->Uid ? "UID " : "" ) . "FETCH $mid $cmd";
+
+		# Clean up history buffer if necessary:
+		$self->Clear($clear)
+			if $self->Count >= $clear and $clear > 0;
+
+
+	   # position will tell us how far from beginning of msg the
+	   # next IMAP FETCH should start (1st time start at offet zero):
+	   my $position = 0;
+	   #$self->_debug("There are $leftSoFar bytes left versus a buffer of $bufferSize bytes.\n");
+	   my $chunkCount = 0;
+	   while ( $leftSoFar > 0 ) {
+		$self->_debug("Starting chunk " . ++$chunkCount . "\n");
+
+		my $newstring         ="$trans $string<$position."  .
+					( $leftSoFar > $bufferSize ? $bufferSize : $leftSoFar ) . 
+					">" ;
+
+		$self->_record($trans,[ 0, "INPUT", "$newstring\x0d\x0a"] );
+		$self->_debug("Issuing migration command: $newstring\n" )
+			if $self->Debug;;
+
+		my $feedback = $self->_send_line("$newstring");
+
+		unless ($feedback) {
+		   $self->LastError("Error sending '$newstring' to source IMAP: $!\n");
+		   return undef;
+		}
+		my $chunk = "";
+		until ($chunk = $pattern->($fromBuffer) ) {
+		   $fromBuffer = "" ;
+	    	   until ( $fromBuffer=~/\x0d\x0a$/ ) {
+	    	   	sysread($fromSock,$fromBuffer,1,length($fromBuffer)) ; 
+			#$self->_debug("migrate chunk $chunkCount:" . 
+			#	"Read from source: $fromBuffer<END>\n");
+		   }
+		   
+		   $self->_record($trans,[ 0, "OUTPUT", "$fromBuffer"] ) ;
+
+		   if ( $fromBuffer =~ /^$trans (?:NO|BAD)/ ) {
+			$self->LastError($fromBuffer) ;
+			next MIGMSG;
+		   }
+
+		   if ( $fromBuffer =~ /^$trans (?:OK)/ ) {
+			$self->LastError("Unexpected good return code " .
+				"from source host: " . $fromBuffer) ;
+			next MIGMSG;
+		   }
+
+		}
+		$fromBuffer = "";
+		my $readSoFar = 0 ;
+		$readSoFar += sysread($fromSock,$fromBuffer,$chunk-$readSoFar,$readSoFar)||0
+			until $readSoFar >= $chunk;
+		#$self->_debug("migrateRead: chunk=$chunk readSoFar=$readSoFar " .
+		#	"Buffer=$fromBuffer<END_OF_BUFFER\n") if $self->Debug;
+
+		my $wroteSoFar = 0;
+		until ( $wroteSoFar >= $chunk ) {
+			#$peer->_debug("Chunk $chunkCount: Next write will attempt to write " .
+			#	"this substring:\n" .
+			#	substr($fromBuffer,$wroteSoFar,$chunk-$wroteSoFar) .
+			#	"<END_OF_SUBSTRING>\n"
+			#);
+			$wroteSoFar += syswrite(
+					$toSock,
+					$fromBuffer,
+					$chunk - $wroteSoFar, 
+					$wroteSoFar )||0
+			until $wroteSoFar >= $readSoFar;
+			$peer->_debug("Chunk $chunkCount: Wrote $wroteSoFar bytes (out of $chunk)\n");
+		}
+		$position += $readSoFar ;
+		$leftSoFar -= $readSoFar;
+		$fromBuffer = "";
+		# Finish up reading the server response from the fetch cmd
+		# 	on the source system:
+		{
+		my $code = 0;
+		until ( $code)  {
+			# escape infinite loop if read_line never returns any data:
+			$self->_debug("Reading from source server; expecting ') OK' type response\n")
+				if $self->Debug;
+			$output = $self->_read_line or return undef; 
+			for my $o (@$output) {
+
+				$self->_record($trans,$o);      # $o is a ref
+
+				# $self->_debug("Received from readline: " .
+				# "${\($o->[DATA])}<<END OF RESULT>>\n");
+
+				next unless $self->_is_output($o);
+
+				($code) = $o->[DATA] =~ /^$trans (OK|BAD|NO)/mi ;
+
+				if ($o->[DATA] =~ /^\*\s+BYE/im) {
+					$self->State(Unconnected);
+					return undef ;
+				}
+	   		}
+	   	}
+	   	} # end scope for my $code
+	   }
+	   # Now let's send a <CR><LF> to the peer to signal end of APPEND cmd:
+	   {
+	    my $wroteSoFar = 0;
+	    $fromBuffer = "\x0d\x0a";
+	    $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar)||0 
+	    		until $wroteSoFar >= 2;
+
+	   }
+	   # Finally, let's get the new message's UID from the peer:
+	   my $new_mid = "";
+           {
+                my $code = 0;
+                until ( $code)  {
+                        # escape infinite loop if read_line never returns any data:
+			$peer->_debug("Reading from target: expecting new uid in response\n")
+				if $peer->Debug;
+                        $output = $peer->_read_line or next MIGMSG;
+                        for my $o (@$output) {
+
+                                $peer->_record($ptrans,$o);      # $o is a ref
+
+                                # $peer->_debug("Received from readline: " .
+                                # "${\($o->[DATA])}<<END OF RESULT>>\n");
+
+                                next unless $peer->_is_output($o);
+
+                                ($code) = $o->[DATA] =~ /^$ptrans (OK|BAD|NO)/mi ;
+				($new_mid)= $o->[DATA] =~ /APPENDUID \d+ (\d+)/ if $code;
+				#$peer->_debug("Code line: " . $o->[DATA] . 
+				#	"\nCode=$code mid=$new_mid\n" ) if $code;
+
+                                if ($o->[DATA] =~ /^\*\s+BYE/im) {
+                                        $peer->State(Unconnected);
+                                        return undef ;
+                                }
+                        }
+			$new_mid||="unknown" ;
+                }
+             } # end scope for my $code
+
+	     $self->_debug("Copied message $mid in folder $folder to " . $peer->User .
+			    '@' . $peer->Server . ". New Message UID is $new_mid.\n" 
+	     ) if $self->Debug;
+
+	     $peer->_debug("Copied message $mid in folder $folder from " . $self->User .
+			    '@' . $self->Server . ". New Message UID is $new_mid.\n" 
+	     ) if $peer->Debug;
+
+
+	  # ... and finish up reading the server response from the fetch cmd
+	  # 	on the source system:
+	      # {
+	#	my $code = 0;
+	#	until ( $code)  {
+	#		# escape infinite loop if read_line never returns any data:
+        #      		unless ($output = $self->_read_line ) {
+	#			$self->_debug($self->LastError) ;
+	#			next MIGMSG;
+	#		}
+	#		for my $o (@$output) {
+#
+#				$self->_record($trans,$o);      # $o is a ref
+#
+#				# $self->_debug("Received from readline: " .
+#				# "${\($o->[DATA])}<<END OF RESULT>>\n");
+#
+#				next unless $self->_is_output($o);
+#
+#			 	($code) = $o->[DATA] =~ /^$trans (OK|BAD|NO)/mi ;
+#
+#			      	if ($o->[DATA] =~ /^\*\s+BYE/im) {
+#					$self->State(Unconnected);
+#					return undef ;
+#				}
+#			}
+#		}
+#		}
+		
+	     	# and clean up the I/O buffer:
+	     	$fromBuffer = "";
+	     }
+	return $self;	
+}
+
 #sub old_body_string {
 #     my $self = shift;
 #     my $msg  = shift;
@@ -862,7 +1193,9 @@ sub _send_line {
 		$string .= "\x0d" unless $string =~ /\x0d$/;	
 		$string .= "\x0a" ;
 	}
-	if ( $string =~ /^[^\x0a{]*\{(\d+)\}\x0d\x0a/ ) {
+	if ( 
+		$string =~ /^[^\x0a{]*\{(\d+)\}\x0d\x0a/ 	# ;-}
+	) 	{
 		my($p1,$p2,$len) ;
 		if ( ($p1,$len)   = $string =~ /^([^\x0a{]*\{(\d+)\}\x0d\x0a)/ 		# } for vi
 			and  (
@@ -1084,28 +1417,41 @@ sub _read_line {
 		exists $self->{_fcntl} or $self->Fast_io($fast_io);
 		$readlen = $self->{Buffer}||4096;
 	}
-	until (		scalar(@$oBuffer) 			and 	# stuff in output buffer
-                      $oBuffer->[-1][DATA]    =~ /\x0d\x0a$/      and     # the last thing there has cr-lf
-                      $oBuffer->[-1][TYPE]    eq "OUTPUT"     and     # that thing is an output line
-			$iBuffer		eq "" 		# and	# and the input buffer has been MT'ed
+	until (	
+		# there's stuff in output buffer:
+		scalar(@$oBuffer)	and 			
+
+		# the last thing there has cr-lf:
+                $oBuffer->[-1][DATA] =~ /\x0d\x0a$/  and     
+
+		# that thing is an output line:
+                $oBuffer->[-1][TYPE]    eq "OUTPUT"  and     
+
+		# and the input buffer has been MT'ed:
+		$iBuffer		eq "" 		
+
 	) {
-              my $transno = $self->Transaction;                       # used below in several places
+              my $transno = $self->Transaction;  # used below in several places
 		if ($timeout) {
 			vec($rvec, fileno($self->Socket), 1) = 1;
 			my @ready = $self->{_select}->can_read($timeout) ;
 			unless ( @ready ) {
 				$self->LastError("Tag $transno: " .
-					"Timeout after $timeout seconds waiting for data from server\n");	
+					"Timeout after $timeout seconds " .
+					"waiting for data from server\n");	
 				$self->_record($transno,
 					[	$self->_next_index($transno),
 						"ERROR",
-						"$transno * NO Timeout after $timeout seconds " .
-						"during read from server\x0d\x0a"
+						"$transno * NO Timeout after ".
+						"$timeout seconds " .
+						"during read from " .
+						"server\x0d\x0a"
 					]
 				);
-				$@ = "Timeout after $timeout seconds during read from server\x0d\x0a";
-				carp "Timeout after $timeout seconds during read from server: $!" 
-					if $self->Debug or $^W;
+				$self->LastError(
+					"Timeout after $timeout seconds " .
+					"during read from server\x0d\x0a"
+				);
 				return undef;
 			}
 		}
@@ -1233,30 +1579,38 @@ sub _read_line {
 
 			}
 			$literal_callback->($litstring) 
-				if defined($litstring) and $literal_callback =~ /CODE/;
+				if defined($litstring) and 
+				$literal_callback =~ /CODE/;
 
 			$self->Fast_io($fast_io) if $fast_io;
-			# Now let's make sure there are no IMAP server output lines 
-			# (i.e. [tag|*] BAD|NO|OK Text) embedded in the literal string
-			# (There shouldn't be but I've seen it done!)
+
+		# Now let's make sure there are no IMAP server output lines 
+		# (i.e. [tag|*] BAD|NO|OK Text) embedded in the literal string
+		# (There shouldn't be but I've seen it done!), but only if
+		# EnableServerResponseInLiteral is set to true
 
 			my $embedded_output = 0;
-			my $lastline = ( split(/\x0d?\x0a/,$litstring))[-1] if $litstring;
-			if ( $lastline and $lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i ) {
-				$litstring =~ s/\Q$lastline\E\x0d?\x0a//;
-				$embedded_output++;
-				$self->_debug("Got server output mixed in with literal: ",
-						"$lastline\n") 
-					if $self->Debug;
+			my $lastline = ( split(/\x0d?\x0a/,$litstring))[-1] 
+				if $litstring;
+
+			if ( 	$self->EnableServerResponseInLiteral and
+				$lastline and 
+				$lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i 
+			) {
+			  $litstring =~ s/\Q$lastline\E\x0d?\x0a//;
+			  $embedded_output++;
+
+			  $self->_debug("Got server output mixed in " .
+					"with literal: $lastline\n"
+			  ) 	if $self->Debug;
+
 			}
-
-		  	# Finally, we need to stuff the literal onto the end of the oBuffer:
-			push 	@$oBuffer , 	[ $index++, "OUTPUT",  $current_line 	] , 
-						[ $index++, "LITERAL", $litstring 	];
-
-			push @$oBuffer,		[ $index++, "OUTPUT",  $lastline 	] 
-				if $embedded_output;
-
+		  	# Finally, we need to stuff the literal onto the 
+			# end of the oBuffer:
+			push @$oBuffer, [ $index++, "OUTPUT" , $current_line],
+					[ $index++, "LITERAL", $litstring   ];
+			push @$oBuffer,	[ $index++, "OUTPUT",  $lastline    ] 
+					if $embedded_output;
 
 		  } else { 
 			push @$oBuffer, [ $index++, "OUTPUT" , $current_line ]; 
@@ -1266,7 +1620,8 @@ sub _read_line {
 		#$self->_debug("iBuffer is now: $iBuffer<<END OF BUFFER>>\n");
 	}
 	#	_debug $self, "Buffer is now $buffer\n";
-      _debug $self, "Read: " . join("",map {$_->[DATA]} @$oBuffer) ."\n" if $self->Debug;
+      _debug $self, "Read: " . join("",map {$_->[DATA]} @$oBuffer) ."\n" 
+		if $self->Debug;
 	return scalar(@$oBuffer) ? $oBuffer : undef ;
 }
 
@@ -1370,6 +1725,8 @@ sub folders {
                                 (?:"[^"]*"|NIL)\s+	 # "delimiter" or NIL
                                 (?:"([^"]*)"|(.*))\x0d\x0a$  # Name or "Folder name"
                         /ix;
+		$folders[-1] = '"' . $folders[-1] . '"' 
+			if $self->exists('"' . $folders[-1] . '"') and $1;
 		# $self->_debug("folders: line $list[$m]: 1=$1 and 2=$2\n");
         } 
 
@@ -1394,7 +1751,11 @@ sub get_bodystructure {
 		$self->LastError("Unable to use get_bodystructure: $@\n");
 		return undef;
 	}
-	return Mail::IMAPClient::BodyStructure->new(grep(/bodystructure \(/i,$self->fetch($msg,"BODYSTRUCTURE")));
+	return Mail::IMAPClient::BodyStructure->new(
+		grep(	/bodystructure \(/i, 	# Wee! ;-)
+			$self->fetch($msg,"BODYSTRUCTURE")
+		)
+	);  
 }
 	
 sub fetch {
@@ -1548,8 +1909,8 @@ sub flags {
 				\) 			# )
 			/x
 		) {
-			$self->_debug("flags: line = '$resultline' and 1,2,3,4 = $1,$2,$3,$4\n") 
-					if $self->Debug;
+			#$self->_debug("flags: line = '$resultline' and 1,2,3,4 = $1,$2,$3,$4\n") 
+			#		if $self->Debug;
 			my $mailid = $u_f ? ( $2||$4) : $1;
 			my $flagsString = $3 ;
 			my @flags = map { s/\s+$//; $_ } split(/\s+/, $flagsString);
@@ -1634,15 +1995,6 @@ sub parse_headers {
                                 }
                         }
                 }
-#               my $pattern = $self->Uid ?      'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
-#                       if (    my($msgid) = $header =~ /$pattern/
-#                       and $header =~ /BODY\[HEADER(?:\]|\.FIELDS)/i
-#               ) {
-#                       # start of new message header:
-#                       $h = {};                  # new hash for headers for this mail
-#                       $headers->{$msgid} = $h;  # store in results, against this message
-#               }
-
                 next if $header =~ /^\s+$/;
 
                 # ( for vi
@@ -2082,7 +2434,7 @@ sub internaldate {
         $self->_imap_command( ( $self->Uid ? "UID " : "" ) . "FETCH $msg INTERNALDATE") or return undef;
         my $internalDate = join("", $self->History($self->Count));
         $internalDate =~ s/^.*INTERNALDATE "//si;
-        $internalDate =~ s/\"\).*$//s;
+        $internalDate =~ s/\".*$//s;
         return $internalDate;
 }
 
@@ -2625,7 +2977,8 @@ sub unmark {
 sub unset_flag {
 	my($self, $flag, @msgs) = @_;
 	if ( ref($msgs[0]) ) { @msgs = @{$msgs[0]} };
-	$flag =~ /^\\/ or $flag = "\\" . $flag ;
+	$flag =~ /^\\/ or $flag = "\\" . $flag 
+		if $flag =~ /^(Answered|Flagged|Deleted|Seen|Draft)$/i;
 	$self->store( join(",",@msgs), "-FLAGS.SILENT (" . $flag . ")" );
 }
 
@@ -2718,37 +3071,39 @@ sub unseen_count {
 
 # Status Routines:
 
-sub Status            { $_[0]->State                          ;       }
-sub IsUnconnected     { ($_[0]->State == Unconnected) ? 1 : 0 ;       }
-sub IsConnected       { ($_[0]->State >= Connected)   ? 1 : 0 ;       }
-sub IsAuthenticated   { ($_[0]->State >= Authenticated)? 1 : 0 ;      }
-sub IsSelected                { ($_[0]->State == Selected)    ? 1 : 0 ;       }               
+
+sub Status            { $_[0]->State                           ;       }
+sub IsUnconnected     { ($_[0]->State == Unconnected)  ? 1 : 0 ;       }
+sub IsConnected       { ($_[0]->State >= Connected)    ? 1 : 0 ;       }
+sub IsAuthenticated   { ($_[0]->State >= Authenticated)? 1 : 0 ;       }
+sub IsSelected        { ($_[0]->State == Selected)     ? 1 : 0 ;       }               
+
 
 # The following private methods all work on an output line array.
 # _data returns the data portion of an output array:
-sub _data {  $_[1]->[DATA]; }
+sub _data {   defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] or return undef; $_[1]->[DATA]; }
 
 # _index returns the index portion of an output array:
-sub _index { $_[1]->[INDEX]; }
+sub _index {  defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] or return undef; $_[1]->[INDEX]; }
 
 # _type returns the type portion of an output array:
-sub _type {  $_[1]->[TYPE]; }
+sub _type {  defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] or return undef; $_[1]->[TYPE]; }
 
 # _is_literal returns true if this is a literal:
-sub _is_literal { defined $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "LITERAL" };
+sub _is_literal { defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "LITERAL" };
 
 # _is_output_or_literal returns true if this is an 
 #  	output line (or the literal part of one):
 sub _is_output_or_literal { 
-              defined $_[1] and defined $_[1]->[TYPE] and 
+              defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] and 
 			($_[1]->[TYPE] eq "OUTPUT" || $_[1]->[TYPE] eq "LITERAL") 
 };
 
 # _is_output returns true if this is an output line:
-sub _is_output { defined $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "OUTPUT" };
+sub _is_output { defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "OUTPUT" };
 
 # _is_input returns true if this is an input line:
-sub _is_input { defined $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "INPUT" };
+sub _is_input { defined $_[1] and ref $_[1] and defined $_[1]->[TYPE] and $_[1]->[TYPE] eq "INPUT" };
 
 # _next_index returns next_index for a transaction; may legitimately return 0 when successful.
 sub _next_index { 
@@ -3054,6 +3409,19 @@ Or you can:
 						Debug_fh => *DBG
 	);
 
+=item EnableServerResponseInLiteral()
+
+The I<EnableServerResponseInLiteral> parameter tells B<Mail::IMAPClient> to expect server responses to
+be embedded in literal strings. Usually literal strings contain only message data, not server responses.
+I have seen at least one IMAP server implementation though that includes the final <tag> OK response
+in the literal data. If your server does this then your script will hang whenever you try to read literal
+data, such as message text, or even output from the B<folders> method if some of your folders have special
+characters such as double quotes or sometimes spaces in the name.
+
+I am pretty sure this behavior is not RFC2060 compliant so I am dropping it by default. In fact, I encountered 
+the problem a long time ago when still new to IMAP and may have imagined the whole thing. However, if your 
+scripts hang running certain methods you may want to at least try enabling this parameter by passing the
+eponymous method a true value. 
 
 =item Folder()
 
@@ -3602,39 +3970,44 @@ successful if the object is in the B<Authenticated> or B<Selected> states.
 
 =item has_capability()
 
-Returns true if the IMAP server to which the B<IMAPClient> object is connected has the capability
-specified as an argument to B<has_capability>.
+Returns true if the IMAP server to which the B<IMAPClient> object is connected 
+has the capability specified as an argument to B<has_capability>.
 
 =item imap4rev1()
 
-Returns true if the IMAP server to which the B<IMAPClient> object is connected has the IMAP4REV1 capability.
+Returns true if the IMAP server to which the B<IMAPClient> object is connected 
+has the IMAP4REV1 capability.
 
 =item internaldate()
 
-B<internaldate> accepts one argument, a message id (or UID if the Uid parameter is true), and returns 
-that message's internal date.
+B<internaldate> accepts one argument, a message id (or UID if the Uid 
+parameter is true), and returns that message's internal date.
 
 =item get_bodystructure
 
-The B<get_bodystructure> method accepts one argument, a message sequence number or, if I<Uid> is true, 
-a message UID. It obtains the message's body structure and returns a B<Mail::IMAPClient::BodyStructure> 
-object for the message.
+The B<get_bodystructure> method accepts one argument, a message sequence 
+number or, if I<Uid> is true, a message UID. It obtains the message's body 
+structure and returns a B<Mail::IMAPClient::BodyStructure> object for the 
+message.
 
 =item getacl()
 
-B<getacl> accepts one argument, the name of a folder. If no argument is provided then the currently selected folder
-is used as the default. It returns a reference to a hash. The keys of the hash are userids that have access to the
-folder, and the value of each element are the permissions for that user. The permissions are listed in a string in 
-the order returned from the server with no whitespace or punctuation between them.
+B<getacl> accepts one argument, the name of a folder. If no argument is 
+provided then the currently selected folder is used as the default. 
+It returns a reference to a hash. The keys of the hash are userids that 
+have access to the folder, and the value of each element are the permissions 
+for that user. The permissions are listed in a string in the order returned 
+from the server with no whitespace or punctuation between them.
 
 =cut
 
 =item is_parent()
 
-The B<is_parent> method accepts one argument, the name of a folder. It returns a value
-that indicates whether or not the folder has children. The value it returns is either
-1) a true value (indicating that the folder has children), 2) 0 if the folder has no
-children at this time, or 3) undef if the folder is not permitted to have children.
+The B<is_parent> method accepts one argument, the name of a folder. It 
+returns a value that indicates whether or not the folder has children. 
+The value it returns is either 1) a true value (indicating that the folder 
+has children), 2) 0 if the folder has no children at this time, or 3) undef 
+if the folder is not permitted to have children.
 
 Eg:
 
@@ -3654,48 +4027,54 @@ Eg:
 
 =item list()
 
-The B<list> method implements the IMAP LIST client command. Arguments are passed to the 
-IMAP server as received, separated from each other by spaces. If no arguments are supplied
-then the default list command C<tag LIST "" '*'> is issued.
+The B<list> method implements the IMAP LIST client command. Arguments are 
+passed to the IMAP server as received, separated from each other by spaces. 
+If no arguments are supplied then the default list command C<tag LIST "" '*'> 
+is issued.
 
-The B<list> method returns an array (or an array reference, if called in a scalar context).
-The array is the unaltered output of the LIST command. (If you want your output altered then
-see the B<folders> method, above.)
+The B<list> method returns an array (or an array reference, if called in a 
+scalar context). The array is the unaltered output of the LIST command. 
+(If you want your output altered then see the B<folders> method, above.)
 
 =cut
 
 =item listrights
 
-The B<listrights> method implements the IMAP LISTRIGHTS client command (L<RFC2086>). 
+The B<listrights> method implements the IMAP LISTRIGHTS client command 
+(L<RFC2086>). 
 
 =item login()
 
-The B<login> method uses the IMAP LOGIN client command (as defined in RFC2060) to log into
-the server.  The I<User> and I<Password> parameters must be set before the B<login> method
-can be invoked. If successful, the B<login> method returns a pointer to the B<IMAPClient> object 
-and sets the object status to I<Authenticated>. If unsuccessful, it returns undef.
+The B<login> method uses the IMAP LOGIN client command (as defined in RFC2060) 
+to log into the server.  The I<User> and I<Password> parameters must be set 
+before the B<login> method can be invoked. If successful, the B<login> method 
+returns a pointer to the B<IMAPClient> object and sets the object status to 
+I<Authenticated>. If unsuccessful, it returns undef.
 
 =cut
 
 =item logout()
 
-The B<logout> method issues the LOGOUT IMAP client commmand. Since the LOGOUT IMAP client 
-command causes the server to end the connection, this also results in the B<IMAPClient> client 
-entering the B<Unconnected> state. This method does not, however, destroy the B<IMAPClient> object,
-so a program can re-invoke the B<connect> and B<login> methods if it wishes to reestablish
-a session later in the program.
+The B<logout> method issues the LOGOUT IMAP client commmand. Since the LOGOUT 
+IMAP client command causes the server to end the connection, this also results 
+in the B<IMAPClient> client entering the B<Unconnected> state. This method does
+not, however, destroy the B<IMAPClient> object, so a program can re-invoke the 
+B<connect> and B<login> methods if it wishes to reestablish a session later in 
+the program.
 
 =cut
 
 =item lsub()
 
-The B<lsub> method implements the IMAP LSUB client command. Arguments are passed to the 
-IMAP server as received, separated from each other by spaces. If no arguments are supplied
-then the default lsub command C<tag LSUB "" '*'> is issued.
+The B<lsub> method implements the IMAP LSUB client command. Arguments are '
+passed to the IMAP server as received, separated from each other by spaces. 
+If no arguments are supplied then the default lsub command C<tag LSUB "" '*'> 
+is issued.
 
-The B<lsub> method returns an array (or an array reference, if called in a scalar context).
-The array is the unaltered output of the LSUB command. If you want an array of subscribed folders
-then see the B<subscribed> method, below.
+The B<lsub> method returns an array (or an array reference, if called in a 
+scalar context).  The array is the unaltered output of the LSUB command. If 
+you want an array of subscribed folders then see the B<subscribed> method, 
+below.
 
 =cut
 
@@ -3763,30 +4142,46 @@ IMAP feature so don't complain to me about it.
 
 =item migrate()
 
-The B<migrate> method copies the indicated messages from the currently selected folder to another 
-B<Mail::IMAPClient> object's session. It requires n arguments:
+The B<migrate> method copies the indicated messages B<from> the currently selected folder B<to> 
+another B<Mail::IMAPClient> object's session. It requires n arguments:
 
-	1. a reference to the target object;
-	2. the message(s) to be copied, specified as either a) the message sequence number (or message
-	   UID if the UID parameter is true) of a single message, b) a reference to an array of message
-	   sequence numbers (or message UID's if the UID parameter is true) or c) the special string "ALL",
-	   which is a shortcut for the results of B<search("ALL")>.
-	3. the folder name of a folder on the target mailbox to receive the message(s). If this argument is
-	   not supplied or if I<undef> is supplied then a folder with the same name as the currently selected
-	   folder on the calling object will be created if necessary and used. If you specify something other
-	   then I<undef> for this argument, even if it's '$imap1->Folder' or the name of the currently selected 
-	   folder then that folder will only be used if it exists on the target object's mailbox; otherwise 
-	   B<migrate> will fail.
+=over 8
 
-The B<migrate> method uses Black Magic to hardwire the I/O between the two B<Mail::IMAPClient> objects  in order
-to minimize resource consumption. If you have older scripts that used B<message_to_file> and B<append_file> to 
-move large messages between IMAP mailboxes then you may want to try this method as a possible replacement.
+=item 1. 
+
+a reference to the target object;
+
+=item 2.
+
+the message(s) to be copied, specified as either 
+a) the message sequence number (or message UID if the UID parameter is true) of a single message, 
+b) a reference to an array of message sequence numbers (or message UID's if the UID parameter is 
+true) or 
+c) the special string "ALL", which is a shortcut for the results of B<search("ALL")>.
+
+=item 3.
+
+the folder name of a folder on the target mailbox to receive the message(s). If this argument is
+not supplied or if I<undef> is supplied then a folder with the same name as the currently selected
+folder on the calling object will be created if necessary and used. If you specify something other
+then I<undef> for this argument, even if it's '$imap1->Folder' or the name of the currently selected 
+folder then that folder will only be used if it exists on the target object's mailbox; otherwise 
+B<migrate> will fail.
+
+=back
+
+=over 4
+
+The B<migrate> method uses Black Magic to hardwire the I/O between the two B<Mail::IMAPClient> 
+objects  in order to minimize resource consumption. If you have older scripts that used 
+B<message_to_file> and B<append_file> to move large messages between IMAP mailboxes then you may 
+want to try this method as a possible replacement.
 
 =item move()
 
 The B<move> method moves messages from the currently selected folder to the folder specified
-in the first argument to B<move>.  If the I<Uid> parameter is not true, then the rest of the arguments 
-should be either:
+in the first argument to B<move>.  If the I<Uid> parameter is not true, then the rest of the 
+arguments should be either:
 
 =over 8
 
@@ -4583,6 +4978,9 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 20001010.10  2002/05/24 15:34:22  dkernen
+# Misc fixes
+#
 # Revision 20001010.9  2001/02/07 20:19:50  dkernen
 #
 # Modified Files: Changes IMAPClient.pm MANIFEST Makefile test.txt  -- up to version 2.1.0

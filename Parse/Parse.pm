@@ -5,18 +5,23 @@ use vars qw($skip $AUTOLOAD  );
 $Mail::IMAPClient::Parse::VERSION = "0.0.1";
 $Mail::IMAPClient::Parse::VERSION = "0.0.1";
 
-=head1 Name
-Mail::IMAPClient::Parse
+=head1 NAME
 
-=cut
+Mail::IMAPClient::Parse -- used internally by Mail::IMAPClient::BodyStructure
 
-=head1 Usage
+=head1 DESCRIPTION
 
 This module is used internally by B<Mail::IMAPClient::BodyStructure> and is generated using 
 B<Parse::RecDescent>. It is not meant to be used directly by other scripts nor is there much
 point in debugging it. 
 
+=head1 SYNOPSIS
+
+This module is used internally by B<Mail::IMAPClient::BodyStructure> and is not meant to 
+be used or called directly from applications.
+
 =cut
+
 
 $skip = '\s*';
 my $ERRORS;

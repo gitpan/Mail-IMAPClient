@@ -4,8 +4,9 @@ use Parse::RecDescent;
 use Mail::IMAPClient;
 #use Data::Dumper;
 
-$Mail::IMAPClient::BodyStructure::VERSION = '0.0.1';
-$Mail::IMAPClient::BodyStructure::VERSION = '0.0.1'; # Do it once more to show we mean it!
+$Mail::IMAPClient::BodyStructure::VERSION = '0.0.2';
+# Do it once more to show we mean it!
+$Mail::IMAPClient::BodyStructure::VERSION = '0.0.2'; 
 
 my $rules = <<'END_RULES';	# Don't mess with the following here doc unless you know what you're doing
 	# Directives
@@ -17,10 +18,14 @@ my $rules = <<'END_RULES';	# Don't mess with the following here doc unless you k
 	NIL:		/^NIL/i			{ $return = "NIL" 	}
 	NUMBER:		/^(\d+)/		{ $return = $item[1]; $return||defined($return);}
 
-	STRING:		/^"((?:[^"\\]|\\.)*)"/ | /^([^ \(\)]+)/	
-			{ $return = $item[1] || $item[2] ; $return||defined($return);} 
+        STRING:         /^"((?:[^"\\]|\\.)*)"/ | /^([^ \(\)]+)/ 
+                        {       $item{STRING} =~ s/^"(.*)"$/$1/;
+                                $return = $item{STRING} || $item{__PATTERN1__} ;
+                                $return||defined($return);
+                        }
 
-	BARESTRING:	/^[^(]+\s+(?=\()/	{ $return = $item[1] ; $return||defined($return);}
+	BARESTRING:	/^[^(]+\s+(?=\()/	
+			{ $return = $item[1] ; $return||defined($return);}
 
 	textlines:	NIL | NUMBER	{ $return = $item[1] || $item[2]; $return||defined($return); }
 	rfc822message:  MESSAGE RFC822 	{ $return = "MESSAGE RFC822" }
@@ -39,9 +44,17 @@ my $rules = <<'END_RULES';	# Don't mess with the following here doc unless you k
 	bodysubtype:	NIL | STRING	
 			{ $return = $item{NIL}||$item{STRING} ; $return||defined($return);}
 	bodyparms:	NIL |  '(' kvpair(s) ')' 		
-			{ $return = $item{NIL}||$item{STRING} ;$return||defined($return);}
+			{
+                          $return = $item{NIL} || 
+                                    { map { (%$_) } @{$item{kvpair}} };
+                          $return || defined($return); 
+                        }
 	bodydisp:	NIL |  '(' kvpair(s) ')'		
-			{ $return = $item{STRING} ; $return||defined($return);}
+			{
+                          $return = $item{NIL} || 
+                                    { map { (%$_) } @{$item{kvpair}} };
+                          $return || defined($return); 
+                        }
 	bodyid:		NIL | STRING		
 			{ $return = $item{NIL} || $item{STRING} ; $return||defined($return);}
 	bodydesc:	NIL | STRING		
@@ -175,8 +188,9 @@ my $rules = <<'END_RULES';	# Don't mess with the following here doc unless you k
 	part:		subpart(s) <commit> basicfields 
 				bodyparms(?) bodydisp(?) bodylang(?) 	
 		{
-			$return = $item{basicfields};
-			$return->{bodytype} = $item{subpart} ;
+			$return = bless($item{basicfields}, "Mail::IMAPClient::BodyStructure");
+			$return->{bodytype} = "MULTIPART";
+			$return->{bodystructure} = $item{subpart};
 			foreach my $b (qw/bodyparms bodydisp bodylang/) { 
 				$return->{$b} = $item{$b};
 			}
@@ -184,17 +198,17 @@ my $rules = <<'END_RULES';	# Don't mess with the following here doc unless you k
 		}
 			| 	textmessage <commit> 				
 		{
-			$return = 	$item{textmessage}		;
+			$return = bless $item{textmessage}, "Mail::IMAPClient::BodyStructure";
 			$return||defined($return);
 		}
 			| 	messagerfc822message <commit> 		
 		{
-			$return = 	$item{messagerfc822message}	;
+			$return = bless $item{messagerfc822message}, "Mail::IMAPClient::BodyStructure";
 			$return||defined($return);
 		}
 			| 	othertypemessage
 		{
-			$return = 	$item{othertypemessage}		;
+			$return = bless $item{othertypemessage}, "Mail::IMAPClient::BodyStructure";
 			$return||defined($return);
 		}
 
@@ -219,10 +233,8 @@ sub new {
 	my $class = shift;
 	my $bodystructure = shift;
 	
-	my $self = {} ;
-	bless $self, ref($class)||$class;
-	$self->{parse} = $parser->start($bodystructure);
-	return $self;
+	my $values = $parser->start($bodystructure);
+	return $values->[0];
 }
 
 sub _get_thingy {
@@ -232,12 +244,6 @@ sub _get_thingy {
 		$@ = "No argument passed to $thingy method." 	;
 		$^W and print STDERR "$@\n" ;
 		return undef;
-	}
-	if ( ref($object) and exists($$object{parse})  ) {
-		$object = $object->{parse} ;
-	}
-	if ( ref($object) =~ /ARRAY/ and scalar(@$object) == 1 ) {
-		$object = $object->[0] ;
 	}
 	unless ( defined($object->{$thingy}) ) {
 		$@ = 	ref($object) 					.
@@ -254,7 +260,7 @@ sub _get_thingy {
 
 BEGIN {
  foreach my $datum (qw/	bodytype bodysubtype 	bodyparms 	bodydisp bodyid
-			bodydesc bodyenc 	bodysize 	bodylang bodystructure		
+			bodydesc bodyenc 	bodysize 	bodylang 
 			envelopestruct  	textlines
 		   /
  ) {
@@ -266,22 +272,63 @@ BEGIN {
 
 sub parts {
 	my $self = shift;
-	my $p1   = shift||$self->{parse}||return undef ; # p1 is an array ref ...
-	return undef unless ref($p1) =~ /ARRAY/ ;	 #   ... or else!
+
 	my @parts = ();
-	my $partno = 0;
-	foreach my $p (   @{$p1}  ) {
-		$partno++;
-		if ( ref($p->{bodytype}) ) {
-			push @parts, 	map { $partno . "." . $_ } $self->parts($p->{bodytype}) ;
-		} else  {
-			  push @parts, 	$partno ;	
+	if ($self->bodytype() ne 'MULTIPART' && $self->bodytype() ne 'MESSAGE') {
+		@parts = ( 1 );
+	}
+	else {
+		foreach my $p ($self->bodystructure()) {
+			if ($p->bodytype() eq 'MULTIPART') {
+				push @parts, $p->parts();
+			}
+			elsif ($p->bodytype() eq 'MESSAGE') {
+				push @parts, $p->parts();
+			}
+			else {
+				push @parts, $p->id();
+			}
 		}
-	  }
-	if ( $partno == 1  and scalar(@parts) > 1 ) { @parts = map { s/^\d+\.// ; $_} @parts } 
+	}
 	return wantarray ? @parts : \@parts;
 }
 
+sub bodystructure {
+	my $self = shift;
+	my @parts = ();
+	my $partno = 0;
+
+        my $prefix = $self->{prefix} || "";
+
+	if (exists $self->{bodystructure} && ref($self->{bodystructure}) =~ /^ARRAY/) {
+		my $bs = $self->{bodystructure};
+		if (scalar @$bs == 1 && $bs->[0]{bodytype} eq 'MULTIPART') {
+			$bs->[0]{prefix} = $prefix;
+                }
+        	$prefix = "$prefix." if $prefix;
+		foreach my $p ( @{$self->{bodystructure}}  ) {
+			$partno++;
+			if (! exists $p->{prefix} ) {
+                        	$p->{id} = "$prefix$partno";
+				$p->{prefix} = "$prefix$partno";
+			}
+			push @parts, $p;	
+		}
+	}
+	return wantarray ? @parts : \@parts;
+}
+
+sub id {
+	my $self = shift;
+	
+	return $self->{id} if exists $self->{id};
+
+	if ($self->{bodytype} eq 'MULTIPART') {
+		return undef;
+	} else {
+		return $self->{id} = 1;
+	}
+}
 
 sub Unwrapped {
 	my $unescape = Mail::IMAPClient::Unescape(@_);
@@ -327,16 +374,17 @@ server responses to the FETCH BODYSTRUCTURE IMAP client command.
 
 =head1 DESCRIPTION
 
-This extension will parse the result of an IMAP FETCH BODYSTRUCTURE command into a perl data structure. It also
-provides helper methods that will help you pull information out of the data structure.
+This extension will parse the result of an IMAP FETCH BODYSTRUCTURE command into a perl 
+data structure. It also provides helper methods that will help you pull information out 
+of the data structure.
 
-Use of this extension requires Parse::RecDescent. If you don't have Parse::RecDescent then you must either
-get it or refrain from using this module.
+Use of this extension requires Parse::RecDescent. If you don't have Parse::RecDescent 
+then you must either get it or refrain from using this module.
 
 =head2 EXPORT
 
-There are no restrictions on exporting this module out of the US. (Oh, did you want to know what variables are
-exported by default or exportable upon request? There aren't any.)
+There are no restrictions on exporting this module out of the US. (Oh, did you want to know 
+what variables are exported by default or exportable upon request? There aren't any.)
 
 =head1 Class Methods
 
@@ -344,17 +392,18 @@ The following class method is available:
 
 =head2 new
 
-This class method is the constructor method for instantiating new Mail::IMAPClient::BodyStructure objects. The 
-B<new> method accepts one argument, a string containing a server response to a FETCH BODYSTRUCTURE directive.
-Only one message's body structure should be described in this string, although that message may contain an arbitrary
-number of parts.
+This class method is the constructor method for instantiating new Mail::IMAPClient::BodyStructure 
+objects. The B<new> method accepts one argument, a string containing a server response to a 
+FETCH BODYSTRUCTURE directive.  Only one message's body structure should be described in this 
+string, although that message may contain an arbitrary number of parts.
 
-If you know the messages sequence number or unique ID (UID) but haven't got its body structure, and you want to get
-the body structure and parse it into a B<Mail::IMAPClient::BodyStructure> object, then you might as well save yourself
-some work and use B<Mail::IMAPClient>'s B<get_bodystructure> method, which accepts a message sequence number (or UID
-if I<Uid> is true) and returns a B<Mail::IMAPClient::BodyStructure> object. It's functionally equivalent to issuing 
-the FETCH BODYSTRUCTURE IMAP client command and then passing the results to B<Mail::IMAPClient::BodyStructure>'s
-B<new> method but it does those things in one simple method call.
+If you know the messages sequence number or unique ID (UID) but haven't got its body structure, 
+and you want to get the body structure and parse it into a B<Mail::IMAPClient::BodyStructure> object, then you might as well save yourself some work and use B<Mail::IMAPClient>'s B<get_bodystructure> 
+method, which accepts a message sequence number (or UID if I<Uid> is true) and returns a 
+B<Mail::IMAPClient::BodyStructure> object. It's functionally equivalent to issuing the 
+FETCH BODYSTRUCTURE IMAP client command and then passing the results to 
+B<Mail::IMAPClient::BodyStructure>'s B<new> method but it does those things in one simple 
+method call.
 
 =head1 Object Methods
 
@@ -377,7 +426,7 @@ B<Mail::IMAPClient::Bodystructure> object.
 =cut
 
 
-	
+
 =head2 bodyparms
 
 The B<bodyparms> object method requires no arguments.  
@@ -427,7 +476,7 @@ B<Mail::IMAPClient::Bodystructure> object.
 =cut
 
 
-	
+
 =head2 bodysize
 
 The B<bodysize> object method requires no arguments.  
