@@ -1,13 +1,14 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.11 2000/03/09 20:32:28 dkernen Exp $
+# $Id: IMAPClient.pm,v 19991216.12 2000/03/16 14:55:23 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.09';
-$Mail::IMAPClient::VERSION = '1.09';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.11';
+$Mail::IMAPClient::VERSION = '1.11';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
 use IO::Socket;
+use IO::File;
 
 #print "Found Fcntl in $INC{'Fcntl.pm'}\n";
 #Fcntl->import;
@@ -17,7 +18,6 @@ use IO::Socket;
 Mail::IMAPClient - An IMAP Client API
 
 =cut
-
 
 sub Unconnected 	{ return 0 ; }		# Object not connected
 sub Connected 		{ return 1 ; } 		# connected; not logged in
@@ -37,6 +37,7 @@ sub Selected 		{ return 3 ; }		# mailbox selected
 	no strict 'refs';
         *$datum = sub {
                 if (defined($_[1])) {
+			$@ = $_[1] if $datum eq 'LastError';
                         return $_[0]->{$datum} = $_[1] ;
                 } else {
                         return $_[0]->{$datum};
@@ -113,19 +114,25 @@ sub new {
 sub connect {
 	my $self = shift;
 	
+	$self->Port(143) 
+		if 	defined ($IO::Socket::INET::VERSION) 
+		and 	$IO::Socket::INET::VERSION eq '1.25' 
+		and 	!$self->Port;
+
 	my $sock = IO::Socket::INET->new(
 		PeerAddr => $self->Server		,
                 PeerPort => $self->Port||'imap(143)'	,
                 Proto    => 'tcp' 			,
 		Debug	=> $self->Debug 		,
 	)						
-	or return undef					;
+	or $@ = "Unable to connect: $!" and return undef;
 
 	$sock->autoflush(1)				;
 	
 	unless ( defined($sock) ) {
 		
 		$self->LastError( "Unable to connect to host: $!\n");	
+		$@ 		= "Unable to connect: $!";	
 		return undef;
 	}
 	$self->Socket($sock);
@@ -168,7 +175,8 @@ sub login {
 sub separator {
 	my $self = shift;
 	my $target = shift ; defined($target) or $target = "INBOX";
-	$target = 'INBOX' if $target =~ /inbox/i;
+	$target = 'INBOX' if $target =~ /inbox/i or !$self->exists($target) ;
+	
 
 	# The fact that the response might end with {123} doesn't really matter here:
 
@@ -191,6 +199,48 @@ sub list {
 	$self->_imap_command($string)  or return undef;
 	return wantarray ? 	$self->History($self->Count) 		: 
 				$self->{"History"}{$self->Count}	;
+}
+
+sub lsub {
+	my $self = shift;
+	my ($reference, $target) = (shift, shift);
+	$reference = "" unless defined($reference);
+	$target = '*' unless defined($target);
+	$target           = $self->Massage($target);
+	my $string      =  qq(LSUB "$reference" $target);
+	$self->_imap_command($string)  or return undef;
+	return wantarray ?      $self->History($self->Count)            : 
+				$self->{"History"}{$self->Count}        ;
+}
+
+sub subscribed {
+	my $self = shift;
+	my $what = shift ;
+	
+	my @folders ;  
+	my $lsub = $self->lsub(undef,( $what? "$what" . $self->separator($what) . "*" : undef ) );
+	
+	for (my $m = 0; $m < scalar(@$lsub); $m++ ) {
+	
+		if ($lsub->[$m]  =~ s/(\{\d+\})\r\n$// ) {
+			$lsub->[$m] .= '\FOLDER LITERAL::' . $lsub->[$m+1];
+			$lsub->[$m+1] = "";     
+		}
+			
+		
+		push @folders, $1||$2 
+			if $lsub->[$m] =~
+			/       ^\*\s+LSUB              # * LSUB
+				\s+\([^\)]*\)\s+            # (Flags)
+				"[^"]*"\s+              # "delimiter"
+				(?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
+			/x;
+
+	} 
+
+	for my $f (@folders) { $f =~ s/^\\FOLDER LITERAL:://;}
+
+	return wantarray ? @folders : \@folders ;
 }
 
 
@@ -268,15 +318,15 @@ sub select {
 	}
 }
 
-sub flags {
-	my $self = shift;
-	my $msg  = shift;
-	$self->fetch($msg,"FLAGS");
-	my $line = ($self->Results)[-2];
-        my($flags) = $line =~ /FLAGS\s*\(([^)]*)\)/;
-        my @flags = split(/\s+/,$flags);
-	return wantarray ? @flags : \@flags ;
-}
+#sub flags {
+#	my $self = shift;
+#	my $msg  = shift;
+#	$self->fetch($msg,"FLAGS");
+#	my $line = ($self->Results)[-2];
+#        my($flags) = $line =~ /FLAGS\s*\(([^)]*)\)/;
+#        my @flags = split(/\s+/,$flags);
+#	return wantarray ? @flags : \@flags ;
+#}
 
 sub message_string {
 	my $self = shift;
@@ -285,6 +335,10 @@ sub message_string {
 	my @torso = $self->fetch($msg,"RFC822.TEXT");
 	shift @head and pop @head and pop @head;
 	shift @torso and pop @torso and pop @torso;
+	local($^W) = undef;
+	# print "Last header is $head[$#head]";
+	until ($head[-1] =~ /\r\n\r\n$/) { $head[-1] .= "\r\n"} ;
+	# print "Last header is $head[$#head]";
 	return join("",@head) . join("",@torso);
 }
 
@@ -367,20 +421,20 @@ sub _imap_command {
 	my ($code, $output);	
 	$output = "";
 
-	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/m ) {
+	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/mi ) {
 		# print "Line +$output \t not '$count OK or BAD or NO or $good'\n" 
 		#	if $self->Debug;
 		$output = $self->_read_line;	
 		for my $o (split(/\r?\n/,$output)) { 
 			$self->_record($count,"$o\r\n");
 		}
-		if ($output =~ /^\*\s+BYE/) {
+		if ($output =~ /^\*\s+BYE/im) {
 			$self->State(Unconnected);
 			return undef ;
 		}
 	}	
 	
-	return $code =~ /^OK|$good/ ? $self : undef ;
+	return $code =~ /^OK|$good/im ? $self : undef ;
 
 }
 
@@ -439,16 +493,16 @@ sub _record {
 
 	push @{$self->{"History"}{$count}}, $line;
 
-	$self->LastError("$line") if $line =~ /^\S+\s+(BAD|NO)/;
+	$self->LastError("$line") if $line =~ /^\S+\s+(BAD|NO)/im;
 
 	return $self;
 }
 
 #_send_line writes to the socket:
 sub _send_line {
-	my($self,$string) = (shift, shift);
+	my($self,$string,$suppress) = (shift, shift, shift);
 
-	unless ($string =~ /\r\n$/) {
+	unless ($string =~ /\r\n$/ or $suppress ) {
 
 		chomp $string;
 		$string .= "\r" unless $string =~ /\r$/;	
@@ -580,6 +634,7 @@ sub folders {
 	
         my @folders ;  
 	my $list = $self->list(undef,( $what? "$what" . $self->separator($what) . "*" : undef ) );
+	push @$list, $self->list(undef, $what) if $what and $self->exists($what) ;
 	
 	for (my $m = 0; $m < scalar(@$list); $m++ ) {
 	
@@ -683,10 +738,121 @@ sub status {
 
 }
 
-sub parse_headers {
+#sub parse_headers {
+#
+#	my($self,$msg,@fields) = @_;
+#	my $string; my $field;
+#
+#	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
+#
+#		$string = 	"$msg rfc822.header" 	; 
+#	} else {
+#		$string	= 	"$msg body[header.fields (" 	. 
+#				join(" ",@fields) 		. ')]' ;
+#	}
+#	my @raw=$self->fetch(	$string	) or return undef;
+#	
+#	my $h = {};
+#
+#        for my $header (@raw) {
+#                next if $header =~ /^\*/;
+#                next if $header =~ /^\s+$/;
+#                # ( for vi
+#                last if $header =~ /^\)/;
+#                my $hdr = $header;
+#                chomp $hdr;
+#                $hdr =~ s/\r$//;   
+#                if ($hdr =~ s/^(\S+): //) { 
+#                        $field = $1 ;
+#                        push @{$h->{$field}} , $hdr ;
+#                } else {
+#                        $h->{$field}[-1] .= $hdr if ref($h->{$field}) eq 'ARRAY';
+#                }
+#        }
+#
+#	return $h;
+#}
 
-	my($self,$msg,@fields) = @_;
-	my $string; my $field;
+
+# Can take a list of messages now.
+# If a single message, returns array or ref to array of flags
+# If a ref to array of messages, returns a ref to hash of msgid => flag arr
+# See parse_headers for more information
+# 2000-03-22 Adrian Smith (adrian.smith@ucpag.com)
+
+sub flags {
+	my $self = shift;
+	my $msgspec = shift;
+	my $flagset = {};
+	my $msg;
+	my $u_f = $self->Uid;
+
+	# Determine if set of messages or just one
+	if (ref($msgspec) eq 'ARRAY') {
+		$msg = join(',', @$msgspec);
+	} else {
+		$msg = $msgspec;
+		if ( scalar(@_) ) {
+			$msg .= join(",",@_) ;
+			$msgspec = [ $msgspec, @_ ] ;
+		}
+	}
+
+	# Send command
+	$self->fetch($msg,"FLAGS");
+
+	# Parse results, setting entry in result hash for each line
+ 	foreach my $resultline ($self->Results) {
+		if (	$resultline =~ 
+			/	\*\s+(\d*)\s+FETCH\s*	# * nnn FETCH 
+				\(FLAGS\s*\((.*)\)	# (FLAGS (\Flag1 \Flag2)
+				(?:\sUID\s(\d+))*	# optional: UID nnn
+				\) 			# )
+			/x
+		) {
+			my $mailid = $u_f ? $3 : $1;
+			my $flagsString = $2;
+			my @flags = split(/\s+/, $flagsString);
+			$flagset->{$mailid} = \@flags;
+		}
+	}
+
+	# Did the guy want just one response? Return it if so
+	if (ref($msgspec) ne 'ARRAY') {
+		my $flagsref = $flagset->{$msgspec};
+		return wantarray ? @$flagsref : $flagsref;
+	}
+
+	# Or did he want a hash from msgid to flag array?
+	return $flagset;
+}
+
+
+
+
+
+
+# parse_headers modified to allow second param to also be a
+# reference to a list of numbers. If this is a case, the headers
+# are read from all the specified messages, and a reference to
+# an hash of mail numbers to references to hashes, are returned.
+# I found, with a mailbox of 300 messages, this was
+# *significantly* faster against our mailserver (< 1 second
+# vs. 20 seconds)
+#
+# 2000-03-22 Adrian Smith (adrian.smith@ucpag.com)
+
+sub parse_headers {
+	my($self,$msgspec,@fields) = @_;
+	my(%fieldmap) = map { ( lc($_),$_ )  } @fields;
+	my $msg; my $string; my $field;
+
+	# Make $msg a comma separated list, of messages we want
+        if (ref($msgspec) eq 'ARRAY') {
+		$msg = join(',', @$msgspec);
+	} else {
+		$msg = $msgspec;
+	}
 
 	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
 
@@ -695,28 +861,52 @@ sub parse_headers {
 		$string	= 	"$msg body[header.fields (" 	. 
 				join(" ",@fields) 		. ')]' ;
 	}
+
 	my @raw=$self->fetch(	$string	) or return undef;
+
+	my $headers = {};	# hash from message ids to header hash
+	my $h = 0;		# reference to hash of current message id, or 0 for between messages
 	
-	my $h = {};
+       	for my $header (@raw) {
+               	if ($header =~ /^\*\s(\d*)/) {	  # start of new message header
+			my $msgid = $1;
+			$h = {};		  # new hash for headers for this mail
+			$headers->{$msgid} = $h;  # store in results, against this message
+			next;
+		}
 
-        for my $header (@raw) {
-                next if $header =~ /^\*/;
                 next if $header =~ /^\s+$/;
-                # ( for vi
-                last if $header =~ /^\)/;
-                my $hdr = $header;
-                chomp $hdr;
-                $hdr =~ s/\r$//;   
-                if ($hdr =~ s/^(\S+): //) { 
-                        $field = $1 ;
-                        push @{$h->{$field}} , $hdr ;
-                } else {
-                        $h->{$field}[-1] .= $hdr if ref($h->{$field}) eq 'ARRAY';
-                }
-        }
 
-	return $h;
+                # ( for vi
+		if ($header =~ /^\)/) {		  # end of this message
+			$h = 0;			  # set to be between messages
+			next;
+		}
+
+		if ($h != 0) {			  # do we expect this to be a header?
+               		my $hdr = $header;
+               		chomp $hdr;
+               		$hdr =~ s/\r$//;   
+               		if ($hdr =~ s/^(\S+): //) { 
+                       		$field = $fieldmap{lc($1)} ;
+                       		push @{$h->{$field}} , $hdr ;
+               		} else {
+                       		$h->{$field}[-1] .= $hdr if ref($h->{$field}) eq 'ARRAY';
+               		}
+		}
+	}
+
+	# if we asked for one message, just return its hash,
+	# otherwise, return hash of numbers => header hash
+	if (ref($msgspec) eq 'ARRAY') {
+		return $headers;
+	} else {
+		return $headers->{$msgspec};
+	}
 }
+
+
+
 
 sub recent_count {
 	my ($self, $folder) = (shift, shift);
@@ -968,7 +1158,7 @@ sub append {
         my $self = shift;
         my $folder = $self->Massage(shift);
 	my $text = join("\n",@_);
-	$text =~ s/\n/\r\n/g;
+	$text =~ s/\r?\n/\r\n/g;
         my $clear = $self->Clear;
 
         $self->Clear($clear)
@@ -990,18 +1180,19 @@ sub append {
 
 	my ($code, $output) = ("","");	
 	
-	until ( ($code) = $output =~ /(^\+|^\d+\sNO|^\d+\sBAD)/) {
+	until ( ($code) = $output =~ /(^\+|^\d*\s*NO|^\d*\s*BAD)/i) {
 		$output = $self->_read_line;	
 		$self->_record($count,$output);
-		if ($output =~ /^\*\s+BYE/) {
+		if ($output =~ /^\*\s+BYE/i) {
 			$self->State(Unconnected);
 			return undef ;
-		} elsif ( $output =~ /^\d+(NO|BAD)/ ) {
+		} elsif ( $output =~ /^\d*\s*(NO|BAD)i/ ) {
 			return undef;
 		}
+		# print "Output so far = $output\n";
 	}	
 	
-        if ( $output =~ /^\d+\s+(BAD|NO)/ ) { 
+        if ( $output =~ /^\d+\s+(BAD|NO)/i ) { 
                 $output =~ s/^\d+\s+//;
                 $self->LastError("Error trying to append: $output\n");
                 return undef;
@@ -1015,15 +1206,115 @@ sub append {
                 return undef;
         }
 
-        until (($code) = $output =~ /^$count (OK|NO|BAD)/) {
+        until (($code) = $output =~ /^$count (OK|NO|BAD)/im) {
                 $output = $self->_read_line;
+		print "Append results: $output\n" if $self->Debug;
                 $self->_record($count,$output);
-                if ($output =~ /^\*\s+BYE/) {
+                if ($output =~ /^\*\s+BYE/im) {
                         $self->State(Unconnected);
                         return undef ;
                 }
         }
-	if ($code !~ /^OK/) {
+	if ($code !~ /^OK/im) {
+		return undef;
+	}
+
+	my($uid) = $output =~ m#\s+(\d+)\]#;
+
+        return defined($uid) ? $uid : $self;
+}
+
+sub append_file {
+
+        my $self = shift;
+        my $folder = $self->Massage(shift);
+	my $file = shift; 
+	my $control = shift || undef;
+
+	unless ( -f $file ) {
+		$self->LastError("File $file not found.\n");
+		return undef;
+	}
+        my $clear = $self->Clear;
+
+        $self->Clear($clear)
+                if $self->Count >= $clear and $clear > 0;
+
+	my $count 	= $self->Count($self->Count+1);
+
+	my $length = -s $file ;
+
+        my $string = "$count APPEND $folder {" . $length  . "}\r\n" ;
+
+        $self->_record($count,"$string\r\n");
+
+	my $feedback = $self->_send_line("$string");
+
+	unless ($feedback) {
+		$self->LastError("Error sending '$string' to IMAP: $!\n");
+		return undef;
+	}
+
+	my ($code, $output) = ("","");	
+	
+	until ( ($code) = $output =~ /(^\+|^\d+\sNO|^\d+\sBAD)/i) {
+		$output = $self->_read_line;	
+		$self->_record($count,$output);
+		if ($output =~ /^\*\s+BYE/) {
+			$self->State(Unconnected);
+			return undef ;
+		} elsif ( $output =~ /^\d+\s+(NO|BAD)/i ) {
+			return undef;
+		}
+	}	
+	
+        if ( $output =~ /^\d+\s+(BAD|NO)/i ) { 
+                $output =~ s/^\d+\s+//;
+                $self->LastError("Error trying to append: $output\n");
+                return undef;
+        }
+	my $fh = IO::File->new($file);
+	
+	{ 	# Narrow scope
+		# Slurp up headers:
+		local $/ = "\r\n\r\n"; 
+		my $text = <$fh>;
+		$self->_record($count,$text);
+		$feedback = $self->_send_line("$text");
+
+		unless ($feedback) {
+			$self->LastError("Error sending append msg text to IMAP: $!\n");
+			return undef;
+		}
+		print "control points to $$control\n" if ref($control);
+		$/ = 	$control ? 	$control : 	"\n";	
+		while ($text = <$fh>) {
+			$text =~ s/\r?\n/\r\n/g;
+			$self->_record($count,$text);
+			$feedback = $self->_send_line("$text",1);
+
+			unless ($feedback) {
+				$self->LastError("Error sending append msg text to IMAP: $!\n");
+				return undef;
+			}
+		}
+		$feedback = $self->_send_line("\r\n");
+
+		unless ($feedback) {
+			$self->LastError("Error sending append msg text to IMAP: $!\n");
+			return undef;
+		}
+	}
+
+        until (($code) = $output =~ /^$count (OK|NO|BAD)/im) {
+                $output = $self->_read_line;
+                $self->_record($count,$output);
+                if ($output =~ /^\*\s+BYE/i) {
+                        $self->State(Unconnected);
+                        return undef ;
+                }
+        }
+	if ($code !~ /^OK/i) {
 		return undef;
 	}
 
@@ -1562,7 +1853,30 @@ name of the folder to append the message to, and the text of the message (includ
 Additional arguments are added to the message text, separated with a newline.
 
 The B<append> method returns the UID of the new message (a true value) if successful, 
-or undef if not, if the IMAP server has the UIDPLUS capability.
+or undef if not, if the IMAP server has the UIDPLUS capability.  If it doesn't then you just 
+get true on success and undef on failure.
+
+=cut
+
+=item append_file
+
+The B<append>_file method adds a message to the specified folder. It takes two arguments, the
+name of the folder to append the message to, and the file name of an RFC822-formatted message.
+
+An optional third argument is the value to use for C<input_record_separator>. The default is
+to use "" for the first read (to get the headers) and "\n" for the rest. Any valid value for
+C<$/> is acceptable, even the funky stuff, like C<\1024>. (See L<perlvar> for more information
+on C<$/>).
+
+The B<append_file> method returns the UID of the new message (a true value) if successful, 
+or undef if not, if the IMAP server has the UIDPLUS capability. If it doesn't then you just 
+get true on success and undef on failure. If you supply a filename that doesn't exist then you
+get an automatic undef.
+
+In case you're wondering, B<append_file> is provided mostly as a way to allow large messages
+to be appended without having to have the whole file in memory. It uses the C<-s> operator to
+obtain the size of the file and then reads and sends the contents line by line (or not, depending
+on whether you supplied that optional third argument).
 
 =cut
 
@@ -1712,7 +2026,8 @@ If the I<Uid> parameter is set to a true value then the first argument will be t
 a UID or list of UID's, which means that the UID FETCH IMAP client command will be run instead
 of FETCH. (It would really be a good idea at this point to review RFC2060.) 
 
-=cut
+me0n
+t
 
 =item flags
 
@@ -1720,6 +2035,34 @@ The B<flags> method implements the FETCH IMAP client command to list a single me
 It accepts one argument, a message sequence number (or a message UID, if the I<Uid> parameter is
 true), and returns an array (or a reference to an array, if called in scalar context) listing the 
 flags that have been set. Flag names are provided with leading backslashes, if any. 
+
+As of version 1.11, you can supply either a list of message id's or a reference to an array of 
+of message id's (which means either sequence number, if the Uid parameter is false, or message
+UID's, if the Uid parameter is true) instead of supplying a single message sequence number or UID.
+If you do, then the return value will not be an array or array reference; instead, it will be a 
+hash reference, with each key being a message sequence number (or UID) and each value being a 
+reference to an array of flags set for that message.
+
+For example, if you want to display the flags for every message in the folder where you store 
+e-mail related to your plans for world domination, you could do something like this:
+
+	use Mail::IMAPClient;
+	my $imap = Mail::IMAPClient->new( Server => $imaphost,
+					  User   => $login,
+					  Password=> $pass,
+					  Uid => 1,		# optional
+	);
+
+	$imap->select("World Domination");
+	# get the flags for every message in my 'World Domination' folder 
+	$flaghash = $imap->flags( scalar($imap->search("ALL"))) ;
+
+	# pump through sorted hash keys to print results:
+	for my $k (sort { $flaghash->{$a} <=> $flaghash->{$b} } keys %$flaghash) {
+		# print: Message 1: \Flag1, \Flag2, \Flag3
+		print "Message $k:\t",join(", ",@{$flaghash->{$k}}),"\n";
+	}
+
 
 =cut
 
@@ -1783,6 +2126,18 @@ command causes the server to end the connection, this also results in the B<IMAP
 entering the B<Unconnected> state. This method does not, however, destroy the B<IMAPClient> object,
 so a program can re-invoke the B<connect> and B<login> methods if it wishes to reestablish
 a session later in the program.
+
+=cut
+
+=item lsub
+
+The B<lsub> method implements the IMAP LSUB client command. Arguments are passed to the 
+IMAP server as received, separated from each other by spaces. If no arguments are supplied
+then the default lsub command C<tag LSUB "" '*'> is issued.
+
+The B<lsub> method returns an array (or an array reference, if called in a scalar context).
+The array is the unaltered output of the LSUB command. If you want an array of subscribed folders
+then see the B<subscribed> method, below.
 
 =cut
 
@@ -1891,9 +2246,41 @@ are included in the returned hash of lists.
 If you're not emotionally prepared to deal with a hash of lists then you can always call the 
 B<fetch> method yourself with the appropriate parameters and parse the data out any way you want to.
 
-If the I<Uid> parameter is true then the first argument will be treated as a message UID.
+If the I<Uid> parameter is true then the first argument will be treated as a message UID. If the first
+argument is a reference to an array of message sequence numbers (or UID's if Uid is true), then 
+B<parse_headers> will be run against each message in the array. In this case the return value is
+a hash, in which the key is the message sequence number (or UID) and the value is a reference to
+a hash as described above.
 
-Currently, specifying a range of message numbers as the first argument is not supported. 
+An example of using B<parse_headers> to print the date and subject of every message in your smut
+folder could look like this:
+
+	use Mail::IMAPClient;
+	my $imap = Mail::IMAPClient->new( Server => $imaphost,
+					  User   => $login,
+					  Password=> $pass,
+					  Uid => 1,		# optional
+	);
+
+	$imap->select("smut");
+
+	for my $h (	
+
+	 # grab the Subject and Date from every message in my (fictional!) smut folder;
+	 # the first argument is a reference to an array listing all messages in the folder
+	 # (which is what gets returned by the $imap->search("ALL") method when called in
+	 # scalar context) and the remaining arguments are the fields to parse out
+
+	 # The key is the message number, which in this case we don't care about:
+	 values %{$imap->parse_headers( scalar($imap->search("ALL")) , "Subject", "Date")}
+	) {
+		# $h is the value of each element in the hash ref returned from parse_headers,
+		# and $h is also a reference to a hash.
+		# We'll only print the first occurance of each field because we don't expect more
+		# than one Date: or Subject: line per message.
+		 print map { "$_:\t$h->{$_}[0]\n"} keys %$h ; 
+	}
+
 
 =cut
 
@@ -2069,6 +2456,11 @@ which returns information about the B<IMAPClient> object. (See the section label
 B<Status Methods>, below).
 
 =cut
+
+=item subscribed
+
+The B<subscribed> method works like the B<folders> method, above, except that the returned list (or
+array reference, if called in scalar context) contains only the subscribed folders. 
 
 =item tag_and_run
 
@@ -2259,6 +2651,12 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 19991216.12  2000/03/16 14:55:23  dkernen
+#
+# Changes 	- to document changes
+# IMAPClient.pm 	- to add lsub and subscribed methods
+# Makefile	- to increment version to 1.10
+#
 # Revision 19991216.11  2000/03/09 20:32:28  dkernen
 #
 # Modified Files:

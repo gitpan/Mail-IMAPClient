@@ -136,7 +136,7 @@ BEGIN {
 	};
 
 	push @tests, sub {	# 13, 14
-		unless ($imap->has_capability(UIDPLUS)) {
+		unless ($imap->has_capability("UIDPLUS") and !ref($uid)) {
 		      	print "ok ", ++$test," (skipped)\n";
                        	print "ok ", ++$test," (skipped)\n";
 		 	return;
@@ -150,7 +150,7 @@ BEGIN {
 			print "not ok ",++$test,"\n";
 		}
 	
-		if ( length($m1))	{	# 14
+		if ( defined($m1) and length($m1))	{	# 14
 			print "ok ",++$test,"\n";
 		} else {
 			print "not ok ",++$test,"\n";
@@ -204,7 +204,7 @@ BEGIN {
 		}
 	};
 	push @tests, sub {	# 19, 20
-		unless ( $imap->has_capability("UIDPLUS") ) {
+		unless ( $imap->uid("search all") ) {
 			print "ok ",++$test," (skipped)\n";
 			print "ok ",++$test," (skipped)\n";
 			return;
@@ -214,8 +214,11 @@ BEGIN {
 			print "ok ",++$test,"\n";
 			if ($uidhits[0] == $uid) { 
 				print "ok ",++$test,"\n" ;
+			} elsif (ref($uid)) {
+				print "ok ",++$test," (skipped)\n" ;
 			} else {
 				print "not ok ",++$test,"\n";
+				print "Expected $uid but got $uidhits[0]\n";
 			}
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -292,7 +295,7 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Debug   => 0,
-		Fast_IO   => 1,
+		Fast_IO   => 0,
 		Timeout	=> 4,
 ) } ;
 

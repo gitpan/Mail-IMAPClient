@@ -1,5 +1,68 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.11
+-----------------------
+Added new example script, copy_folder.pl, to demonstrate one way to copy entire folders between
+imap accounts (which may or may not be on the same server). This example is right next to all the
+others, in the examples/ subdirectory of the distribution.
+
+Changed error handling slightly. $@ now contains pretty much the same stuff as what gets returned
+by LastError, even when LastError won't work (i.e. when an implicit connect or login fails and so
+no object reference is returned by new). You can thank John Milton for the friendly nagging that
+got me to do this.
+
+Added new test suite for the fast_io engine. This should make it easier to determine whether or
+not the fast_io engine will work on your platform. 
+
+Implemented a work-around to allow the Port parameter to default despite a known bug in 
+IO::Socket::INET version 1.25 (distributed with perl 5.6.0).
+
+Fixed a bug in the message_string method in which the resulting text string for some mime messages 
+to be incompatible with append.
+
+Fixed a bug in the Fast_io i/o engine that could cause hangs during an append operation.
+
+Changed a number of regular expressions to accept mixed-case "Ok", "No" or "Bad" responses
+from the server and to do multi-line matching.
+
+Fixed a bug in the append method that was causing extra carriage returns to appear in messages 
+whose lines were already terminated with the CR-LF sequence. Thanks to Heather Adkins for 
+reporting this bug.
+
+Enhanced the parse_headers routine so that it is less sensitive to variations of case in message
+headers. Now, the case of the returned key matches the case of the field as specified in the 
+parse_headers method's arguments, regardless of its case in the message being parsed. (You can thank
+Heather for this as well.) See below for more changes to parse_headers in this release.
+
+Improved the append method so that it has better error handling and error recovery. Thanks to 
+Mark Keisler for pointing out some bugs in the error handling code in this method.
+
+Added the append_file method, which is like the append method but it works on files instead of strings.
+The file provided to append must contain an RFC822-formatted message. Use of the append_file method
+avoids having to stuff huge messages into variables before appending them. Thanks to Jim Martin
+(jwm3@jwm3.org) for suggesting this method.
+
+Changed the flags method and the parse_headers method so that a reference to an array of 
+message sequence numbers (or message UIDS if the Uid parameter is turned on) can optionally be passed 
+instead of a single message sequence number (or UID). Use of this enhancement will change your return
+values so be sure to read the pod.  Thanks to Adrian Smith (adrian.smith@ucpag.com) for delivering 
+this enhancement.
+
+Fixed a bug in "message_string" that caused the blank lines between headers and body to fall out of
+the string.
+
+Tinkered with the undocumented _send_line method to permit an optional argument to suppress the 
+automatic insertion of <CR><LF> at the end of strings being sent. (NOTE: I'm telling you this 
+because I'm a nice guy. This doesn't mean that _send_line is now a programming interface.)
+
+Changes in version 1.10
+-----------------------
+
+Added two new methods, lsub and subscribed. lsub replaces the behavior of the default method and
+should be downwardly compatible. The subscribed method works like the folders method but the results
+include only subscribed folders. Thanks to Alexei Kharchenko for providing the code for lsub (which
+is the foundation upon which 'subscribed' was built).
+
 Changes in version 1.09
 -----------------------
 
@@ -313,4 +376,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.12 2000/03/10 16:04:22 dkernen Exp $
+# $Id: Changes,v 19991216.13 2000/03/16 14:55:22 dkernen Exp $

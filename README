@@ -30,9 +30,10 @@ COMPATIBILITY
 This module was developed on Solaris 2.5.1 and 2.6 against Netscape IMAP 
 servers versions 3.6 and 4.1. However, since it is written in perl and 
 designed for flexibility, it should run on any OS with a TCP/IP stack and 
-a version of perl that includes Socket.pm and IO::Socket.pm. It also should 
-be able to talk to any IMAP server, even those that have, um, proprietary 
-features (assuming that the programmer knows what those features are). 
+a version of perl that includes the Socket and IO::Socket modules. It also 
+should be able to talk to any IMAP server, even those that have, um, 
+proprietary features (assuming that the programmer knows what those features 
+are). 
 
 To date, I know that the test suite runs successfully with the following IMAP 
 servers:

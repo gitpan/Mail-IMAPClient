@@ -33,6 +33,9 @@ If you don't have a test.txt file in your installation directory then you will h
 answer at least one prompt. If you do have a test.txt file, and you run 'make clean', then 
 you won't have a test.txt file anymore, so take precautions. 
 
+If you do have a test.txt file and you don't run 'make clean' then a text file will be sitting 
+around containing logon credentials, so take precautions.
+
 If, when replying to the "perl Makefile.PL" prompts, you supply server, id, and password 
 credentials for an id that has a ridiculously huge number of folders and subfolders then 
 the 'make test' may run approximately forever. Next time try an id with less stuff. 
