@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id$
+# $Id: thread.t,v 1.1 2002/08/30 20:50:43 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -61,5 +61,10 @@ END {print "not ok 1\n" unless $main::loaded;}
 
 
 # History:
-# $Log$
+# $Log: thread.t,v $
+# Revision 1.1  2002/08/30 20:50:43  dkernen
+#
+# Added Files: Thread/Makefile.PL Thread/Thread.grammar Thread/Thread.pod
+# Added Files: Thread/t/thread.t
+#
 #

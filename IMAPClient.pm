@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.12 2002/08/23 14:33:40 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.14 2002/09/03 13:49:35 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.2.1';
-$Mail::IMAPClient::VERSION = '2.2.1';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.2.2';
+$Mail::IMAPClient::VERSION = '2.2.2';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -31,6 +31,7 @@ use constant Selected => 3;   		        # mailbox selected
 use constant INDEX => 0;              		# Array index for output line number
 use constant TYPE => 1;               		# Array index for output line type (OUTPUT,INPUT, or LITERAL)
 use constant DATA => 2;                       	# Array index for output line data
+
 
 my %SEARCH_KEYS = map { ( $_ => 1 ) } qw/
 	ALL ANSWERED BCC BEFORE BODY CC DELETED DRAFT FLAGGED
@@ -1199,7 +1200,9 @@ sub _record {
 #_send_line writes to the socket:
 sub _send_line {
 	my($self,$string,$suppress) = (shift, shift, shift);
-
+	#$self->_debug("_send_line: Connection state = " . 
+	#		$self->State . " and socket fh = " . ($self->Socket||"undef") . "\n")
+	#if $self->Debug;
 	unless ($self->IsConnected and $self->Socket) {
 		$self->LastError("NO Not connected.\n");
 		carp "Not connected" if $^W;
@@ -3175,10 +3178,9 @@ sub Massage {
 	$arg 	= substr($arg,1,length($arg)-2) if $arg =~ /^".*"$/
                 and ! ( $notFolder or $self->STATUS(qq("$escaped_arg"),"(MESSAGES)"));
 
-
 	if ($arg =~ /["\\]/) {
 		$arg = "{" . length($arg) . "}\x0d\x0a$arg" ;
-	} elsif ($arg =~ /\s/) {
+	} elsif ($arg =~ /\s|[()]/) {
 		$arg = qq("${arg}") unless $arg =~ /^"/;
 	} 
 
@@ -3278,9 +3280,7 @@ object via the L<new> constructor method. Once the object has been
 instantiated, the L<connect> method is either implicitly or explicitly
 called. At that point methods are available that implement the IMAP
 client commands as specified in I<RFC2060>. When processing is
-complete, the I<logoff> object method is called, either explicitly by
-the program or implicitly when the object goes out of scope (or at
-program termination). 
+complete, the I<logoff> object method should be called.
 
 This documentation is not meant to be a replacement for RFC2060, and
 the wily programmer will have a copy of that document handy when coding
@@ -4343,6 +4343,11 @@ I<Unconnected> state. This method does not, however, destroy the
 B<IMAPClient> object, so a program can re-invoke the L<connect> and
 L<login> methods if it wishes to reestablish a session later in the
 program.
+
+According to the standard, a well-behaved client should log out before
+closing the socket connection. Therefore, B<Mail::IMAPClient> will 
+attempt to log out of the server during B<DESTROY> processing if the
+object being destroyed is in the L<Connected> state.
 
 =cut
 
@@ -5790,15 +5795,15 @@ operation is allowed to fail on a "Resource Temporarily Available"
 error. These errors can occur from time to time if the server is too
 busy to empty out its read buffer (which is logically the "other end"
 of the client's write buffer). By default, B<Mail::IMAPClient> will
-retry 10 times, but you can adjust this behavior by setting
-I<Maxtemperrors>. Note that after each temporary error, the server will
-wait for a number of seconds equal to the number of consecutive
-temporary errors times .25, so very high values for I<Maxtemperrors>
-can slow you down in a big way if your "temporary error" is not all
-that temporary.
+retry an unlimited number of times, but you can adjust this 
+behavior by setting I<Maxtemperrors>. Note that after each temporary 
+error, the server will wait for a number of seconds equal to the number 
+of consecutive temporary errors times .25, so very high values for 
+I<Maxtemperrors> can slow you down in a big way if your "temporary 
+error" is not all that temporary.
 
 You can set this parameter to "UNLIMITED" to ignore "Resource
-Temporarily Unavailable" errors.
+Temporarily Unavailable" errors. This is the default.
 
 =head2 Password
 
@@ -6184,13 +6189,13 @@ are always private and will never be part of the documented interface.
 
 =head1 REPORTING BUGS
 
-Please feel free to e-mail the author at the below address if you
-encounter any strange behaviors. Don't worry about hurting my 
+Please feel free to e-mail the author at C<bug-Mail-IMAPClient@rt.cpan.org>
+if you encounter any strange behaviors. Don't worry about hurting my 
 feelings or sounding like a whiner or anything like that; 
-if there's a problem with this module I'd like to hear about it. 
-However, I probably won't be able to do much about it if you don't 
-include enough information, so please read and follow these
-instructions carefully:
+if there's a problem with this module you'll be doing me a favor by
+reporting it.  However, I probably won't be able to do much about it if 
+you don't include enough information, so please read and follow these
+instructions carefully.
 
 When reporting a bug, please be sure to include the following:
 
@@ -6204,7 +6209,13 @@ doing? What happens? Have you found a work-around?)
 
 - An example script that demonstrates the problem (preferably with as
 few lines of code as possible!) and which calls the Mail::IMAPClient's
-B<new> method with the I<Debug> parameter set to "1".
+L<new> method with the L<Debug> parameter set to "1". (If this generates
+a ridiculous amount of output and you're sure you know where the problem
+is, you can create your object with debugging turned off and then 
+turn it on later, just before you issue the commands that recreate the 
+problem. On the other hand, if you can do this you can probably also 
+reduce the program rather than reducing the output, and this would be 
+the best way to go under most circumstances.)
 
 - Output from the example script when it's running with the Debug
 parameter turned on. You can edit the output to remove (or preferably
@@ -6237,13 +6248,37 @@ like this: C<perl -d example_script.pl [ args ]>
 
 Note that in these examples, the script that demonstrates your problem
 is named "example_script.pl" and the trace output will be saved in
-"mail_imapclient_db.out". You should change these to suite your needs.
+"mail_imapclient_db.out". You should either change these values to suit
+your needs, or change your needs to suit these values.
+
+Bug reports should be mailed to: 
+
+	bug-Mail-IMAPClient@rt.cpan.org
+
+Please remember to place a SHORT description of the problem in the subject
+of the message. Please try to be a bit specific; things like "Bug
+in Mail::IMAPClient" or "Computer Problem" won't exactly expedite things
+on my end.
+
+=head1 REPORTING THINGS THAT ARE NOT BUGS
+
+If you have suggestions for extending this functionality of this module, or
+if you have a question and you can't find an answer in any of the 
+documentation (including the RFC's, which are included in this distribution
+for a reason), then you can e-mail me at the following address:
+
+	comment-Mail-IMAPClient@rt.cpan.org
+
+Please note that this address is for questions, suggestions, and other comments
+about B<Mail::IMAPClient>. It's not for reporting bugs, it's not for general 
+correspondence, and it's especially not for selling porn, mortgages, Viagra, 
+or anything else.
 
 =head1 AUTHOR
 
 	David J. Kernen
 	The Kernen Consulting Group, Inc
-	david.kernen@kernengroup.com
+	DJKERNEN@cpan.org
 
 =cut
 

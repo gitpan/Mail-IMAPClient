@@ -53,23 +53,38 @@ sub set_test_data {
 		"Do you want to run the extended tests? (n/y) ==> ";
 	my $yes = <STDIN>;
 	return unless $yes =~ /^[Yy](?:[Ee]:[Ss]?)?$/ ;
+
 	unless (open TST,">./test.txt") { warn "ERROR: couldn't open ./test.txt: $!\n"; return }
-	print "\nPlease provide the hostname or IP address of a host running an IMAP server \n",
-		"(or QUIT to skip the extended tests) ==> ";
-	my $server = <STDIN>;
-	chomp $server;
-	return if $server =~ /^\s+$|^quit$/i ;
+
+	my $server = "";
+	until ($server ) {
+		print "\nPlease provide the hostname or IP address of a host running an IMAP server \n",
+			"(or QUIT to skip the extended tests) ==> ";
+		$server = <STDIN>;
+		chomp $server;
+		return if $server =~ /^\s*quit\s*$/i ;
+	}
 	print TST "server=$server\n";
+
+	my $user = "";
+	until ($user) {
 	print "\nPlease provide the username of an account\non $server (or QUIT) ==> ";
-	my $user = <STDIN>;
-	chomp $user;
-	return if $user =~ /^\s+$|^quit$/i ;
+		$user = <STDIN>;
+		chomp $user;
+		return if $user =~ /^\s*quit\s*$/i ;
+	}
+
 	print TST "user=$user\n";
-	print "\nPlease provide the password for $user\n(or QUIT) ==> ";
-	my $passed = <STDIN>;
-	chomp $passed;
-	return if $passed =~ /^\s+$|^quit$/i ;
+	my $passe = "";
+	until ($passed) {
+		print "\nPlease provide the password for $user\n(or QUIT) ==> ";
+		$passed = <STDIN>;
+		chomp $passed;
+		return if $passed =~ /^\s+$|^quit$/i ;
+	}
+
 	print TST "passed=$passed\n";
+
 	print "\nPlease provide the port to connect to on $server to run the test \n",
 		"(default is 143) ==> ";
 	my $port = <STDIN>;

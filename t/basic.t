@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.21 2002/08/23 13:29:59 dkernen Exp $
+# $Id: basic.t,v 19991216.22 2002/08/30 20:48:52 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -496,7 +496,7 @@ BEGIN {
 		print "ok ",++$test,"\n"; #43
 		$im2->select($migtarget);
 		$im2->delete_message(@{$im2->messages}) if $im2->message_count;
-		$im2->close($migtarget);
+		$im2->close;
 	 	$im2->delete($migtarget);
 	 }
 	 $im2->logout;
@@ -526,7 +526,22 @@ BEGIN {
 		# sub { "commented out #45" } ,
 	; 	
 
-	if ( -f "./test.txt" ) { 
+
+	open TST,"./test.txt" ;
+	while (defined(my $l = <TST>)) {
+		chomp $l;
+		my($p,$v)=split(/=/,$l);
+		for($p,$v) { s/(?:^\s+)|(?:\s+$)//g; }
+		$parms{$p}=$v if $v;
+	}
+	close TST;
+
+	if ( 	-f 	"./test.txt" 
+		and	%parms
+		and 	length 	$parms{server}
+		and 	length 	$parms{user}
+		and 	length 	$parms{passed} 
+	) { 
 		print "1..${\(scalar @tests)}\n";  # update here if adding test to existing sub
 	} else {		
 		print "1..1\n"; 	
@@ -535,16 +550,7 @@ BEGIN {
 	$main::loaded = 1;
 	print "ok 1\n";
 	$| = 1; 
-
 	unless ( -f "./test.txt" ) { exit;}
-
-	open TST,"./test.txt" or exit;
-	while (defined(my $l = <TST>)) {
-		my($p,$v)=split(/=/,$l);
-		chomp $v if $v;
-		$parms{$p}=$v if $v;
-	}
-	close TST;
 
 }
 
@@ -558,6 +564,11 @@ select(((select($db),$|=1))[0]);
 =end debugging
 
 =cut
+
+exit unless		%parms 
+	and 	length 	$parms{server}
+	and 	length 	$parms{user}
+	and 	length 	$parms{passed} ;
 
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
@@ -596,6 +607,20 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.22  2002/08/30 20:48:52  dkernen
+#
+# #
+# Modified Files:
+# 	Changes IMAPClient.pm MANIFEST Makefile Makefile.PL README
+# 	Todo test.txt
+# 	BodyStructure/Parse/Makefile
+# 	BodyStructure/Parse/Parse.pm
+# 	BodyStructure/Parse/Parse.pod
+# 	BodyStructure/Parse/t/parse.t
+# 	t/basic.t
+# for version 2.2.1
+# #
+#
 # Revision 19991216.21  2002/08/23 13:29:59  dkernen
 #
 # Modified Files: Changes IMAPClient.pm INSTALL MANIFEST Makefile Makefile.PL README Todo test.txt

@@ -2,6 +2,22 @@ Revision History for Perl extension Mail::IMAPClient.
 
 Changes in version 2.2.1
 ------------------------
+Fixed a bug in Massage method (generally only used by other IMAPClient methods)
+that broke folder names with parens. 
+
+Updated bug reporting procedures. Also added a section in the documentation for
+REPORTING THINGS THAT ARE NOT BUGS. Bug tracking is now done via rt.cpan.org,
+which I stumbled upon quite by accident and which I am really pleased with. A lot
+of credit goes to _somebody_ for putting this out on CPAN. Unfortunately as of 
+this writing I don't who.
+
+Fixed a bug in the documentation regarding the logoff method, which is never
+implicitly invoked anymore; I gave up on that because the DESTROY method would
+sometimes be called after the Socket handle was already destroyed.
+
+
+Changes in version 2.2.1
+------------------------
 Updated append_string to wrap the date argument in double quotes if the argument was
 provided without quotes. Thanks to Grant Waldram for pointing out that some IMAP 
 servers require this behavior.
@@ -1058,4 +1074,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.11 2002/08/23 14:33:39 dkernen Exp $
+# $Id: Changes,v 20001010.13 2002/09/03 14:01:03 dkernen Exp $
