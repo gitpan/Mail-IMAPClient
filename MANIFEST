@@ -62,3 +62,6 @@ Thread/Thread.pod
 Thread/Thread.grammar
 Thread/Makefile.PL
 Thread/t/thread.t
+MessageSet/Makefile.PL
+MessageSet/MessageSet.pm
+MessageSet/t/range.t

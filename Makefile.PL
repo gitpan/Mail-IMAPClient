@@ -15,7 +15,7 @@ unless ($DO_BODYSTRUCTURE) {
 }
 
 WriteMakefile(
-    'DIR'		=> [ $DO_BODYSTRUCTURE ? ( 'BodyStructure' , 'Thread' ) : ()  ],
+    'DIR'		=> [ 'MessageSet', $DO_BODYSTRUCTURE ? ( 'BodyStructure' , 'Thread' ) : ()  ],
     'NAME'		=> 'Mail::IMAPClient',
     'VERSION_FROM' 	=> 'IMAPClient.pm', # finds $VERSION
     'clean' 		=> {	FILES 	=> 'test.txt'	},

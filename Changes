@@ -1,5 +1,23 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
+Changes in version 2.2.5
+------------------------
+Added the Range method to convert a bunch of message UID's or sequence numbers
+into compact ranges. Also added a supporting class for the returned range 
+objects with overloaded operators that support stringifying, adding to, and
+deleting from a range object's message set (Mail::IMAPClient::MessageSet). 
+I also wrote documentation for same, so check it out. In future releases, 
+I will probably enhance the base module to use MessageSet objects when 
+feasible (i.e. whenever I know that the argument in question should in fact 
+be a message specification). But I'll let you find all the bugs in the 
+MessageSet module first ;-) Thanks goes to Stefan Schmidt, who is the first
+to report using a server that restricted the size of a client request to 
+something smaller than what Mail::IMAPClient was generating for him. 
+(Originally the Range method was just supposed condense a message set into
+the shortest possible RFC2060-compliant string, but then I got all happy and
+started adding features. You know how it is...)
+
+
 Changes in version 2.2.4
 -------------------------
 Fixed a bug in the done method (new in 2.2.3). 
@@ -1118,4 +1136,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.14 2002/09/26 17:55:57 dkernen Exp $
+# $Id: Changes,v 20001010.15 2002/10/23 20:45:44 dkernen Exp $

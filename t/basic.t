@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.23 2002/09/26 17:56:58 dkernen Exp $
+# $Id: basic.t,v 19991216.24 2002/10/23 20:46:09 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -543,7 +543,7 @@ BEGIN {
 		#push @tests,  sub { "commented out #46" } ; 	
 
 
-	open TST,"./test.txt" ;
+	if (open TST,"./test.txt" ) {
 	while (defined(my $l = <TST>)) {
 		chomp $l;
 		my($p,$v)=split(/=/,$l);
@@ -551,6 +551,7 @@ BEGIN {
 		$parms{$p}=$v if $v;
 	}
 	close TST;
+	}
 
 	if ( 	-f 	"./test.txt" 
 		and	%parms
@@ -623,6 +624,13 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.24  2002/10/23 20:46:09  dkernen
+#
+# Modified Files: Changes IMAPClient.pm MANIFEST Makefile.PL
+# Added Files: Makefile.PL MessageSet.pm
+# Added Files: range.t
+# Modified Files: basic.t
+#
 # Revision 19991216.23  2002/09/26 17:56:58  dkernen
 #
 # Modified Files:

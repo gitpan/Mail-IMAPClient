@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.15 2002/09/26 17:55:58 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.16 2002/10/23 20:45:45 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.2.4';
-$Mail::IMAPClient::VERSION = '2.2.4';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.2.5';
+$Mail::IMAPClient::VERSION = '2.2.5';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -1926,10 +1926,11 @@ sub logout {
 	my $self = shift;
 	my $string = "LOGOUT";
 	$self->_imap_command($string) ; 
-	$self->State(Unconnected);
 	$self->{Folders} = undef;
 	$self->{_IMAP4REV1} = undef;
-	$self->Socket->close ; $self->{Socket} = undef;
+	eval {$self->Socket->close if defined($self->Socket)} ; 
+	$self->{Socket} = undef;
+	$self->State(Unconnected);
 	return $self;
 }
 
@@ -2920,100 +2921,6 @@ sub append {
 	return $self->append_string($folder,$text);
 }
 
-=begin legacy
-	#{
-        my $clear = $self->Clear;
-
-        $self->Clear($clear)
-                if $self->Count >= $clear and $clear > 0;
-
-	my $count 	= $self->Count($self->Count+1);
-
-        my $string = "$count APPEND $folder {" . length($text)  . "}\x0d\x0a" ;
-
-        $self->_record($count,[ $self->_next_index($count), "INPUT", "$string\x0d\x0a" ] );
-
-	# Step 1: Send the append command.
-
-	my $feedback = $self->_send_line("$string");
-
-	unless ($feedback) {
-		$self->LastError("Error sending '$string' to IMAP: $!\n");
-		return undef;
-	}
-
-	my ($code, $output) = ("","");	
-
-	# Step 2: Get the "+ go ahead" response
-	until ( $code ) {
-		$output = $self->_read_line or return undef;	
-		foreach my $o (@$output) { 
-
-			$self->_record($count,$o);	# $o is already an array ref
-			next unless $self->_is_output($o);
-
-                      ($code) = $o->[DATA] =~ /(^\+|^\d*\s*NO|^\d*\s*BAD)/i ;
-
-                      if ($o->[DATA] =~ /^\*\s+BYE/i) {
-                              $self->LastError("Error trying to append: " . $o->[DATA]. "; Disconnected.\n");
-                              $self->_debug("Error trying to append: " . $o->[DATA]. "; Disconnected.\n");
-                              carp("Error trying to append: " . $o->[DATA] ."; Disconnected") if $^W;
-				$self->State(Unconnected);
-
-                      } elsif ( $o->[DATA] =~ /^\d*\s*(NO|BAD)/i ) { # i and / transposed!!!
-                              $self->LastError("Error trying to append: " . $o->[DATA]  . "\n");
-                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
-                              carp("Error trying to append: " . $o->[DATA]) if $^W;
-				return undef;
-			}
-		}
-	}	
-
-	$self->_record($count,[ $self->_next_index($count), "INPUT", "$text\x0d\x0a" ] );
-
-	# Step 3: Send the actual text of the message:
-        $feedback = $self->_send_line("$text\x0d\x0a");
-
-        unless ($feedback) {
-                $self->LastError("Error sending append msg text to IMAP: $!\n");
-                return undef;
-        }
-	$code = undef;			# clear out code
-
-	# Step 4: Figure out the results:
-        until ($code) {
-                $output = $self->_read_line or return undef;
-              $self->_debug("Append results: " . map({ $_->[DATA] } @$output) . "\n" )
-			if $self->Debug;
-                foreach my $o (@$output) {
-			$self->_record($count,$o); # $o is already an array ref
-
-                      ($code) = $o->[DATA] =~ /^(?:$count|\*) (OK|NO|BAD)/im  ;
-
-                      if ($o->[DATA] =~ /^\*\s+BYE/im) {
-				$self->State(Unconnected);
-                              $self->LastError("Error trying to append: " . $o->[DATA] . "\n");
-                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
-                              carp("Error trying to append: " . $o->[DATA] ) if $^W;
-			}
-			if ($code and $code !~ /^OK/im) {
-                              $self->LastError("Error trying to append: " . $o->[DATA] . "\n");
-                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
-                              carp("Error trying to append: " . $o->[DATA] ) if $^W;
-				return undef;
-			}
-        	}
-	}
-
-      my($uid) = join("",map { $_->[TYPE] eq "OUTPUT" ? $_->[DATA] : () } @$output ) =~ m#\s+(\d+)\]#;
-
-        return defined($uid) ? $uid : $self;
-}
-
-=end legacy
-
-=cut
-
 sub append_file {
 
         my $self 	= shift;
@@ -3439,26 +3346,18 @@ sub _next_index {
 		scalar(@{$_[0]->{'History'}{$_[1]||$_[0]->Transaction}}) 		: 0 
 };
 
-
-=head1 SYNOPSIS
-
-    use Mail::IMAPClient;
-    my $imap = Mail::IMAPClient->new( Server => 'imaphost', 
-			  User   => 'memememe',
-			  Password => 'secret',
-    );
-
-    $imap->Debug($opt_d);
-
-    my @folders = $imap->folders;
-
-    foreach my $f (@folders) { 
-
-	print 	"$f is a folder with ",
-		$imap->message_count($f),
-		" messages.\n";
-   }
-
+sub Range {
+	require "Mail/IMAPClient/MessageSet.pm";
+	my $self = shift;
+	my $targ = $_[0];
+	#print "Arg is ",ref($targ),"\n";
+	if (@_ == 1 and ref($targ) =~ /Mail::IMAPClient::MessageSet/ ) {
+		return $targ;
+	}
+	my $range = Mail::IMAPClient::MessageSet->new(@_);
+	#print "Returning $range :",ref($range)," == $range\n";
+	return $range;
+}
 
 =cut
 
@@ -3586,44 +3485,23 @@ Here are some examples:
 
 	use Mail::IMAPClient;
 
-	my $imap = Mail::IMAPClient->new;	# returns an unconnected Mail::IMAPClient object
-	#	...				# intervening code using the 1st object, then:
-	$imap = Mail::IMAPClient->new(		# returns a new, authenticated Mail::IMAPClient object
+	# returns an unconnected Mail::IMAPClient object:
+	my $imap = Mail::IMAPClient->new;	
+	#	...				
+	# intervening code using the 1st object, then:
+	# (returns a new, authenticated Mail::IMAPClient object)
+	$imap = Mail::IMAPClient->new(	
 			Server => $host,
 			User 	=> $id,
 			Password=> $pass,
-			Clear	=> 5,		# Unnecessary since '5' is the default
-	#		...			# Other key=>value pairs go here
+			Clear	=> 5,	# Unnecessary since '5' is the default
+	#		...		# Other key=>value pairs go here
 	)	or die "Cannot connect to $host as $id: $@";
-
-
 
 See also L<"Parameters">, below, and L<"connect"> and L<"login"> for
 information on how to manually connect and login after B<new>.
 
 =cut
-
-=head2 Unconnected
-
-Example:
-
-	$Unconnected = $imap->Unconnected();
-	# or:
-	$imap->Unconnected($new_value);
-
-returns a value equal to the numerical value associated with an object
-in the B<Unconnected> state.
-
-=head2 Connected
-
-Example:
-
-	$Connected = $imap->Connected();
-	# or:
-	$imap->Connected($new_value);
-
-returns a value equal to the numerical value associated with an object
-in the B<Connected> state.
 
 =head2 Authenticated
 
@@ -3636,16 +3514,20 @@ Example:
 returns a value equal to the numerical value associated with an object
 in the B<Authenticated> state.
 
-=head2 Selected
+<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
+will usually want to use those methods instead of one of the above.
+
+=head2 Connected
 
 Example:
 
-	$Selected = $imap->Selected();
+	$Connected = $imap->Connected();
 	# or:
-	$imap->Selected($new_value);
+	$imap->Connected($new_value);
 
 returns a value equal to the numerical value associated with an object
-in the B<Selected> state.
+in the B<Connected> state.
 
 <NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
 L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
@@ -3657,8 +3539,8 @@ Example:
 
 	$imap->search(HEADER => 'Message-id' => $imap->Quote($msg_id));
 
-The B<Quote> method accepts a value as an argument.  It returns its argument as a 
-correctly quoted string or a literal string.
+The B<Quote> method accepts a value as an argument.  It returns its 
+argument as a correctly quoted string or a literal string.
 
 Note that you should not use this on folder names, since methods that accept
 folder names as an argument will quote the folder name arguments appropriately
@@ -3696,17 +3578,99 @@ On the other hand:
 	# CORRECT! Sends this to imap server: 
 	#<TAG> [UID] STORE +FLAGS (\Deleted)\r\n
 
-In the above, I had to abandon the many methods available to B<Mail::IMAPClient>
-programmers (such as L<delete_message> and all-lowercase L<search>) for the sake
-of coming up with an example. However, there are times when unexpected values in
-certain places will for you to B<Quote>. An example is RFC822 Message-id's, which 
-usually don't contain quotes or parens. Usually you won't worry about it, until 
-suddenly searches for certain message-id's fail for no apparent reason. (A failed 
-search is not simply a search that returns no hits; it's a search that flat out 
-didn't happen.) This normally happens to me at about 5:00 pm on a day when I 
-was hoping to leave on time. 
+In the above, I had to abandon the many methods available to 
+B<Mail::IMAPClient> programmers (such as L<delete_message> and all-lowercase 
+L<search>) for the sake of coming up with an example. However, there are 
+times when unexpected values in certain places will for you to B<Quote>. 
+An example is RFC822 Message-id's, which usually don't contain quotes or 
+parens. Usually you won't worry about it, until suddenly searches for certain 
+message-id's fail for no apparent reason. (A failed search is not simply a 
+search that returns no hits; it's a search that flat out didn't happen.) 
+This normally happens to me at about 5:00 pm on a day when I was hoping to 
+leave on time. 
 
-=head2 message_count
+=head2 Range
+
+Example:
+	
+	my %parsed = $imap->parse_headers(
+				$imap->Range($imap->messages),
+				"Date",
+				"Subject"
+	);
+
+The B<Range> method will condense a list of message sequence numbers or
+message UID's into the most compact format supported by RFC2060. It accepts
+one or more arguments, each of which can be:
+
+=over 8
+
+=item a) a message number,
+
+=item b) a comma-separated list of message numbers,
+
+=item c) a colon-separated range of message numbers (i.e. "$begin:$end")
+
+=item d) a combination of messages and message ranges, separated by commas
+(i.e. 1,3,5:8,10), or
+
+=item e) a reference to an array whose elements are like I<a)> through I<d)>.
+
+The B<Range> method returns a reference to a B<Mail::IMAPClient::MessageSet>
+object. The object has all kinds of magic properties, one of which being that
+if you treat it as if it were just a string it will act like it's just a 
+string. This means you can ignore its objectivity and just treat it like a
+string whose value is your message set expressed in compact format.
+
+You may want to use this method if you find that fetch operations on large
+message sets seem to take a really long time, or if your server rejects
+these requests with the claim that the input line is too long. You may also
+want to use this if you need to add or remove messages to your message set
+and want an easy way to manage this. 
+
+For more information on the capabilities of the returned object reference,
+see L<Mail::IMAPClient::MessageSet>.
+
+=head2 Rfc2060_date
+
+Example:
+
+	$Rfc2060_date = $imap->Rfc2060_date($seconds);
+	# or:
+	$Rfc2060_date = Mail::IMAPClient->Rfc2060_date($seconds);
+
+The B<Rfc2060_date> method accepts one input argument, a number of
+seconds since the epoch date. It returns an RFC2060 compliant date
+string for that date (as required in date-related arguments to SEARCH,
+such as "since", "before", etc.). 
+
+=head2 Rfc822_date
+
+Example:
+
+	$Rfc822_date = $imap->Rfc822_date($seconds);
+	# or:
+	$Rfc822_date = Mail::IMAPClient->Rfc822_date($seconds);
+
+The B<Rfc822_date> method accepts one input argument, a number of
+seconds since the epoch date. It returns an RFC822 compliant date
+string for that date (without the 'Date:' prefix). Useful for putting
+dates in message strings before calling L<append>, L<search>, etcetera.
+
+=head2 Selected
+
+Example:
+
+	$Selected = $imap->Selected();
+	# or:
+	$imap->Selected($new_value);
+
+returns a value equal to the numerical value associated with an object
+in the B<Selected> state.
+
+<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
+will usually want to use those methods instead of one of the above.
 
 =head2 Strip_cr
 
@@ -3741,32 +3705,20 @@ B<NOTE: Strip_cr> does not remove new line characters.
 
 =cut
 
-=head2 Rfc2060_date
+=head2 Unconnected
 
 Example:
 
-	$Rfc2060_date = $imap->Rfc2060_date($seconds);
+	$Unconnected = $imap->Unconnected();
 	# or:
-	$Rfc2060_date = Mail::IMAPClient->Rfc2060_date($seconds);
+	$imap->Unconnected($new_value);
 
-The B<Rfc2060_date> method accepts one input argument, a number of
-seconds since the epoch date. It returns an RFC2060 compliant date
-string for that date (as required in date-related arguments to SEARCH,
-such as "since", "before", etc.). 
+returns a value equal to the numerical value associated with an object
+in the B<Unconnected> state.
 
-=head2 Rfc822_date
-
-Example:
-
-	$Rfc822_date = $imap->Rfc822_date($seconds);
-	# or:
-	$Rfc822_date = Mail::IMAPClient->Rfc822_date($seconds);
-
-The B<Rfc822_date> method accepts one input argument, a number of
-seconds since the epoch date. It returns an RFC822 compliant date
-string for that date (without the 'Date:' prefix). Useful for putting
-dates in message strings before calling L<append>, L<search>, etcetera.
-
+<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
+will usually want to use those methods instead of one of the above.
 
 =head1 OBJECT METHODS
 
