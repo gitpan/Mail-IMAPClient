@@ -1,5 +1,34 @@
 Revision History for Perl extension Mail::IMAPClient.
 
+Changes in version 2.1.3
+------------------------
+Added the new method append_string. It works similarly to append but will allow extra arguments
+to supply the flags and internal date of the appended message. See the pod for more details.
+(Thanks to Federico Edelman Anaya for suggesting this fix.)
+
+Fixed a bug in the AUTOLOAD subroutine that caused "myrights" (and possibly other non-existant methods)
+to fail. Thanks go to Larry Rosenbaum for reporting the bug and identifying the fix.
+
+Added the new method Escaped_results, which preprocesses results so that data containing certain
+special characters are returned quoted with special characters (like quotes!) escaped. (I needed
+this for the bodystructure stuff, below.)
+
+NEW! Added support for parsing bodystructures (as provided in the server response to 
+FETCH BODYSTRUCTURE). This support requires Parse::RecDescent and is implemented via two 
+new modules, Mail::IMAPClient::BodyStructure and Mail::IMAPClient::Parse. Note that the latter 
+module is used by the former; your programs need not and should not use it directly so don't. 
+Also, these modules are ALPHA and EXPERIMENTAL so no screaming when they don't work. (Polite bug 
+reports will of course be gratefully accepted.) Many thanks to Damian Conway, the author of 
+Parse::RecDescent, without which this feature would not have been possible (or at least not very
+likely).
+
+Enhanced support for DOS systems (and DOS's offspring, such as windows) by removing the "\c\n"s 
+and replacing them with "\x0d\x0a". Thanks go to Marcio Marchini for his help with this effort.
+
+Fixed the listed of symbols imported along with Fcntl.pm. (Paul Linder asked me to put this in 
+the last release but I forgot.)
+
+
 Changes in version 2.1.2
 ------------------------
 

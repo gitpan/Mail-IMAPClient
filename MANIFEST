@@ -1,6 +1,8 @@
 Changes
 Todo
 IMAPClient.pm
+BodyStructure/BodyStructure.pm
+Parse/Parse.pm
 INSTALL
 MANIFEST
 README
@@ -43,3 +45,7 @@ docs/rfc2342.txt
 docs/rfc2359.txt
 docs/rfc2683.txt
 docs/draft-ietf-imapext-sort-06.txt
+Parse/Makefile.PL
+Parse/t/parse.t
+BodyStructure/Makefile.PL
+BodyStructure/t/bodystructure.t

@@ -2,10 +2,10 @@ package Mail::IMAPClient;
 
 # $Id: IMAPClient.pm,v 20001010.9 2001/02/07 20:19:50 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.1.2';
-$Mail::IMAPClient::VERSION = '2.1.2';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.1.3';
+$Mail::IMAPClient::VERSION = '2.1.3';  	# do it twice to make sure it takes
 
-use Fcntl qw(F_GETFL F_SETFL);
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
 use IO::Socket();
 use IO::Select();
@@ -50,8 +50,8 @@ sub _do_accessor {
       eval { $fcntl=fcntl($_[0]->{Socket}, F_GETFL, 0) } ;
       if ($@) {
       $_[0]->{Fast_io} = 0;
-      warn ref($_[0]) . " not using Fast_IO; not available on this platform.\n"
-        if ( $^W or $_[0]->Debug);
+      carp ref($_[0]) . " not using Fast_IO; not available on this platform"
+        if ( ( $^W or $_[0]->Debug) and not $_[0]->{_fastio_warning_}++);
       } else {
       $_[0]->{Fast_io} = 1;
       $_[0]->{_fcntl} = $fcntl;
@@ -143,11 +143,11 @@ return          sprintf(
 sub Strip_cr {
 	my $class = shift;
 	unless ( ref($_[0]) or scalar(@_) > 1 ) {
-		(my $string = $_[0]) =~ s/\r\n/\n/gm;
+		(my $string = $_[0]) =~ s/\x0d\x0a/\x0a/gm;
 		return $string;
 	}
-	return wantarray ?     	map { s/\r\n/\n/gm ; $_ }  (ref($_[0]) ? @{$_[0]}  : @_)  : 
-				[ map { s/\r\n/\n/gm ; $_ } ref($_[0]) ? @{$_[0]} : @_ ] ;
+	return wantarray ?     	map { s/\x0d\x0a/\0a/gm ; $_ }  (ref($_[0]) ? @{$_[0]}  : @_)  : 
+				[ map { s/\x0d\x0a/\x0a/gm ; $_ } ref($_[0]) ? @{$_[0]} : @_ ] ;
 }
 
 # The following defines a special method to deal with the Clear parameter:
@@ -265,7 +265,7 @@ sub login {
 	# $self->folders and $self->separator unless $self->NoAutoList;
 	unless ( $self->IsAuthenticated) {
 		my($carp) 	=  $self->LastError;
-		$carp 		=~ s/^[\S]+ ([^\r\n]*)\r?\n/$1/;
+		$carp 		=~ s/^[\S]+ ([^\x0d\x0a]*)\x0d?\x0a/$1/;
  		carp $carp unless defined wantarray;
 		return undef;
 	}
@@ -356,7 +356,7 @@ sub subscribed {
 	my $m;
 
 	for ($m = 0; $m < scalar(@list); $m++ ) {
-		if ($list[$m] && $list[$m]  !~ /\r\n$/ ) {
+		if ($list[$m] && $list[$m]  !~ /\x0d\x0a$/ ) {
 			$list[$m] .= $list[$m+1] ;
 			$list[$m+1] = "";	
 		}
@@ -369,7 +369,7 @@ sub subscribed {
                         /       ^\*\s+LSUB               # * LSUB
                                 \s+\([^\)]*\)\s+         # (Flags)
                                 (?:"[^"]*"|NIL)\s+	 # "delimiter" or NIL
-                                (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
+                                (?:"([^"]*)"|(.*))\x0d\x0a$  # Name or "Folder name"
                         /ix;
 
         } 
@@ -426,7 +426,7 @@ sub getacl {
 			
 			$perm = $history[$x] =~ /^\* ACL $/ ? $history[++$x].$history[++$x] : 
 				$history[$x];		
-			$perm =~ s/\s?\r\n$//;
+			$perm =~ s/\s?\x0d\x0a$//;
 			piece:  until ( $perm =~ /\Q$target\E"?$/ or !$perm) {
 				#$self->_debug(qq(Piece: permline=$perm and pattern = /\Q$target\E"? \$/));
 				$perm =~ s/\s([^\s]+)\s?$// or last piece;
@@ -497,7 +497,7 @@ sub message_string {
 	}      
 	# BUG? should probably return undef if length != expected
 	if ( length($string) != $expected_size ) { 
-		warn "${self}::message_string: expected $expected_size bytes but received " . 
+		carp "${self}::message_string: expected $expected_size bytes but received " . 
 		length($string) 
 			if $self->Debug or $^W; 
 	}
@@ -507,6 +507,30 @@ sub message_string {
 			length($string)."\n");
 		return undef;
 	}
+	return $string;
+}
+
+sub bodypart_string {
+	my($self, $msg, $partno) = @_;
+
+	unless ( $self->has_capability('IMAP4REV1') ) {
+		$self->LastError(
+				"Unable to get body part; server " . 
+				$self->Server . 
+				" does not support IMAP4REV1"
+		);
+		return undef;
+	}
+
+	my $cmd = "BODY" . ( $self->Peek ? ".PEEK[$partno]" : "[$partno]" ) 	;
+
+	$self->fetch($msg,$cmd) or return undef;
+	
+	my $string = "";
+
+	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
+              $string .= $result->[DATA] if $self->_is_literal($result) ;
+	}      
 	return $string;
 }
 
@@ -526,6 +550,7 @@ sub message_to_file {
 			carp $@ if $^W;
 			return undef;
 		}
+		binmode $handle;	# For those of you who need something like this...
 	} 
 
         my $clear = "";
@@ -542,7 +567,7 @@ sub message_to_file {
 
         $string         = "$trans $string" ;
 
-        $self->_record($trans,[ 0, "INPUT", "$string\r\n"] );
+        $self->_record($trans,[ 0, "INPUT", "$string\x0d\x0a"] );
 
         my $feedback = $self->_send_line("$string");
 
@@ -618,7 +643,7 @@ sub body_string {
 			$self->LastError("Unable to parse server response from " . $self->LastIMAPCommand );
 			return undef ;
 	}
-	my $popped ; $popped = pop @$ref until $popped =~ /\)\r\n$/ or not grep(/\)\r\n$/,@$ref);
+	my $popped ; $popped = pop @$ref until $popped =~ /\)\x0d\x0a$/ or not grep(/\)\x0d\x0a$/,@$ref);
 
         if      ($head =~ /BODY\[TEXT\]\s*$/i )     {       # Next line is a literal
                         $string .= shift @$ref while scalar(@$ref);
@@ -677,7 +702,7 @@ sub _imap_command {
 
 	$string 	= "$count $string" ;
 
-	$self->_record($count,[ 0, "INPUT", "$string\r\n"] );
+	$self->_record($count,[ 0, "INPUT", "$string\x0d\x0a"] );
 
 	my $feedback = $self->_send_line("$string");
 
@@ -730,7 +755,7 @@ sub run {
 	$self->Clear($clear) 
 		if $self->Count >= $clear and $clear > 0;
 
-	$self->_record($count,[ $self->_next_index($count), "INPUT", "$string\r\n"] );
+	$self->_record($count,[ $self->_next_index($count), "INPUT", "$string\x0d\x0a"] );
 
 	my $feedback = $self->_send_line("$string");
 
@@ -796,19 +821,19 @@ sub _send_line {
 		return undef;
 	}
 
-	unless ($string =~ /\r\n$/ or $suppress ) {
+	unless ($string =~ /\x0d\x0a$/ or $suppress ) {
 
 		chomp $string;
-		$string .= "\r" unless $string =~ /\r$/;	
-		$string .= "\n" ;
+		$string .= "\x0d" unless $string =~ /\x0d$/;	
+		$string .= "\x0a" ;
 	}
-	if ( $string =~ /^[^\n{]*\{(\d+)\}\r\n/ ) {
+	if ( $string =~ /^[^\x0a{]*\{(\d+)\}\x0d\x0a/ ) {
 		my($p1,$p2,$len) ;
-		if ( ($p1,$len)   = $string =~ /^([^\n{]*\{(\d+)\}\r\n)/ 		# } for vi
+		if ( ($p1,$len)   = $string =~ /^([^\x0a{]*\{(\d+)\}\x0d\x0a)/ 		# } for vi
 			and  (
 				$len < 32766 ? 
-				( ($p2) = $string =~ /^[^\n{]*\{\d+\}\r\n(.{$len}.*\r\n)/  ) :	
-				( ($p2) = $string =~ /^[^\n{]*\{\d+\}\r\n(.*\r\n)/ and length($p2) == $len  )
+				( ($p2) = $string =~ /^[^\x0a{]*\{\d+\}\x0d\x0a(.{$len}.*\x0d\x0a)/  ) :	
+				( ($p2) = $string =~ /^[^\x0a{]*\{\d+\}\x0d\x0a(.*\x0d\x0a)/ and length($p2) == $len  )
 				# }} for vi
 			)
 		) {
@@ -1020,7 +1045,7 @@ sub _read_line {
 		$readlen = $self->{Buffer}||4096;
 	}
 	until (		scalar(@$oBuffer) 			and 	# stuff in output buffer
-                      $oBuffer->[-1][DATA]    =~ /\r\n$/      and     # the last thing there has cr-lf
+                      $oBuffer->[-1][DATA]    =~ /\x0d\x0a$/      and     # the last thing there has cr-lf
                       $oBuffer->[-1][TYPE]    eq "OUTPUT"     and     # that thing is an output line
 			$iBuffer		eq "" 		# and	# and the input buffer has been MT'ed
 	) {
@@ -1035,10 +1060,10 @@ sub _read_line {
 					[	$self->_next_index($transno),
 						"ERROR",
 						"$transno * NO Timeout after $timeout seconds " .
-						"during read from server\r\n"
+						"during read from server\x0d\x0a"
 					]
 				);
-				$@ = "Timeout after $timeout seconds during read from server\r\n";
+				$@ = "Timeout after $timeout seconds during read from server\x0d\x0a";
 				carp "Timeout after $timeout seconds during read from server: $!" 
 					if $self->Debug or $^W;
 				return undef;
@@ -1052,7 +1077,7 @@ sub _read_line {
               my $ret = sysread( $sh, $iBuffer, $readlen, length($iBuffer)) ;
 		# $self->_debug("Read so far: $iBuffer<<END>>\n");
               if($timeout and ! defined($ret)) { # Blocking read error...
-                  my $msg = "Error while reading data from server: $!\r\n";
+                  my $msg = "Error while reading data from server: $!\x0d\x0a";
                   $self->_record($transno,
                                  [ $self->_next_index($transno),
                                    "ERROR", "$transno * NO $msg "
@@ -1061,7 +1086,7 @@ sub _read_line {
                   return undef;
               }
               elsif(defined($ret) and $ret == 0) {    # Caught EOF...
-                  my $msg="Socket closed while reading data from server.\r\n";
+                  my $msg="Socket closed while reading data from server.\x0d\x0a";
                   $self->_record($transno,
                                  [ $self->_next_index($transno),
                                    "ERROR", "$transno * NO $msg "
@@ -1071,13 +1096,13 @@ sub _read_line {
               }
               # successfully wrote to other end, keep going...
               $count += $ret;
-		LINES: while ( $iBuffer =~ s/^(.*?\r?\n)// ) {
+		LINES: while ( $iBuffer =~ s/^(.*?\x0d?\x0a)// ) {
 		   my $current_line = $1;
 
 		   # $self->_debug("BUFFER: pulled from buffer: <BEGIN>${current_line}<END>\n" .
 		   # 	"and left with buffer contents of: <BEGIN>${iBuffer}<END>\n");
 
-		   LITERAL: if ($current_line =~ s/\{(\d+)\}\r\n$//) {
+		   LITERAL: if ($current_line =~ s/\{(\d+)\}\x0d\x0a$//) {
 			# This part handles IMAP "Literals", which according to rfc2060 look something like this:
 			# [tag]|* BLAH BLAH {nnn}\r\n
 			# [nnn bytes of literally transmitted stuff]
@@ -1131,7 +1156,7 @@ sub _read_line {
 					$self->_record($transno, [ 
 							$self->_next_index($transno),
 							"ERROR",
-							"$transno * NO Error reading data from server: $!\r\n"	
+							"$transno * NO Error reading data from server: $!\n"	
 						]
 					);
 					return undef;
@@ -1140,7 +1165,7 @@ sub _read_line {
 							$self->_next_index($transno),
 							"ERROR",
 							"$transno * ".
-							"BYE Server unexpectedly closed connection: $!\r\n"	
+							"BYE Server unexpectedly closed connection: $!\n"	
 						]
 					);
 					$self->State(Unconnected);
@@ -1159,9 +1184,9 @@ sub _read_line {
 			# (There shouldn't be but I've seen it done!)
 
 			my $embedded_output = 0;
-			my $lastline = ( split(/\r?\n/,$litstring))[-1] if $litstring;
+			my $lastline = ( split(/\x0d?\x0a/,$litstring))[-1] if $litstring;
 			if ( $lastline and $lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i ) {
-				$litstring =~ s/\Q$lastline\E\r?\n//;
+				$litstring =~ s/\Q$lastline\E\x0d?\x0a//;
 				$embedded_output++;
 				$self->_debug("Got server output mixed in with literal: ",
 						"$lastline\n") 
@@ -1222,6 +1247,27 @@ sub History {
 
 }
 
+sub Escaped_results {
+	my @a;
+	foreach  my $line (@{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}} ) {
+		if (  $_[0]->_is_literal($line) ) { 
+			$line->[DATA] =~ s/([\\\(\)"\x0d\x0a])/\\$1/g ;
+			push @a, qq("$line->[DATA]");
+		} else {
+      			push @a, $line->[DATA] ;
+		}
+	}
+	shift @a;	# $a[0] is the ALWAYS the command ; I make sure of that in _imap_command
+	return wantarray ? @a : \@a ;
+
+}
+
+sub Unescape {
+	shift @_ if $_[1];
+	my $whatever = shift;
+	$whatever =~ s/\\([\\\(\)"\x0d\x0a])/$1/g ;
+	return $whatever;
+}
 
 sub logout {
 	my $self = shift;
@@ -1251,11 +1297,11 @@ sub folders {
 	for ($m = 0; $m < scalar(@list); $m++ ) {
 		# $self->_debug("Folders: examining $list[$m]\n");
 
-		if ($list[$m] && $list[$m]  !~ /\r\n$/ ) {
+		if ($list[$m] && $list[$m]  !~ /\x0d\x0a$/ ) {
 			$self->_debug("folders: concatenating $list[$m] and " . $list[$m+1] . "\n") ;
 			$list[$m] .= $list[$m+1] ;
 			$list[$m+1] = "";	
-			$list[$m] .= "\r\n" unless $list[$m] =~ /\r\n$/;
+			$list[$m] .= "\x0d\x0a" unless $list[$m] =~ /\x0d\x0a$/;
 		}
 			
 		
@@ -1265,7 +1311,7 @@ sub folders {
                         /       ^\*\s+LIST               # * LIST
                                 \s+\([^\)]*\)\s+         # (Flags)
                                 (?:"[^"]*"|NIL)\s+	 # "delimiter" or NIL
-                                (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
+                                (?:"([^"]*)"|(.*))\x0d\x0a$  # Name or "Folder name"
                         /ix;
 		# $self->_debug("folders: line $list[$m]: 1=$1 and 2=$2\n");
         } 
@@ -1285,6 +1331,14 @@ sub exists {
 	return undef;
 }
 	
+sub get_bodystructure {
+	my($self,$msg) = @_;
+	unless ( eval {require Mail::IMAPClient::BodyStructure ; 1 } ) {
+		$self->LastError("Unable to use get_bodystructure: $@\n");
+		return undef;
+	}
+	return Mail::IMAPClient::BodyStructure->new(grep(/bodystructure \(/i,$self->fetch("BODYSTRUCTURE",$msg)));
+}
 	
 sub fetch {
 
@@ -1304,11 +1358,12 @@ sub AUTOLOAD {
 	my $self = shift;
 	return undef if $Mail::IMAPClient::AUTOLOAD =~ /DESTROY$/;
 	delete $self->{Folders}  ;
-	$Mail::IMAPClient::AUTOLOAD =~ s/.*:://;
+	my $autoload = $Mail::IMAPClient::AUTOLOAD;
+	$autoload =~ s/.*:://;
 	if (	
 			$^W
-		and	$Mail::IMAPClient::AUTOLOAD =~ /^[a-z]+$/
-		and	$Mail::IMAPClient::AUTOLOAD !~ 
+		and	$autoload =~ /^[a-z]+$/
+		and	$autoload !~ 
 				/^	(?:
 						store	 |
 						copy	 |
@@ -1320,46 +1375,46 @@ sub AUTOLOAD {
 					)$
 				/x 
 	) {
-		carp 	"$Mail::IMAPClient::AUTOLOAD is all lower-case. " .
+		carp 	"$autoload is all lower-case. " .
 			"May conflict with future methods. " .
 			"Change method name to be mixed case or all upper case to ensure upward compatability"
 	}
 	if (scalar(@_)) {
 		my @a = @_;
 		if (	
-			$Mail::IMAPClient::AUTOLOAD =~ 
+			$autoload =~ 
 				/^(?:subscribe|delete|myrights)$/i
 		) {
 			$a[-1] = $self->Massage($a[-1]) ;
 		} elsif (	
-			$Mail::IMAPClient::AUTOLOAD =~ 
+			$autoload =~ 
 				/^(?:create)$/i
 		) {
 			$a[0] = $self->Massage($a[0]) ;
 		} elsif (
-			$Mail::IMAPClient::AUTOLOAD =~ /^(?:store|copy)$/i
+			$autoload =~ /^(?:store|copy)$/i
 		) {
-			$Mail::IMAPClient::AUTOLOAD = "UID $Mail::IMAPClient::AUTOLOAD"
+			$autoload = "UID $autoload"
 				if $self->Uid;
 		} elsif (
-			$Mail::IMAPClient::AUTOLOAD =~ /^(?:expunge)$/i and defined($_[0])
+			$autoload =~ /^(?:expunge)$/i and defined($_[0])
 		) {
 			my $old;
 			if ( $_[0] ne $self->Folder ) {
 				$old = $self->Folder; $self->select($_[0]); 
 			} 	
-			my $succ = $self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD/) ;
+			my $succ = $self->_imap_command(qq/$autoload/) ;
 			$self->select($old);
 			return undef unless $succ;
 			return wantarray ? 	$self->History($self->Count) 	: 
                                               map {$_->[DATA]}@{$self->{'History'}{$self->Count}}     ;
 			
 		}
-		_debug $self, "Autoloading: $Mail::IMAPClient::AUTOLOAD " . join(" ",@a) ,"\n" if $self->Debug;
-		return undef unless $self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD / . join(" ",@a) )  ;
+		_debug $self, "Autoloading: $autoload " . join(" ",@a) ,"\n" if $self->Debug;
+		return undef unless $self->_imap_command(qq/$autoload / . join(" ",@a) )  ;
 	} else {
-		$self->Folder(undef) if $Mail::IMAPClient::AUTOLOAD =~ /^(?:close)/i ; 
-		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD/) or return undef;
+		$self->Folder(undef) if $autoload =~ /^(?:close)/i ; 
+		$self->_imap_command(qq/$autoload/) or return undef;
 	}
 	return wantarray ? 	$self->History($self->Count) 	: 
                               [map {$_->[DATA] } @{$self->{'History'}{$self->Count}}] ;
@@ -1504,7 +1559,7 @@ sub parse_headers {
 	my $headers = {};	# hash from message ids to header hash
 	my $h = 0;		# reference to hash of current msgid, or 0 between msgs
 	
-        for my $header (map { split(/(?:\r\n)/,$_) } @raw) {
+        for my $header (map { split(/(?:\x0d\x0a)/,$_) } @raw) {
                 local($^W) = undef;
                 if ( $header =~ /^\*\s+\d+\s+FETCH\s+\(.*BODY\[HEADER(?:\]|\.FIELDS)/i) {
                         if ($self->Uid) {
@@ -1625,7 +1680,7 @@ sub parse_headers2 {
 	my $headers = {};	# hash from message ids to header hash
 	my $h = 0;		# reference to hash of current msgid, or 0 between msgs
 	
-       	for my $header (map { split(/(?:\r\n)/,$_) } @raw) {
+       	for my $header (map { split(/(?:\x0d\x0a)/,$_) } @raw) {
 		local($^W) = undef;
 		my $pattern = $self->Uid ? 	'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
                	if (	my($msgid) = $header =~ /$pattern/ 
@@ -1941,7 +1996,7 @@ sub namespace {
 			carp "$@" if $^W;
 	}
 	my $namespace = (map({ /^\* NAMESPACE (.*)/ ? $1 : () } @{$self->_imap_command("NAMESPACE")->Results}))[0] ;
-	$namespace =~ s/\r?\n$//;
+	$namespace =~ s/\x0d?\x0a$//;
 	my($personal,$shared,$public) = $namespace =~ m#
 		(NIL|\((?:\([^\)]+\)\s*)+\))\s
 		(NIL|\((?:\([^\)]+\)\s*)+\))\s
@@ -1983,7 +2038,7 @@ sub is_parent {
         for (my $m = 0; $m < scalar(@$list); $m++ ) {
 		#$self->_debug("Judging whether or not $list->[$m] is fit for parenthood\n");
 		return undef if $list->[$m] =~ /NoInferior/i; 	# let's not beat around the bush
-                if ($list->[$m]  =~ s/(\{\d+\})\r\n$// ) {
+                if ($list->[$m]  =~ s/(\{\d+\})\x0d\x0a$// ) {
                         $list->[$m] .= $list->[$m+1];
                         $list->[$m+1] = "";
                 }
@@ -1993,7 +2048,7 @@ sub is_parent {
                         /       ^\*\s+LIST              # * LIST
                                 \s+\([^\)]*\)\s+            # (Flags)
                                 "[^"]*"\s+              # "delimiter"
-                                (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
+                                (?:"([^"]*)"|(.*))\x0d\x0a$  # Name or "Folder name"
                         /x;
 	}	
 	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\s*\)/ if $line;
@@ -2006,14 +2061,27 @@ sub is_parent {
 	}
 }
 
-
-sub append {
+sub append_string {
 
         my $self = shift;
         my $folder = $self->Massage(shift);
 
-	my $text = join("\r\n",@_);
-	$text =~ s/\r?\n/\r\n/g;
+	my $text = shift;
+	$text =~ s/\x0d?\x0a/\x0d\x0a/g;
+ 
+	my($flags,$date) = (shift,shift);
+
+	if (defined($flags)) {
+		$flags =~ s/^\s+//g;
+		$flags =~ s/\s+$//g;
+	}
+
+	if (defined($date)) {
+		$date =~ s/^\s+//g;
+		$date =~ s/\s+$//g;
+	}
+
+	$flags = "($flags)" if $flags and $flags !~ /^\(.*\)$/ ;
 
         my $clear = $self->Clear;
 
@@ -2022,9 +2090,115 @@ sub append {
 
 	my $count 	= $self->Count($self->Count+1);
 
-        my $string = "$count APPEND $folder {" . length($text)  . "}\r\n" ;
+        my $string = 	  "$count APPEND $folder "  	  . 
+			( $flags ? "$flags " : "" 	) . 
+			( $date ? "$date " : "" 	) . 
+			"{" . length($text)  . "}\x0d\x0a" ;
 
-        $self->_record($count,[ $self->_next_index($count), "INPUT", "$string\r\n" ] );
+        $self->_record($count,[ $self->_next_index($count), "INPUT", "$string\x0d\x0a" ] );
+
+	# Step 1: Send the append command.
+
+	my $feedback = $self->_send_line("$string");
+
+	unless ($feedback) {
+		$self->LastError("Error sending '$string' to IMAP: $!\n");
+		return undef;
+	}
+
+	my ($code, $output) = ("","");	
+	
+	# Step 2: Get the "+ go ahead" response
+	until ( $code ) {
+		$output = $self->_read_line or return undef;	
+		foreach my $o (@$output) { 
+
+			$self->_record($count,$o);	# $o is already an array ref
+			next unless $self->_is_output($o);
+
+                      ($code) = $o->[DATA] =~ /(^\+|^\d*\s*NO|^\d*\s*BAD)/i ;
+
+                      if ($o->[DATA] =~ /^\*\s+BYE/i) {
+                              $self->LastError("Error trying to append string: " . 
+						$o->[DATA]. "; Disconnected.\n");
+                              $self->_debug("Error trying to append string: " . $o->[DATA]. 
+					"; Disconnected.\n");
+                              carp("Error trying to append string: " . $o->[DATA] ."; Disconnected") if $^W;
+				$self->State(Unconnected);
+
+                      } elsif ( $o->[DATA] =~ /^\d*\s*(NO|BAD)/i ) { # i and / transposed!!!
+                              $self->LastError("Error trying to append string: " . $o->[DATA]  . "\n");
+                              $self->_debug("Error trying to append string: " . $o->[DATA] . "\n");
+                              carp("Error trying to append string: " . $o->[DATA]) if $^W;
+				return undef;
+			}
+		}
+	}	
+	
+	$self->_record($count,[ $self->_next_index($count), "INPUT", "$text\x0d\x0a" ] );
+
+	# Step 3: Send the actual text of the message:
+        $feedback = $self->_send_line("$text\x0d\x0a");
+
+        unless ($feedback) {
+                $self->LastError("Error sending append msg text to IMAP: $!\n");
+                return undef;
+        }
+	$code = undef;			# clear out code
+
+	# Step 4: Figure out the results:
+        until ($code) {
+                $output = $self->_read_line or return undef;
+              $self->_debug("Append results: " . map({ $_->[DATA] } @$output) . "\n" )
+			if $self->Debug;
+                foreach my $o (@$output) {
+			$self->_record($count,$o); # $o is already an array ref
+
+                      ($code) = $o->[DATA] =~ /^(?:$count|\*) (OK|NO|BAD)/im  ;
+			
+                      if ($o->[DATA] =~ /^\*\s+BYE/im) {
+				$self->State(Unconnected);
+                              $self->LastError("Error trying to append: " . $o->[DATA] . "\n");
+                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
+                              carp("Error trying to append: " . $o->[DATA] ) if $^W;
+			}
+			if ($code and $code !~ /^OK/im) {
+                              $self->LastError("Error trying to append: " . $o->[DATA] . "\n");
+                              $self->_debug("Error trying to append: " . $o->[DATA] . "\n");
+                              carp("Error trying to append: " . $o->[DATA] ) if $^W;
+				return undef;
+			}
+        	}
+	}
+
+      my($uid) = join("",map { $_->[TYPE] eq "OUTPUT" ? $_->[DATA] : () } @$output ) =~ m#\s+(\d+)\]#;
+
+        return defined($uid) ? $uid : $self;
+}
+sub append {
+
+        my $self = shift;
+	# now that we're passing thru to append_string we won't massage here
+        # my $folder = $self->Massage(shift); 
+        my $folder = shift;
+
+	my $text = join("\x0d\x0a",@_);
+	$text =~ s/\x0d?\x0a/\x0d\x0a/g;
+	return $self->append_string($folder,$text);
+}
+
+=begin legacy
+
+        my $clear = $self->Clear;
+
+        $self->Clear($clear)
+                if $self->Count >= $clear and $clear > 0;
+
+	my $count 	= $self->Count($self->Count+1);
+
+        my $string = "$count APPEND $folder {" . length($text)  . "}\x0d\x0a" ;
+
+        $self->_record($count,[ $self->_next_index($count), "INPUT", "$string\x0d\x0a" ] );
 
 	# Step 1: Send the append command.
 
@@ -2062,10 +2236,10 @@ sub append {
 		}
 	}	
 	
-	$self->_record($count,[ $self->_next_index($count), "INPUT", "$text\r\n" ] );
+	$self->_record($count,[ $self->_next_index($count), "INPUT", "$text\x0d\x0a" ] );
 
 	# Step 3: Send the actual text of the message:
-        $feedback = $self->_send_line("$text\r\n");
+        $feedback = $self->_send_line("$text\x0d\x0a");
 
         unless ($feedback) {
                 $self->LastError("Error sending append msg text to IMAP: $!\n");
@@ -2103,6 +2277,10 @@ sub append {
         return defined($uid) ? $uid : $self;
 }
 
+=end legacy
+
+=cut
+
 sub append_file {
 
         my $self 	= shift;
@@ -2126,7 +2304,7 @@ sub append_file {
 		return undef;
 	}
 
-	my $bare_nl_count = scalar grep { /^\n$|[^\r]\n$/} <$fh>;
+	my $bare_nl_count = scalar grep { /^\x0a$|[^\x0d]\x0a$/} <$fh>;
 
 	seek($fh,0,0);
 	
@@ -2137,7 +2315,7 @@ sub append_file {
 
 	my $length = ( -s $file ) + $bare_nl_count;
 
-        my $string = "$count APPEND $folder {" . $length  . "}\r\n" ;
+        my $string = "$count APPEND $folder {" . $length  . "}\x0d\x0a" ;
 
         $self->_record($count,[ $self->_next_index($count), "INPUT", "$string" ] );
 
@@ -2171,9 +2349,9 @@ sub append_file {
 	
 	{ 	# Narrow scope
 		# Slurp up headers: later we'll make this more efficient I guess
-		local $/ = "\r\n\r\n"; 
+		local $/ = "\x0d\x0a\x0d\x0a"; 
 		my $text = <$fh>;
-		$text =~ s/\r?\n/\r\n/g;
+		$text =~ s/\x0d?\x0a/\x0d\x0a/g;
 		$self->_record($count,[ $self->_next_index($count), "INPUT", "{From file $file}" ] ) ;
 		$feedback = $self->_send_line($text);
 
@@ -2183,11 +2361,11 @@ sub append_file {
 			return undef;
 		}
 		_debug $self, "control points to $$control\n" if ref($control) and $self->Debug;
-		$/ = 	ref($control) ?  "\n" : $control ? $control : 	"\n";	
+		$/ = 	ref($control) ?  "\x0a" : $control ? $control : 	"\x0a";	
 		while (defined($text = <$fh>)) {
-			$text =~ s/\r?\n/\r\n/g;
+			$text =~ s/\x0d?\x0a/\x0d\x0a/g;
 			$self->_record(	$count,
-					[ $self->_next_index($count), "INPUT", "{from $file}\r\n" ] 
+					[ $self->_next_index($count), "INPUT", "{from $file}\x0d\x0a" ] 
 			);
 			$feedback = $self->_send_line($text,1);
 
@@ -2197,7 +2375,7 @@ sub append_file {
 				return undef;
 			}
 		}
-		$feedback = $self->_send_line("\r\n");
+		$feedback = $self->_send_line("\x0d\x0a");
 
 		unless ($feedback) {
 			$self->LastError("Error sending append msg text to IMAP: $!\n");
@@ -2258,7 +2436,7 @@ sub authenticate {
 
         my $string = "$count AUTHENTICATE $scheme";
 
-        $self->_record($count,[ $self->_next_index($self->Transaction), "INPUT", "$string\r\n"] );
+        $self->_record($count,[ $self->_next_index($self->Transaction), "INPUT", "$string\x0d\x0a"] );
 
 	my $feedback = $self->_send_line("$string");
 
@@ -2455,7 +2633,7 @@ sub Massage {
 
 
 	if ($arg =~ /["\\]/) {
-		$arg = "{" . length($arg) . "}\r\n$arg" ;
+		$arg = "{" . length($arg) . "}\x0d\x0a$arg" ;
 	} else {
 		$arg = qq("${arg}") unless $arg =~ /^"/;
 	}
@@ -3026,6 +3204,9 @@ carrage return. To protect against this, B<append> will insert a carrage return 
 that is "bare". If you don't like this behavior then you can avoid it by not passing naked newlines 
 to B<append>.
 
+Note that B<append> does not allow you to specify the internal date or initial flags of an appended 
+message. If you need this capability then use B<append_string>, below.
+
 =cut
 
 =item append_file()
@@ -3048,6 +3229,34 @@ In case you're wondering, B<append_file> is provided mostly as a way to allow la
 to be appended without having to have the whole file in memory. It uses the C<-s> operator to
 obtain the size of the file and then reads and sends the contents line by line (or not, depending
 on whether you supplied that optional third argument).
+
+=cut
+
+=item append_string()
+
+The B<append_string> method adds a message to the specified folder. It requires two arguments, the
+name of the folder to append the message to, and the text of the message (including headers).
+The message text must be included in a single string (unlike B<append>, above).
+
+You can optionally specify a third and fourth argument to B<append_string>. The third argument, if
+supplied, is the list of flags to set for the appended message. The list must be specified as a
+space-separated list of flags, including any backslashes that may be necessary. The enclosing 
+parentheses that are required by RFC2060 are optional for B<append_string>. The fourth argument, 
+if specified, is the date to set as the internal date. It should be in the format described for 
+I<date_time> fields in RFC2060, i.e. "dd-Mon-yyyy hh:mm:ss +0000".
+
+If you want to specify a date/time but you don't want any flags then specify I<undef> as 
+the third argument.
+
+The B<append_string> method returns the UID of the new message (a true value) if successful, 
+or undef if not, if the IMAP server has the UIDPLUS capability.  If it doesn't then you just 
+get true on success and undef on failure.
+
+Note that many servers will get really ticked off if you try to append a message that contains
+"bare newlines", which is the titillating term given to newlines that are not preceded by a 
+carrage return. To protect against this, B<append_string> will insert a carrage return before any newline
+that is "bare". If you don't like this behavior then you can avoid it by not passing naked newlines 
+to B<append_string>.
 
 =cut
 
@@ -3347,6 +3556,12 @@ Returns true if the IMAP server to which the B<IMAPClient> object is connected h
 
 B<internaldate> accepts one argument, a message id (or UID if the Uid parameter is true), and returns 
 that message's internal date.
+
+=item get_bodystructure
+
+The B<get_bodystructure> method accepts one argument, a message sequence number or, if I<Uid> is true, 
+a message UID. It obtains the message's body structure and returns a B<Mail::IMAPClient::BodyStructure> 
+object for the message.
 
 =item getacl()
 
@@ -4115,6 +4330,17 @@ for determining the cause of failure when a connection and login are attempted a
 a single B<new> method invocation. The status methods are:
 
 =over 8
+
+=item 0. Escaped_results
+
+The B<Escaped_results> method is almost identical to the B<History> method. Unlike the B<History>
+method, however, server output transmitted literally will be wrapped in double quotes, with all of 
+the parentheses, double quotes, backslashes, newlines, and carrage returns escaped.  If called in 
+a scalar context, B<Escaped_results> returns an array reference rather than an array.
+
+B<Escaped_results> is useful if you are retrieving output and processing it manually, and you are
+depending on the above special characters to delimit the data. It is not useful when 
+retrieving message contents; use B<message_string> or B<body_string> for that.
 
 =item 1. History
 

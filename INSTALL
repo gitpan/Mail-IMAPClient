@@ -18,7 +18,7 @@ but I hope to incorporate more thorough testing in a future version. You should 
 try it and let me know if your tests fail. 
 
 Version 1.0 changed the installation script so that it reuses the parameter file for 
-test.pl if it finds one. Installation can be run in the background if the test.txt file 
+the tests if it finds one. Installation can be run in the background if the test.txt file 
 exists. Touching it is good enough to prevent prompts; having a correctly formatted 
 version (as shown in test_template.txt) is even better, as it will allow you to do a 
 thorough 'make test'. Invalid data in test.txt (either from precreating it or from 
@@ -35,11 +35,14 @@ answer at least one prompt. If you do have a test.txt file, and you run 'make cl
 you won't have a test.txt file anymore, so take precautions. 
 
 If you do have a test.txt file and you don't run 'make clean' then a text file will be sitting 
-around containing logon credentials, so take precautions.
+around containing logon credentials, so take precautions. (It's just a test account anyway, 
+right?)
 
 If, when replying to the "perl Makefile.PL" prompts, you supply server, id, and password 
 credentials for an id that has a ridiculously huge number of folders and subfolders then 
 the 'make test' may run approximately forever. Next time try an id with less stuff. 
+
+As of
 
 For examples on using Mail::IMAPClient, check out the examples subdirectory. If you have 
 better examples, then why haven't you e-mailed them to me? Also, I totally recommend that you

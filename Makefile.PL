@@ -2,11 +2,13 @@ use ExtUtils::MakeMaker;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
 WriteMakefile(
+    'DIR'		=> ['BodyStructure', 'Parse'],
     'NAME'		=> 'Mail::IMAPClient',
     'VERSION_FROM' 	=> 'IMAPClient.pm', # finds $VERSION
     'clean' 		=> {	FILES 	=> 'test.txt'	}
 
 );
+
 
 &set_test_data;
 

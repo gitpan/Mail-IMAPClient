@@ -71,6 +71,17 @@ perl -e "use constant; use Socket; use IO::Socket; use IO::File; use IO::Select;
 
 If you get compile errors then you'll have trouble using Mail::IMAPClient.
 
+If you need to use the bodystructure helper module Mail::IMAPClient::BodyStructure then you also need
+Parse::RecDescent. Try this on the command line:
+
+perl -e "use Parse::RecDescent;"
+
+If you get compile errors then you will not be able to use the Mail::IMAPClient::BodyStructure module (or the
+get_bodystructure method in Mail::IMAPClient). You will also get errors when you run 'make test' in t/bodystructure
+and/or t/parse. If these tests fail you can still use Mail::IMAPClient safely (assuming the other tests passed!) but
+you will not be able to use Mail::IMAPClient::BodyStructure or the get_bodystructure method in Mail::IMAPClient.
+
+
 REPORING BUGS
 
 See the section on "REPORTING BUGS" in the module's documentation if you are having problems.
