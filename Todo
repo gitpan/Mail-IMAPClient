@@ -1,6 +1,5 @@
 The following is a list of some items that I hope to include in a future release:
 
-
 - Currently a number of IMAP Client commands are implemented using the 'default method', which
 is an AUTOLOAD hack. I'd like to reduce that if possible to a bare minimum.
 
@@ -15,6 +14,9 @@ there and with any OS that allows the IO::Socket module to work.
 
 - Support for older/other versions of IMAP. Currently only RFC2060 is explicitly supported, although
 thanks to the 'default method' (implemented via and AUTOLOAD hack) virtually any IMAP command is 
-supported, even proprietary commands, X- extensions, and so forth.
+supported, even proprietary commands, X- extensions, and so forth. But not necessarily other 
+authentication mechanisms... :-(
+
+- Support for other authentication mechanisms, such as NTLM.
 
 

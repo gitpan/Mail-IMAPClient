@@ -1,5 +1,5 @@
 Changes
-TODO
+Todo
 IMAPClient.pm
 INSTALL
 MANIFEST
@@ -10,3 +10,4 @@ Copying
 Artistic
 examples/populate_mailbox.pl
 docs/rfc2060.txt
+

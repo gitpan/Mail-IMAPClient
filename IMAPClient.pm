@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$VERSION = '.09';
-$VERSION = '.09';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '.99';
+$Mail::IMAPClient::VERSION = '.99';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -23,11 +23,12 @@ sub Selected 		{ return 3 ; }		# mailbox selected
 # the following for loop sets up eponymous accessor methods for 
 # the object's parameters:
 
-for my $datum (
+{
+ for my $datum (
 		qw( 	State Port Server Folder
 			User Password Socket 
 			Debug LastError Count	)
-) {
+ ) {
 	no strict 'refs';
         *$datum = sub {
                 if ($_[1]) {
@@ -36,7 +37,31 @@ for my $datum (
                         return $_[0]->{$datum};
                 }
         };
+ }
 }
+
+# The following class method is for creating valid dates in appended msgs:
+
+sub Rfc822_date {
+my $class=      shift;
+#Date: Fri, 09 Jul 1999 13:10:55 -0000#
+my $date =      $class =~ /^\d+$/ ? $class : shift ;
+my @date =      gmtime($date);
+my @dow  =      qw{ Sun Mon Tue Wed Thu Fri Sat };
+my @mnt  =      qw{ Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec};
+#
+return          sprintf(
+                        "%s, %2.2d %s %4.4s %2.2d:%2.2d:%2.2d -%4.4d",
+                        $dow[$date[6]],
+                        $date[3],
+                        $mnt[$date[4]],
+                        $date[5]+=1900,
+                        $date[2],
+                        $date[1],
+                        $date[0],
+                        $date[8]) ;
+}
+
 
 # The following defines a special method to deal with the Clear parameter:
 
@@ -55,8 +80,6 @@ sub Clear {
 	return $oldclear;
 }
 
-my $not_void_context = '0 but true'; 		# return true value
-
 # read-only access to the transaction number:
 sub Transaction { shift->Count };
 
@@ -67,7 +90,7 @@ sub new {
 
 	bless $self, ref($class)||$class;
 
-
+	$self->{Count} = 1;
 	$self->State(Unconnected);
 	if (@_) {
 		my %conf = @_;
@@ -182,7 +205,7 @@ sub _imap_command {
 
 	my $count 	= $self->Count($self->Count+1);
 
-	$string 	= "$count $string";
+	$string 	= "$count $string" ;
 
 	$self->_record($count,"$string\r\n");
 
@@ -194,14 +217,16 @@ sub _imap_command {
 	}
 
 	my ($code, $output);	
+
+	$output = $self->_read_line;	
 	
 	until ( ($code) = $output =~ /^$count (NO|BAD|$good|OK)/) {
-		$output = $self->_read_line;	
 		$self->_record($count,$output);
 		if ($output =~ /^\*\s+BYE/) {
 			$self->State(Unconnected);
 			return undef ;
 		}
+		$output = $self->_read_line;	
 	}	
 	
 	return $code =~ /^OK|$good/ ? $self : undef ;
@@ -214,7 +239,7 @@ sub _record {
 
 	push @{$self->{"History"}{$count}}, $line;
 
-	$self->LastError("$line") if /^\S+\s+(BAD|NO)/;
+	$self->LastError("$line") if $line =~ /^\S+\s+(BAD|NO)/;
 
 	return $self;
 }
@@ -240,12 +265,12 @@ sub _read_line {
 	my $self 	= shift;	
 	my $sh		= $self->Socket;
 	
-	my $buffer	; 
+	my $buffer	= undef; 
 	my $count	= 0;
 
 	sysread($sh,$buffer,1,$count++) until $buffer =~ /\r\n$/;
 	print "Read: $buffer\n" if $self->Debug;
-	return $buffer;
+	return defined($buffer) ? $buffer : undef ;
 }
 
 
@@ -324,15 +349,15 @@ sub fetch {
 sub AUTOLOAD {
 
 	my $self = shift;
-	return undef if $AUTOLOAD =~ /DESTROY$/;
-	delete $self->{Folders}  if lc($AUTOLOAD) =~ /::create$/i;
-	delete $self->{Folders}  if lc($AUTOLOAD) =~ /::rename$/i;
-	delete $self->{Folders}  if lc($AUTOLOAD) =~ /::delete$/i;
-	my $cmd = $AUTOLOAD =~ s/.*:://;
+	return undef if $Mail::IMAPClient::AUTOLOAD =~ /DESTROY$/;
+	delete $self->{Folders}  if lc($Mail::IMAPClient::AUTOLOAD) =~ /::create$/i;
+	delete $self->{Folders}  if lc($Mail::IMAPClient::AUTOLOAD) =~ /::rename$/i;
+	delete $self->{Folders}  if lc($Mail::IMAPClient::AUTOLOAD) =~ /::delete$/i;
+	my $cmd = $Mail::IMAPClient::AUTOLOAD =~ s/.*:://;
 	if (scalar(@_)) {
-		$self->_imap_command(qq/$AUTOLOAD / . join(" ",@_) )  or return undef;
+		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD / . join(" ",@_) )  or return undef;
 	} else {
-		$self->_imap_command(qq/$AUTOLOAD/) or return undef;
+		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD/) or return undef;
 	}
 	return wantarray ? 	$self->History($self->Count) 	: 
 				$self->{"History"}{$self->Count}	;
@@ -352,6 +377,17 @@ sub status {
 
 }
 
+sub recent_count {
+	my ($self, $folder) = (shift, shift);
+
+	$self->status($folder, 'RECENT') or return undef;
+
+	chomp(my $r = ( grep { s/\*\s+STATUS\s+.*\(RECENT\s+(\d+)\)/$1/ }
+			$self->History($self->Transaction)
+	)[0]);
+
+	return $r;
+}
 
 sub message_count {
 	
@@ -366,6 +402,37 @@ sub message_count {
 	return $m;
 
 	
+}
+
+{
+for my $datum (
+                qw(     recent seen
+                        unseen
+                 )
+) {
+        no strict 'refs';
+        *$datum = sub {
+		my $self = shift;
+		$self->_imap_command( "SEARCH $datum")
+			 or return undef;
+		my @results =  $self->History($self->Count)     ;
+
+		my @hits;
+
+		for my $r (@results) {
+
+		       chomp $r;
+		       $r =~ s/\r$//;
+		       $r =~ s/^.*SEARCH\s+//;
+		       push @hits, grep(/\d/,(split(/\s+/,$r)));
+
+		}
+
+		return wantarray ? @hits : \@hits;
+
+
+        };
+}
 }
 
 sub Strip_cr {
@@ -384,7 +451,7 @@ sub disconnect { $_[0]->logout }
 sub DESTROY {
 	my $self = shift;
 	eval {
-		$self->logout if $self->State > Connected; 
+		$self->logout if $self->State->Connected; 
 		$self->Socket->close if ref($self->Socket);
 	}
 }
@@ -401,7 +468,11 @@ sub search {
 
 	for my $r (@results) {
 			
-		push @hits, split(/\s+/,$r)  if $r =~ s/^\*\s+SEARCH\s+//;
+               chomp $r;
+               $r =~ s/\r$//;
+               $r =~ s/^.*SEARCH\s+//;
+               push @hits, grep(/\d/,(split(/\s+/,$r)));
+
 	}
 	
 	return wantarray ? @hits : \@hits;
@@ -464,7 +535,7 @@ sub append {
 	my $count 	= $self->Count($self->Count+1);
 
 
-        my $string = "$count APPEND $folder {" . length($text) . "}\r\n" ;
+        my $string = "$count APPEND $folder {" . length($text)  . "}\r\n" ;
 
         $self->_record($count,"$string\r\n");
 
@@ -486,9 +557,68 @@ sub append {
 		}
 	}	
 	
-        return undef if $code =~ /^BAD|NO/ ;
+        return undef if $code =~ /^BAD|^NO/ ;
 
         $feedback = $self->_send_line("$text\r\n");
+
+        unless ($feedback) {
+                $self->LastError("Error sending append msg text to IMAP: $!\n");
+                return undef;
+        }
+
+        until (($code) = $output =~ /^$count (OK|NO|BAD)/) {
+                $output = $self->_read_line;
+                $self->_record($count,$output);
+                if ($output =~ /^\*\s+BYE/) {
+                        $self->State(Unconnected);
+                        return undef ;
+                }
+        }
+
+        return $code =~ /^OK/ ? $self : undef ;
+
+}
+
+sub authenticate {
+
+        my $self 	= shift;
+        my $scheme 	= shift;
+        my $response 	= shift;
+
+        my $clear = $self->Clear;
+
+        $self->Clear($clear)
+                if $self->Count >= $clear and $clear > 0;
+
+	my $count 	= $self->Count($self->Count+1);
+
+
+        my $string = "$count AUTHENTICATE $scheme";
+
+        $self->_record($count,"$string\r\n");
+
+	my $feedback = $self->_send_line("$string");
+
+	unless ($feedback) {
+		$self->LastError("Error sending '$string' to IMAP: $!\n");
+		return undef;
+	}
+
+	my ($code, $output);	
+	
+	until ( ($code) = $output =~ /^\+ (.*)\+$/) {
+		$output = $self->_read_line;	
+		$self->_record($count,$output);
+		if ($output =~ /^\*\s+BYE/) {
+			$self->State(Unconnected);
+			return undef ;
+		}
+	}	
+	
+        return undef if $code =~ /^BAD|^NO/ ;
+
+	my $reply = $response->($code) ;
+        $feedback = $self->_send_line($response->($code));
 
         unless ($feedback) {
                 $self->LastError("Error sending append msg text to IMAP: $!\n");
@@ -546,7 +676,7 @@ sub IsConnected 	{ return ($_[0]->State >= Connected) 	? 1 : 0 ; 	}
 sub IsAuthenticated 	{ return ($_[0]->State >= Authenticated)? 1 : 0 ; 	}
 sub IsSelected 		{ return ($_[0]->State == Selected) 	? 1 : 0 ; 	}		
 
-=head1 EXAMPLE
+=head1 SYNOPSIS
 
     use Mail::IMAPClient;
     my $imap = Mail::IMAPClient->new( Server => 'imaphost', 
@@ -747,6 +877,19 @@ The B<append> method returns a true value if successful or undef if not.
 
 =cut
 
+=item authenticate
+
+The B<authenticate> method accepts two arguments, an authentication type to be used (ie CRAM-MD5)
+and a code or subroutine reference to execute to obtain a response. The B<authenticate> assumes that
+the authentication type specified in the first argument follows a challenge-response flow. The 
+B<authenticate> method issues the IMAP Client AUTHENTICATE command and receives a challenge from the
+server. That challenge (minus any tag prefix or enclosing '+' characters but still base64 encoding)
+is passed as the only argument to the code or subroutine referenced in the second argument. The return
+value from the 2nd argument's code is written to the server as is, except that a <CR><NL> sequence is
+appended if neccessary.
+
+=cut
+
 =item capability
 
 The B<capability> method returns an array of capabilities as returned by the CAPABILITY IMAP 
@@ -918,6 +1061,21 @@ I<Unconnected> state.
 
 =cut
 
+=item recent
+
+The B<recent> method performs an IMAP SEARCH RECENT search against the selected folder and returns
+an array of sequence numbers of messages that are recent.
+
+=cut
+
+=item recent_count
+
+The B<recent_count> method accepts as an argument a folder name. It returns the number of recent 
+messages in the folder (as returned by the IMAP client command "STATUS folder RECENT"), or undef 
+in the case of an error. The B<recent_count> method was contributed by Rob Deker (deker@ikimbo.com).
+
+=cut
+
 =item search
 
 The B<search> method implements the SEARCH IMAP client command. Any argument supplied to
@@ -932,6 +1090,13 @@ C<"$arg">.
 
 The B<search> method returns an array containing sequence numbers of messages that passed the
 SEARCH IMAP client command's search criteria. 
+
+=cut
+
+=item seen
+
+The B<seen> method performs an IMAP SEARCH SEEN search against the selected folder and returns
+an array of sequence numbers of messages that have already been seen (ie their SEEN flag is set).
 
 =cut
 
@@ -964,6 +1129,13 @@ rather than the array itself.
 The B<status> method should not be confused with the B<Status> method (with an uppercase 'S'),
 which returns information about the B<IMAPClient> object. (See the section labeled 
 B<Status Methods>, below).
+
+=cut
+
+=item unseen
+
+The B<unseen> method performs an IMAP SEARCH UNSEEN search against the selected folder and returns
+an array of sequence numbers of messages that have not yet been seen (ie their SEEN flag is not set).
 
 =cut
 
@@ -1109,6 +1281,15 @@ B<Strip_cr> does not remove new line characters.
 
 =cut
 
+=item Rfc822_date
+
+The B<Rfc822_date> method accepts one input argument, a number of seconds since
+the epoch date. It returns an RFC822 compliant date string for that date
+(without the 'Date:' prefix). Useful for putting dates in messagestrings before
+calling <append>.
+
+=cut
+
 =back
 
 
@@ -1147,4 +1328,6 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either
 the GNU General Public License or the Artistic License for more details.
 
 =cut
+
+my $not_void_context = '0 but true'; 		# return true value
 

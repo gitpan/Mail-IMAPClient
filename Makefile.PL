@@ -2,6 +2,48 @@ use ExtUtils::MakeMaker;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
 WriteMakefile(
-    'NAME'	=> 'Mail::IMAPClient',
-    'VERSION_FROM' => 'IMAPClient.pm', # finds $VERSION
+    'NAME'		=> 'Mail::IMAPClient',
+    'VERSION_FROM' 	=> 'IMAPClient.pm', # finds $VERSION
+    'clean' 		=> {	FILES 	=> '.test'	}
+
 );
+
+&set_test_data;
+
+sub set_test_data {
+	print 	"You have the option of running an extended suite of tests during\n",
+		"'make test'. This requires an IMAP server name, user account, and ",
+		"password to test with.","\n","\n",
+		"Do you want to run the extended tests? (n/y) ==> ";
+	my $yes = <>;
+	return unless $yes =~ /^[Yy](?:[Ee]:[Ss]?)?$/ ;
+	unless (-f "./IMAPClient.pm") { warn "ERROR: not in installation directory\n"; return }
+	unless (open TST,">./.test") { warn "ERROR: couldn't open ./.test: $!\n"; return }
+	print "\nPlease provide the hostname of a host running an IMAP server \n",
+		"(or QUIT to skip the extended tests) ==> ";
+	my $server = <>;
+	chomp $server;
+	return if $server =~ /^\s+$|^quit$/i ;
+	print TST "server=$server\n";
+	print "\nPlease provide the username of an account\non $server (or QUIT) ==> ";
+	my $user = <>;
+	chomp $user;
+	return if $user =~ /^\s+$|^quit$/i ;
+	print TST "user=$user\n";
+	print "\nPlease provide the password for $user\n(or QUIT) ==> ";
+	my $passed = <>;
+	chomp $passed;
+	return if $passed =~ /^\s+$|^quit$/i ;
+	print TST "passed=$passed\n";
+	print "\nPlease provide the port to connect to on $server to run the test \n",
+		"(default is 143) ==> ";
+	my $port = <>;
+	chomp $port;
+	$port ||= 143; 
+	print TST "port=$port\n";
+	close TST;
+	print "\nGracias! The information you provided (including the \n",
+		" password!) has been stored in ",cwd,"/.test and should be\n",
+		" removed (either by hand or by 'make clean') after testing.\n";
+}
+

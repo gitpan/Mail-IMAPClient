@@ -1,5 +1,35 @@
 Revision history for Perl extension IMAPClient.
 
-0.01  Thu Aug 26 14:10:03 1999
+0.09  Thu Aug 26 14:10:03 1999
 	- original version; created by h2xs 1.19
+
+Changes in version .99 
+----------------------
+Added the Rfc822_date class method to create RFC822-compliant date fields in messages 
+being appended with the append method.
+
+Added the recent, seen, and unseen methods to return an array of sequence numbers from a 
+SEARCH RECENT, SEARCH SEEN, or SEARCH UNSEEN method call. These methods are shortcuts to
+$imap->search("RECENT"), etc. 
+
+Added the recent_count method to return the number of RECENT messages in a folder. Contributed
+by Rob Deker.
+
+Added 'use strict' compliance, courtesy of Mihai Ibanescu.
+
+Fixed a bug in the search method that resulted in a list with one empty member being returned if
+a search had no hits. The search method now returns undef if there are no hits.
+
+Added 'authenticate' method to provide very crude support for the IMAP AUTHENTICATE command. The previous
+release didn't support AUTHENTICATE at all, unless you used very low-level (and undocumented) methods. 
+With the 'authenticate' method, the programmer still has to figure out how to respond to the server's 
+challenge. I hope to make it friendlier in the next release. Or maybe the one after that. This method
+is at least a start, albeit a pretty much untested one.
+
+Added Rfc822_date class method to facilitate creation of "Date:" header field when creating text for
+the "append" method, although the method may come in handy whenever you're creating a Date: header,
+even if it's not in conjuction with an IMAP session.
+
+Added more tests, which will optionally run at 'make test' time, provided all the necessary data
+(like username, hostname, password for testing an IMAP session) are available.
 
