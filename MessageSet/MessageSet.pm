@@ -1,5 +1,5 @@
 package Mail::IMAPClient::MessageSet;
-#$Id: MessageSet.pm,v 1.1 2002/10/23 20:45:55 dkernen Exp $
+#$Id: MessageSet.pm,v 1.3 2002/12/13 18:08:49 dkernen Exp $
 
 =head1 NAME
 
@@ -30,6 +30,7 @@ use overload 	qq/""/ => "str" ,
 		qq/.=/=>"cat", 
 		qq/+=/=>"cat", 
 		qq/-=/=>"rem", 
+		q/@{}/=>"unfold", 
 		fallback => "TRUE";
 
 sub new {
@@ -119,7 +120,8 @@ reference to a scalar variable that contains the message set's compact
 RFC2060 representation. The object is overloaded so that using it like a string
 returns this compact message set representation. You can also add messages to
 the set (using either a '.=' operator or a '+=' operator) or remove messages
-(with the '-=' operator).
+(with the '-=' operator). And if you use it as an array reference, it will 
+humor you and act like one by calling L<unfold> for you.
 
 RFC2060 specifies that multiple messages can be provided to certain IMAP
 commands by separating them with commas. For example, "1,2,3,4,5" would 
@@ -156,6 +158,10 @@ message uids: 1,3,4,5,6,9,10, as follows:
 	# Hey, I didn't really want message 17 in there; let's take it out:
 	$msgset -= 17;
 	print "$msgset\n";  # prints "1,3:6,9:10,14,16,18:20\n"
+	# Now let's iterate over each message:
+	for my $msg (@$msgset) {
+		print "$msg\n";
+	}       # Prints: "1\n3\n4\n5\n6\n9\n10\n14\n16\n18\n19\n20"
 
 (Note that the L<Mail::IMAPClient> B<Range> method can be used as 
 a short-cut to specifying C<Mail::IMAPClient::MessageSet-E<gt>new(@etc)>.) 
@@ -217,13 +223,13 @@ to make manipulating your message sets easier. The overridden operations are:
 =head2 stringify
 
 Attempts to stringify a B<Mail::IMAPClient::MessageSet> object will result in
-the compact message specification to be returned, which is almost certainly
+the compact message specification being returned, which is almost certainly
 what you will want.
 
 =head2 Auto-increment
 
 Attempts to autoincrement a B<Mail::IMAPClient::MessageSet> object will 
-result in a message being added to the object's message set. 
+result in a message (or messages) being added to the object's message set. 
 
 Example:
 
@@ -363,8 +369,8 @@ or anything else.
 
 =head1 COPYRIGHT
 
-                       Copyright 1999, 2000 The Kernen Group, Inc.
-                            All rights reserved.
+          Copyright 1999, 2000, 2001, 2002 The Kernen Group, Inc.
+          All rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either:
@@ -390,6 +396,15 @@ my $not_void = 11; # This module goes all the way up to 11!
 
 # History: 
 # $Log: MessageSet.pm,v $
+# Revision 1.3  2002/12/13 18:08:49  dkernen
+# Made changes for version 2.2.6 (see Changes file for more info)
+#
+# Revision 1.2  2002/11/08 15:48:42  dkernen
+#
+# Modified Files: Changes
+# 		IMAPClient.pm
+# Modified Files: MessageSet.pm
+#
 # Revision 1.1  2002/10/23 20:45:55  dkernen
 #
 # Modified Files: Changes IMAPClient.pm MANIFEST Makefile.PL

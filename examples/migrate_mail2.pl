@@ -210,7 +210,7 @@ for my $f ($imap->folders) {
 		$targF = $srcF ;
 	}
 
-	$targF =~ s/$sep1/$sep2/go;
+	$targF =~ s/$sep1/$sep2/go unless $sep1 eq $sep2;
 	$targF =~ tr/#\$\& '"/\@\@+_/;
 	if ( $imap->is_parent($f) and !$mixedUse2 ) {
 		$targF .= "_mail" ;
@@ -219,13 +219,16 @@ for my $f ($imap->folders) {
 
 	# Create the (massaged) folder on the target side:
 	unless ( $imap2->exists($targF) ) {
-		$imap2->create($targF)
+		$imap2->create($imap2->Massage($targF))
 			or warn "Cannot create $targF on " . $imap2->Server . ": $@\n" and next;
 	}
 
 	# ... and select it
-	$imap2->select($targF)  
+	$imap2->select($imap2->Massage($targF))  
 			or warn "Cannot select $targF on " . $imap2->Server . ": $@\n" and next;
+
+	# now that we know the target folder is selectable, we can close it again:
+	$imap2->close; 
 	my $count = 0;
 	my $expectedTotal = $imap->message_count($f) ;
 

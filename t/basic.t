@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.24 2002/10/23 20:46:09 dkernen Exp $
+# $Id: basic.t,v 19991216.26 2002/12/13 18:08:50 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -17,11 +17,14 @@ my $imap;
 my @tests;
 my $uid;
 $fast||=0;
+$range||=0;
 $uidplus||=0;
+$authmech||=0;
 use vars qw/*TMP/;
 
 BEGIN {
 	$^W++;
+	# $ARGV[0]||=1;
 	my $target; my $sep; my $target2;
 
 	push @tests, sub { $test++ } ; # Dummy test 1
@@ -407,7 +410,7 @@ BEGIN {
 	}, sub { $imap->delete_message(@hits) } ;	# dummy 39
 	push @tests, sub {	# 40
 		$imap->select($target2);
-		if ( 	$imap->delete_message($imap->search("ALL")) 
+		if ( 	$imap->delete_message(scalar($imap->search("ALL"))) 
 			and $imap->close and 
 			$imap->delete($target2) 
 		) {
@@ -451,9 +454,10 @@ BEGIN {
                 	Clear   => 0,
                 	Timeout => 30,
                 	Debug   => $ARGV[0],
-                	Debug_fh   => $ARGV[0]?IO::File->new(">./imap2.debug"):undef,
+                	#Debug_fh   => $ARGV[0]?IO::File->new(">./imap2.debug"):undef,
                 	Fast_IO => $fast,
                 	Uid     => $uidplus,
+                	Authmechanism  => $authmech||undef,
 		)       or
         	print STDERR 	"\nCannot log into $parms{server} as $parms{user}. ",
 				"Are server/user/password correct?\n"
@@ -586,7 +590,7 @@ exit unless		%parms
 	and 	length 	$parms{server}
 	and 	length 	$parms{user}
 	and 	length 	$parms{passed} ;
-print "Uid=$uidplus and Fast = $fast\n";
+# print "Uid=$uidplus and Fast = $fast\n";
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -598,6 +602,8 @@ eval { $imap = Mail::IMAPClient->new(
 		Debug_fh   => 	$ARGV[0]?IO::File->new(">imap1.debug"):undef,
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
+		Range 	=> $range,
+                Authmechanism  => $authmech||undef,
 ) 	or 
 	print STDERR "\nCannot log into $parms{server} as $parms{user}. Are server/user/password correct?\n" 
 	and exit
@@ -624,6 +630,16 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.26  2002/12/13 18:08:50  dkernen
+# Made changes for version 2.2.6 (see Changes file for more info)
+#
+# Revision 19991216.25  2002/11/08 15:49:05  dkernen
+#
+# Modified Files: Changes
+# 		IMAPClient.pm
+# 		MessageSet.pm
+# 	 	t/basic.t
+#
 # Revision 19991216.24  2002/10/23 20:46:09  dkernen
 #
 # Modified Files: Changes IMAPClient.pm MANIFEST Makefile.PL

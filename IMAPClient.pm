@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.16 2002/10/23 20:45:45 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.18 2002/12/13 18:08:39 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.2.5';
-$Mail::IMAPClient::VERSION = '2.2.5';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.2.6';
+$Mail::IMAPClient::VERSION = '2.2.6';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -117,12 +117,22 @@ BEGIN {
 			User Password Socket Timeout Buffer
 			Debug LastError Count Uid Debug_fh Maxtemperrors
 			EnableServerResponseInLiteral
+			Authmechanism Authcallback Ranges
 		)
  ) {
         no strict 'refs';
         *$datum = sub { _do_accessor($datum, @_); };
  }
 
+ eval {
+   require Digest::HMAC_MD5;
+   require MIME::Base64;
+ };
+ if ($@) {
+   $Mail::IMAPClient::_CRAM_MD5_ERR =
+     "Internal CRAM-MD5 implementation not available: $@";
+   $Mail::IMAPClient::_CRAM_MD5_ERR =~ s/\n+$/\n/;
+ }
 }
 
 sub Wrap { 	shift->Clear(@_); 	}
@@ -290,6 +300,9 @@ sub connect {
 
 sub login {
 	my $self = shift;
+	return $self->authenticate($self->Authmechanism,$self->Authcallback) 
+		if $self->{Authmechanism};
+
 	my $id   = $self->User;
 	my $has_quotes = $id =~ /^".*"$/ ? 1 : 0;
 	my $string = 	"Login " . ( $has_quotes ? $id : qq("$id") ) . " " . 
@@ -358,7 +371,8 @@ sub list {
 	my ($reference, $target) = (shift, shift);
 	$reference = "" unless defined($reference);
 	$target = '*' unless defined($target);
-	$target 	  = $self->Massage($target);
+	$target = '""' if $target eq "";
+	$target 	  = $self->Massage($target) unless $target eq '*' or $target eq '""';
 	my $string 	=  qq(LIST "$reference" $target);
 	$self->_imap_command($string)  or return undef;
 	return wantarray ? 	
@@ -715,10 +729,13 @@ sub migrate {
 	}
 	$msgs or $msgs eq "0" or $msgs = "all";	
 	if ( $msgs =~ /^all$/i ) { $msgs = $self->search("ALL") }
+	my $range = $self->Range($msgs) ;
 	$self->_debug("Migrating the following msgs from $folder: " . 
-		( ref($msgs) ? join(", ",@$msgs) : $msgs) );
+		" $range\n");
+		# ( ref($msgs) ? join(", ",@$msgs) : $msgs) );
 
-	MIGMSG:	foreach my $mid ( ref($msgs) ? @$msgs : (split(/,\s*/,$msgs)) ) {
+	#MIGMSG:	foreach my $mid ( ref($msgs) ? @$msgs : (split(/,\s*/,$msgs)) ) {
+	MIGMSG:	foreach my $mid ( @$range ) {
 		# Set up counters for size of msg and portion of msg remaining to
 		# process:
 		$self->_debug("Migrating message $mid in folder $folder\n") 
@@ -736,13 +753,18 @@ sub migrate {
 		# If msg size is less than buffersize then do whole msg in one 
 		# transaction:
 		if ( $size <= $bufferSize ) {
-			my $new_mid = $peer->append($peer->Massage($folder),$self->message_string($mid) ) ;
-		        $self->_debug("Copied message $mid in folder $folder to " . $peer->User .
-				    '@' . $peer->Server . ". New Message UID is $new_mid.\n" 
+			my $new_mid = $peer->append_string($peer->Massage($folder),
+					$self->message_string($mid) ,undef,
+					$intDate) ;
+		        $self->_debug("Copied message $mid in folder $folder to " . 
+				    $peer->User .
+				    '@' . $peer->Server . 
+				    ". New Message UID is $new_mid.\n" 
 		        ) if $self->Debug;
 
-		        $peer->_debug("Copied message $mid in folder $folder from " . $self->User .
-				    '@' . $self->Server . ". New Message UID is $new_mid.\n" 
+		        $peer->_debug("Copied message $mid in folder $folder from " . 
+				$self->User .
+				'@' . $self->Server . ". New Message UID is $new_mid.\n" 
 		        ) if $peer->Debug;
 
 
@@ -2027,7 +2049,12 @@ sub fetch {
 
 	my $self = shift;
 	my $what = shift||"ALL";
-	ref($what) and $what = join(",",@$what);	
+	#ref($what) and $what = join(",",@$what);	
+	if ( $what eq 'ALL' ) {
+		$what = $self->Range($self->messages );
+	} elsif (ref($what) or $what =~ /^[,:\d]+\w*$/)  {
+		$what = $self->Range($what);	
+	}
 	$self->_imap_command( ( $self->Uid ? "UID " : "" ) .
 				"FETCH $what" . ( @_ ? " " . join(" ",@_) : '' )
 	) 	 					or return undef;
@@ -2214,14 +2241,22 @@ sub flags {
 	my $u_f = $self->Uid;
 
 	# Determine if set of messages or just one
-	if (ref($msgspec) eq 'ARRAY') {
-		$msg = join(',', @$msgspec);
-	} else {
+	if (ref($msgspec) eq 'ARRAY' ) {
+		$msg = $self->Range($msgspec) ;
+	} elsif ( !ref($msgspec) ) 	{
 		$msg = $msgspec;
 		if ( scalar(@_) ) {
-			$msg .= join(",",@_) ;
-			$msgspec = [ $msgspec, @_ ] ;
+			$msgspec = $self->Range($msg) ;
+			$msgspec += $_ for (@_);
+			$msg = $msgspec;
 		}
+	} elsif ( ref($msgspec) =~ /MessageSet/ ) {
+		if ( scalar(@_) ) {
+			$msgspec += $_ for @_;
+		}
+	} else {
+		$self->LastError("Invalid argument passed to fetch.\n");
+		return undef;
 	}
 
 	# Send command
@@ -2250,7 +2285,7 @@ sub flags {
 	}
 
 	# Did the guy want just one response? Return it if so
-	if (ref($msgspec) ne 'ARRAY') {
+	unless (ref($msgspec) ) {
 		my $flagsref = $flagset->{$msgspec};
 		return wantarray ? @$flagsref : $flagsref;
 	}
@@ -2276,7 +2311,8 @@ sub parse_headers {
 
 	# Make $msg a comma separated list, of messages we want
         if (ref($msgspec) eq 'ARRAY') {
-		$msg = join(',', @$msgspec);
+		#$msg = join(',', @$msgspec);
+		$msg = $self->Range($msgspec);
 	} else {
 		$msg = $msgspec;
 	}
@@ -2368,7 +2404,8 @@ sub parse_headers {
 	}
 	# if we asked for one message, just return its hash,
 	# otherwise, return hash of numbers => header hash
-	if (ref($msgspec) eq 'ARRAY') {
+	# if (ref($msgspec) eq 'ARRAY') {
+	if (ref($msgspec) ) {
 		#_debug $self,"Structure from parse_headers:\n", 
 		#	Dumper($headers) 
 		#	if $self->Debug;
@@ -2381,10 +2418,14 @@ sub parse_headers {
 	}
 }
 
-sub rfc822_header {
+sub subject { return $_[0]->get_header($_[1],"Subject") }
+sub date { return $_[0]->get_header($_[1],"Date") }
+sub rfc822_header { get_header(@_) }
+
+sub get_header {
 	my($self , $msg, $header ) = @_;
 	my $val = 0;
-	eval { $val = $_[0]->parse_headers($_[1],$_[2])->[0] };
+	eval { $val = $self->parse_headers($msg,$header)->{$header}[0] };
 	return defined($val)? $val : undef;
 }
 
@@ -2429,7 +2470,8 @@ for my $datum (
 
 		#my $hits = $self->search($datum eq "messages" ? "ALL" : "$datum")
 		#	 or return undef;
-		#print "Received $hits from search and array context flag is ",wantarry,"\n";
+		#print "Received $hits from search and array context flag is ",
+		#	wantarry,"\n";
 		#if ( scalar(@$hits) ) {
 		#	return wantarray ? @$hits : $hits ;
 		#}
@@ -2523,10 +2565,15 @@ sub search {
 		unless scalar(@hits);
 
 	if ( wantarray ) {
-
 		return @hits;
 	} else {
-		return scalar(@hits) ? \@hits : undef;
+		if ($self->Ranges) {
+			#print STDERR "Fetch: Returning range\n";
+			return scalar(@hits) ? $self->Range(\@hits) : undef;
+		} else {
+			#print STDERR "Fetch: Returning ref\n";
+			return scalar(@hits) ? \@hits : undef;
+		}
 	}
 }
 
@@ -3101,7 +3148,16 @@ sub authenticate {
 	
         return undef if $code =~ /^BAD|^NO/ ;
 
-        $feedback = $self->_send_line($response->($code));
+        if ('CRAM-MD5' eq $scheme && ! $response) {
+          if ($Mail::IMAPClient::_CRAM_MD5_ERR) {
+            $self->LastError($Mail::IMAPClient::_CRAM_MD5_ERR);
+            carp $Mail::IMAPClient::_CRAM_MD5_ERR if $^W;
+          } else {
+            $response = \&_cram_md5;
+          }
+        }
+
+        $feedback = $self->_send_line($response->($code, $self));
 
         unless ($feedback) {
                 $self->LastError("Error sending append msg text to IMAP: $!\n");
@@ -3346,6 +3402,15 @@ sub _next_index {
 		scalar(@{$_[0]->{'History'}{$_[1]||$_[0]->Transaction}}) 		: 0 
 };
 
+sub _cram_md5 {
+  my ($code, $client) = @_;
+  my $hmac = Digest::HMAC_MD5::hmac_md5_hex(MIME::Base64::decode($code),
+                                            $client->Password());
+  return MIME::Base64::encode($client->User() . " $hmac");
+}
+
+
+
 sub Range {
 	require "Mail/IMAPClient/MessageSet.pm";
 	my $self = shift;
@@ -3465,7 +3530,7 @@ anything like that.
 
 Example:
 
-	$imap->new(%args) or die "Could not new: $@\n";
+	Mail::IMAPClient->new(%args) or die "Could not new: $@\n";
 
 The L<new> method creates a new instance of an B<IMAPClient> object. If
 the I<Server> parameter is passed as an argument to B<new>, then B<new>
@@ -3509,12 +3574,14 @@ Example:
 
 	$Authenticated = $imap->Authenticated();
 	# or:
-	$imap->Authenticated($new_value);
+	$imap->Authenticated($new_value);  # But you'll probably never need to do this
 
 returns a value equal to the numerical value associated with an object
-in the B<Authenticated> state.
+in the B<Authenticated> state. This value is normally maintained by the
+B<Mail::IMAPClient> module, so you typically will only query it and 
+won't need to set it.
 
-<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+B<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
 L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
 will usually want to use those methods instead of one of the above.
 
@@ -3524,12 +3591,14 @@ Example:
 
 	$Connected = $imap->Connected();
 	# or:
-	$imap->Connected($new_value);
+	$imap->Connected($new_value); # But you'll probably never need to do this 
 
 returns a value equal to the numerical value associated with an object
-in the B<Connected> state.
+in the B<Connected> state.  This value is normally maintained by the
+B<Mail::IMAPClient> module, so you typically will only query it and 
+won't need to set it.
 
-<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+B<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
 L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
 will usually want to use those methods instead of one of the above.
 
@@ -3545,13 +3614,23 @@ argument as a correctly quoted string or a literal string.
 Note that you should not use this on folder names, since methods that accept
 folder names as an argument will quote the folder name arguments appropriately
 for you. (Exceptions to this rule are methods that come with IMAP extensions 
-that are not explicitely supported by this documentation.)
+that are not explicitly supported by B<Mail::IMAPClient>.)
 
 If you are getting unexpected results when running methods with values that 
 have (or might have) embedded spaces, double quotes, braces, or parentheses, 
 then you may wish to call B<Quote> to quote these values. You should B<not> 
 use this method with foldernames or with arguments that are wrapped in quotes 
-or parens because the RFC2060 spec requires the quotes or parentheses. 
+or parens if those quotes or parens are there because the RFC2060 spec requires 
+them. So, for example, if RFC requires an argument in this format:
+	
+	( argument )
+
+and your argument is (or might be) "pennies (from heaven)", then you could just
+use: 
+
+	$argument = "(" . $imap->Quote($argument) . ")" 
+
+and be done with it.
 
 Of course, the fact that sometimes these characters are sometimes required 
 delimiters is precisely the reason you must quote them when they are I<not> 
@@ -3581,13 +3660,21 @@ On the other hand:
 In the above, I had to abandon the many methods available to 
 B<Mail::IMAPClient> programmers (such as L<delete_message> and all-lowercase 
 L<search>) for the sake of coming up with an example. However, there are 
-times when unexpected values in certain places will for you to B<Quote>. 
-An example is RFC822 Message-id's, which usually don't contain quotes or 
-parens. Usually you won't worry about it, until suddenly searches for certain 
+times when unexpected values in certain places will force you to B<Quote>. 
+An example is RFC822 Message-id's, which I<usually> don't contain quotes or 
+parens. So you don't worry about it, until suddenly searches for certain 
 message-id's fail for no apparent reason. (A failed search is not simply a 
 search that returns no hits; it's a search that flat out didn't happen.) 
-This normally happens to me at about 5:00 pm on a day when I was hoping to 
-leave on time. 
+This normally happens to me at about 5:00 pm on the one day when I was hoping 
+to leave on time. (By the way, my experience is that any character that can 
+possibly find its way into a Message-Id eventually will, so when dealing
+with these values take proactive, defensive measures from the very start.
+In fact, as I was typing the above, a buddy of mine came in to ask advice about
+a logfile parsing routine he was writing in which the fields were delimited
+by colons. One of the fields was a Message Id, and, you guessed it, some of the
+message id's in the log had (unescaped!) colons embedded in them and were 
+screwing up his C<split()>.  So there you have it, it's not just me. This is 
+everyone's problem.)
 
 =head2 Range
 
@@ -3615,6 +3702,8 @@ one or more arguments, each of which can be:
 (i.e. 1,3,5:8,10), or
 
 =item e) a reference to an array whose elements are like I<a)> through I<d)>.
+
+=back
 
 The B<Range> method returns a reference to a B<Mail::IMAPClient::MessageSet>
 object. The object has all kinds of magic properties, one of which being that
@@ -3663,12 +3752,14 @@ Example:
 
 	$Selected = $imap->Selected();
 	# or:
-	$imap->Selected($new_value);
+	$imap->Selected($new_value); # But you'll probably never need to do this
 
 returns a value equal to the numerical value associated with an object
-in the B<Selected> state.
+in the B<Selected> state.  This value is normally maintained by the
+B<Mail::IMAPClient> module, so you typically will only query it and 
+won't need to set it.
 
-<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+B<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
 L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
 will usually want to use those methods instead of one of the above.
 
@@ -3714,9 +3805,11 @@ Example:
 	$imap->Unconnected($new_value);
 
 returns a value equal to the numerical value associated with an object
-in the B<Unconnected> state.
+in the B<Unconnected> state.  This value is normally maintained by the
+B<Mail::IMAPClient> module, so you typically will only query it and 
+won't need to set it.
 
-<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+B<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
 L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
 will usually want to use those methods instead of one of the above.
 
@@ -3755,11 +3848,11 @@ search encountered a problem (such as invalid parameters).
 A number of IMAP commands do not have corresponding B<Mail::IMAPClient>
 methods. Instead, they are implemented via a default method and Perl's 
 L<AUTOLOAD|perlsub/autoload> facility. If you are looking for a specific
-IMAP client command (or IMAP extension) and cannot find it here then
-that does not necessarily mean you can not use B<Mail::IMAPClient> to
-issue the command. In fact, you can issue virtually any IMAP client
-command simply by I<pretending> that there is a B<Mail::IMAPClient> method.
-See the section on 
+IMAP client command (or IMAP extension) and do not see it documented in this
+pod, then that does not necessarily mean you can not use B<Mail::IMAPClient> to
+issue the command. In fact, you can issue almost any IMAP client
+command simply by I<pretending> that there is a corresponding 
+B<Mail::IMAPClient> method.  See the section on 
 L<"Other IMAP Client Commands and the Default Object Method">
 below for details on the default method.
 
@@ -3893,6 +3986,11 @@ to the code or subroutine referenced in the second argument. The return
 value from the 2nd argument's code is written to the server as is,
 except that a <CR><NL> sequence is appended if neccessary.
 
+If you do not specify a second argument, then the first argument must be
+one of the authentication mechanisms for which B<Mail::IMAPClient> has
+built in support. Currently there is built in support for CRAM-MD5, and
+I hope to add more in future releases. 
+
 If you are interested in doing NTLM authentication then please see Mark
 Bush's L<Authen::NTLM>, which can work with B<Mail::IMAPClient> to
 provide NTLM authentication.
@@ -4022,6 +4120,7 @@ Example:
 	or die "Could not copy: $@\n";
 
 Or:
+
 	# Now brackets indicate an array ref!
 	my $uidList = $imap->copy($folder, [ $msg_1, ... , $msg_n ]) 
 	or die "Could not copy: $@\n";
@@ -4063,6 +4162,23 @@ and the create will fail, so don't do that.
 B<create> returns a true value on success and C<undef> on failure, as
 you've probably guessed.
 
+=head2 date
+
+Example:
+
+	my $date = $imap->date($msg);
+
+
+The B<date> method accepts one argument, a message sequence number (or a
+message UID if the I<Uid> parameter is set to a true value). It returns 
+the date of message as specified in the message's RFC822 "Date: " header,
+without the "Date: " prefix.
+
+The B<date> method is a short-cut for:
+
+	my $date = $imap->get_header($msg,"Date");
+
+
 =head2 delete
 
 Example:
@@ -4077,7 +4193,7 @@ delete. It returns a true value on success and C<undef> on failure.
 Example:
 
 	my @msgs = $imap->seen;
-	$imap->delete_message(\@msgs) 
+	scalar(@msgs) and $imap->delete_message(\@msgs) 
 		or die "Could not delete_message: $@\n";
 
 The above could also be rewritten like this:
@@ -4085,14 +4201,17 @@ The above could also be rewritten like this:
 	# scalar context returns array ref
 	my $msgs = scalar($imap->seen);	
 
-	$imap->delete_message($msgs) 
+	scalar(@$msgs) and $imap->delete_message($msgs) 
 		or die "Could not delete_message: $@\n";
 
 Or, as a one-liner:
 
 
 	$imap->delete_message( scalar($imap->seen) )
-		or die "Could not delete_message: $@\n";
+		or warn "Could not delete_message: $@\n";
+	# just give warning in case failure is 
+	# due to having no 'seen' msgs in the 1st place!
+
 
 The B<delete_message> method accepts a list of arguments. If the L<Uid>
 parameter is not set to a true value, then each item in the list should
@@ -4100,17 +4219,11 @@ be either:
 
 =over 4
 
-=item >
+=item > a message sequence number,
 
-a message sequence number,
+=item > a comma-separated list of message sequence numbers, 
 
-=item >
-
-a comma-separated list of message sequence numbers, 
-
-=item >
-
-a reference to an array of message sequence numbers, or
+=item > a reference to an array of message sequence numbers, or
 
 =back
 
@@ -4119,17 +4232,11 @@ list should be either:
 
 =over 4
 
-=item >
+=item > a message UID, 
 
-a message UID, 
+=item > a comma-separated list of UID's, or 
 
-=item >
-
-a comma-separated list of UID's, or 
-
-=item >
-
-a reference to an array of message UID's.
+=item > a reference to an array of message UID's.
 
 =back
 
@@ -4147,13 +4254,19 @@ banish the thought, "BYE", then B<delete_message> will return C<undef>.
 
 If you must have guaranteed results then use the IMAP STORE client
 command (via the default method) and use the +FLAGS (\Deleted) option,
-and then parse your results manually. Eg: 
+and then parse your results manually.
+
+Eg: 
 
 	$imap->store($msg_id,'+FLAGS (\Deleted)');
 	my @results = $imap->History($imap->Transaction);
 	...			# code to parse output goes here
 
 
+
+(Frankly I see no reason to bother with any of that; if a message doesn't get 
+deleted it's almost always because it's already not there, which is what you 
+want anyway. But 'your milage may vary' and all that.)
 
 The B<IMAPClient> object must be in C<Selected> status to use the
 B<delete_message> method. 
@@ -4190,9 +4303,9 @@ Example:
 The B<deny_seeing> method accepts a list of one or more message
 sequence numbers, or a single reference to an array of one or more
 message sequence numbers, as its argument(s). It then unsets the
-"\Seen" flag for those messages. Of course, if the L<Uid> parameter is
-set to a true value then those message sequence numbers should be
-unique message id's.
+"\Seen" flag for those messages (so that you can "deny" that you ever 
+saw them). Of course, if the L<Uid> parameter is set to a true value 
+then those message sequence numbers should be unique message id's. 
 
 Note that specifying C<$imap-E<gt>deny_seeing(@msgs)> is just a
 shortcut for specifying C<$imap-E<gt>unset_flag("Seen",@msgs)>. 
@@ -4590,6 +4703,26 @@ between them.
 
 =cut
 
+=head2 get_header
+
+Example:
+
+	my $messageId = $imap->get_header($msg, "Message-Id") ;
+
+The B<get_header> method accepts two arguments, a message sequence number
+or UID and the name of an RFC822 header (without the trailing colon). It returns 
+the value for that header in the message whose sequence number or UID
+was passed as the first argument. If no value can be found it returns C<undef>;
+if multiple values are found it returns the first one. Its return value is 
+always a scalar. B<get_header> uses case insensitive matching to get the value,
+so you do not have to worry about the case of your second argument.
+
+The B<get_header> method is a short-cut for:
+
+	my $messageId = $imap->parse_headers($msg,"Subject")->{"Subject"}[0];
+
+
+
 =head2 is_parent
 
 Example:
@@ -4752,7 +4885,8 @@ You may also want to see the L<Quote> method, which is related to this method.
 
 Example:
 
-	my $msgcount = $imap->message_count($folder) or die "Could not message_count: $@\n";
+	my $msgcount = $imap->message_count($folder); 
+	defined($msgcount) or die "Could not message_count: $@\n";
 
 The B<message_count> method accepts the name of a folder as an argument
 and returns the number of messages in that folder. Internally, it
@@ -5332,58 +5466,6 @@ to the I<SEARCH> command.
 
 =cut
 
-=head2 sort
-
-Example:
-
-	my @msgs = $imap->sort(@args) ;
-	if ($@ ) {
-		warn "Error in sort: $@\n";
-	}
-
-The B<sort> method is just like the L<search> method, only different.
-It implements the SORT extension as described in
-L<http://search.ietf.org/internet-drafts/draft-ietf-imapext-sort-10.txt>.
-It would be wise to use the L<has_capability> method to verify that the
-SORT capability is available on your server before trying to use the
-B<sort> method. If you forget to check and you're connecting to a
-server that doesn't have the SORT capability then B<sort> will return
-undef. L<LastError> will then say you are "BAD". If your server doesn't
-support the SORT capability then you'll have to use L<search> and then
-sort the results yourself.
-
-The first argument to B<sort> is a space-delimited list of sorting
-criteria. The Internet Draft that describes SORT requires that this
-list be wrapped in parentheses, even if there is only one sort
-criterion. If you forget the parentheses then the B<sort> method will
-add them. But you have to forget both of them, or none. This isn't CMS
-running under VM!
-
-The second argument is a character set to use for sorting. Different
-character sets use different sorting orders, so this argument is
-important. Since all servers must support UTF-8 and US-ASCII if they
-support the SORT capability at all, you can use one of those if you
-don't have some other preferred character set in mind.
-
-The rest of the arguments are searching criteria, just as you would
-supply to the L<search> method. These are all documented in RFC2060. If
-you just want all of the messages in the currently selected folder
-returned to you in sorted order, use I<ALL> as your only search
-criterion.
-
-The B<sort> method returns an array containing sequence numbers of
-messages that passed the SORT IMAP client command's search criteria. If
-the L<Uid> parameter is true then the array will contain message UID's.
-If B<sort> is called in scalar context then a pointer to the array will
-be passed, instead of the array itself. The message sequence numbers or
-unique identifiers are ordered according to the sort criteria
-specified. The sort criteria are nested in the order specified; that
-is, items are sorted first by the first criterion, and within the first
-criterion they are sorted by the second criterion, and so on.
-
-The sort method C<$@> will clear C<$@> before attempting the I<SORT>
-operation just as the L<search> method does.
-
 =head2 see
 
 Example:
@@ -5621,6 +5703,58 @@ state in order to use this method.
 
 =cut
 
+=head2 sort
+
+Example:
+
+	my @msgs = $imap->sort(@args) ;
+	if ($@ ) {
+		warn "Error in sort: $@\n";
+	}
+
+The B<sort> method is just like the L<search> method, only different.
+It implements the SORT extension as described in
+L<http://search.ietf.org/internet-drafts/draft-ietf-imapext-sort-10.txt>.
+It would be wise to use the L<has_capability> method to verify that the
+SORT capability is available on your server before trying to use the
+B<sort> method. If you forget to check and you're connecting to a
+server that doesn't have the SORT capability then B<sort> will return
+undef. L<LastError> will then say you are "BAD". If your server doesn't
+support the SORT capability then you'll have to use L<search> and then
+sort the results yourself.
+
+The first argument to B<sort> is a space-delimited list of sorting
+criteria. The Internet Draft that describes SORT requires that this
+list be wrapped in parentheses, even if there is only one sort
+criterion. If you forget the parentheses then the B<sort> method will
+add them. But you have to forget both of them, or none. This isn't CMS
+running under VM!
+
+The second argument is a character set to use for sorting. Different
+character sets use different sorting orders, so this argument is
+important. Since all servers must support UTF-8 and US-ASCII if they
+support the SORT capability at all, you can use one of those if you
+don't have some other preferred character set in mind.
+
+The rest of the arguments are searching criteria, just as you would
+supply to the L<search> method. These are all documented in RFC2060. If
+you just want all of the messages in the currently selected folder
+returned to you in sorted order, use I<ALL> as your only search
+criterion.
+
+The B<sort> method returns an array containing sequence numbers of
+messages that passed the SORT IMAP client command's search criteria. If
+the L<Uid> parameter is true then the array will contain message UID's.
+If B<sort> is called in scalar context then a pointer to the array will
+be passed, instead of the array itself. The message sequence numbers or
+unique identifiers are ordered according to the sort criteria
+specified. The sort criteria are nested in the order specified; that
+is, items are sorted first by the first criterion, and within the first
+criterion they are sorted by the second criterion, and so on.
+
+The sort method will clear C<$@> before attempting the I<SORT>
+operation just as the L<search> method does.
+
 =head2 status
 
 Example:
@@ -5665,6 +5799,21 @@ arguments. Furthermore, these methods are friendlier and more flexible
 with regards to how you specify your arguments. See for example L<see>,
 L<deny_seeing>, L<delete_message>, and L<restore_message>. Or L<mark>,
 L<unmark>, L<set_flag>, and L<unset_flag>.
+
+=head2 subject
+
+Example:
+
+
+	my $subject = $imap->subject($msg);
+
+
+The B<subject> method accepts one argument, a message sequence number (or a 
+message UID, if the I<Uid> parameter is true). The text in the "Subject" header
+of that message is returned (without the "Subject: " prefix). This method is
+a short-cut for:
+
+	my $subject = $imap->get_header($msg, "Subject");
 
 =head2 subscribed
 
@@ -5952,6 +6101,57 @@ generic parameter names. The B<IMAPClient> object doesn't actually have
 parameters named 'parameter' and 'parameter2'. On the contrary, the
 available parameters are:
 
+=head2 Authmechanism
+
+Example:
+
+		$imap->Authmechanism("CRAM-MD5");
+		# or
+		my $authmech = $imap->Authmechanism();
+
+If specified, the I<Authmechanism> causes the specified authentication
+mechanism to be used whenever B<Mail::IMAPClient> would otherwise invoke
+B<login>. If the value specified for the I<Authmechanism> parameter is not
+a valid authentication mechanism for your server then you will never ever
+be able to log in again for the rest of your perl script, probably. So you
+might want to check, like this:
+
+	my $authmech = "CRAM-MD5";
+	$imap->has_capability($authmech) and $imap->Authmechanism($authmech);
+
+Of course if you know your server supports your favorite authentication 
+mechanism then you know, so you can then include your I<Authmechanism> 
+with your B<new> call, as in:
+	
+	my $imap = Mail::IMAPClient->new(
+			User    => $user,
+			Passord => $passord,
+			Server  => $server,
+			Authmechanism  => $authmech,
+			%etc 
+	);
+
+If I<Authmechanism> is supplied but I<Authcallback> is not then you had better be
+supporting one of the authentication mechanisms that B<Mail::IMAPClient> supports
+"out of the box" (such as CRAM-MD5).
+
+=head2 Authcallback
+
+Example:
+
+		$imap->Authcallback( \&callback );
+
+
+This specifies a default callback to the default authentication mechanism
+(see L<Authmechanism>, above). Together, these two methods replace automatic
+calls to login with automatic calls that look like this (sort of):
+
+	$imap->authenticate($imap->Authmechanism,$imap->Authcallback) ;
+
+If I<Authmechanism> is supplied but I<Authcallback> is not then you had better be
+supporting one of the authentication mechanisms that B<Mail::IMAPClient> supports
+"out of the box" (such as CRAM-MD5).
+
 =head2 Buffer
 
 Example:
@@ -6220,6 +6420,29 @@ Example:
 Specifies the port on which the IMAP server is listening. The default
 is 143, which is the standard IMAP port. Can be supplied with the
 L<new> method call or separately by calling the L<Port> object method.
+
+=head2 Ranges
+
+Example:
+
+	$imap->Ranges(1);
+	# or:
+	my $search = $imap->search(@search_args);
+	if ( $imap->Ranges) {	# $search is a MessageSet object
+		print "This is my condensed search result: $search\n";
+		print "This is every message in the search result: ",
+			join(",",@$search),"\n;
+	}
+
+
+If set to a true value, then the L<search> method will return a 
+L<Mail::IMAPClient::MessageSet> object if called in a scalar context,
+instead of the array reference that B<fetch> normally returns when
+called in a scalar context. If set to zero or if undefined, then B<search>
+will continue to return an array reference when called in scalar context.
+
+This parameter has no affect on the B<search> method when B<search> is called
+in a list context.
 
 =head2 Server
 
@@ -6646,8 +6869,8 @@ or anything else.
 
 =head1 COPYRIGHT
 
-                       Copyright 1999, 2000 The Kernen Group, Inc.
-                            All rights reserved.
+   Copyright 1999, 2000, 2001, 2002 The Kernen Group, Inc.
+   All rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either:

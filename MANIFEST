@@ -4,6 +4,7 @@ IMAPClient.pm
 BodyStructure/BodyStructure.pm
 BodyStructure/Parse/Parse.pod
 INSTALL
+BUG_REPORTS
 INSTALL_perl5.80
 MANIFEST
 README
@@ -12,6 +13,8 @@ t/basic.t
 t/fast_io.t
 t/uidplus.t
 t/uidfast.t
+t/cram-md5.t
+t/ranges.t
 Copying
 Artistic
 examples/build_dist.pl
@@ -49,6 +52,7 @@ docs/rfc2245.txt
 docs/rfc2342.txt
 docs/rfc2359.txt
 docs/rfc2683.txt
+docs/rfc2831.txt
 docs/draft-ietf-imapext-sort-06.txt
 BodyStructure/Parse/Makefile.PL
 BodyStructure/Parse/Parse.grammar

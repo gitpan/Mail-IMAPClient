@@ -1,5 +1,54 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
+Changes in version 2.2.6
+------------------------
+
+Fixed a bug in the migrate method that caused the internaldate
+of migrated messages to sometimes be wrong. Credit goes to Jen Wu 
+for identifying both bug and fix. 
+
+Added a new method, "get_header", to provide a short-cut for a common
+use of parse_headers. Added two other methods, "subject" and "date",
+to provide shortcuts to get_header. 
+
+Changed the Mail::IMAPClient::MessageSet module to override array 
+dereferencing. (See below.)
+
+Changed fetch and search methods to use the Range method (and thus the
+Mail::IMAPClient::MessageSet module) for messages. The fetch method will
+use MessageSet objects all the time, but the search method will only 
+return MessageSet objects if you specify "Ranges => 1" (with Ranges being 
+a new parameter).  The default will be "Ranges => 0" (which preserves 
+the old behavior) but this default will go away in some future release.
+There should be no need to override the fetch method's new behavior, since
+it will be transparent to you unless you tend to fetch a lot of messages
+at once, in which case your fetches may be faster and perhaps less likely
+to fail due to the request exceeding your server's line limit. If you set
+the Ranges parameter to true, then you still should not see a difference,
+because a) when fetch is called in a list context then you will not get
+a MessageSet object, you'll get the same list as always, and b) the 
+MessageSet objects now override array de-referencing operations, so if you
+treat the returned MessageSet object as if it were an array then the object
+will humour you and act like a reference to an array of messages sequence
+numbers or message uids.
+
+Also changed the flags method to use the Range method. This should also
+be transparent since the methods arguments and return values do not change.
+
+Added built-in support for CRAM-MD5 authentication. This authentication 
+method will in this release be used only when requested. In future releases
+the default authentication will probably be the strongest authentication 
+supported "out of the box" that is available on your server. Since CRAM-MD5
+is the only authentication other than plain text that is currently supported
+"out of the box", it will be the default authentication mechanism for any 
+server that supports it. See the pod for the Authmechanism and Authcallback
+parameters (which were also added in this release) and the doc for the 
+authenticate method (which has been around a while). Many thanks to Ville Skyttä
+for providing the code that makes up the heart of this new support, as well
+as to Gisle Aas for the Digest::HMAC_MD5 and MIME::Base64.
+
+Made minor tweaks to the documentation. Again. (Will it ever be 100% right?)
+
 Changes in version 2.2.5
 ------------------------
 Added the Range method to convert a bunch of message UID's or sequence numbers
@@ -1136,4 +1185,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.15 2002/10/23 20:45:44 dkernen Exp $
+# $Id: Changes,v 20001010.17 2002/12/13 18:08:37 dkernen Exp $
