@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$Mail::IMAPClient::VERSION = '1.02';
-$Mail::IMAPClient::VERSION = '1.02';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.03';
+$Mail::IMAPClient::VERSION = '1.03';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -17,8 +17,6 @@ sub Unconnected 	{ return 0 ; }		# Object not connected
 sub Connected 		{ return 1 ; } 		# connected; not logged in
 sub Authenticated 	{ return 2 ; }		# logged in; no mailbox selected
 sub Selected 		{ return 3 ; }		# mailbox selected
-
-
 
 # the following for loop sets up eponymous accessor methods for 
 # the object's parameters:
@@ -65,7 +63,7 @@ return          sprintf(
 
 # The following defines a special method to deal with the Clear parameter:
 
-sub Clear { 
+sub Clear {
 	my $self = shift;
 	defined(my $clear = shift) or return $self->{Clear}; 
 	
@@ -135,21 +133,40 @@ sub connect {
 
 sub login {
 	my $self = shift;
-	my $string = "Login " . $self->User . " " . $self->Password ;
+	my $string = "Login " . $self->User . " " . $self->Massage($self->Password) ;
 	$self->_imap_command($string) 
 		and $self->State(Authenticated);
+	$self->folders and $self->separator;
 	return ( ($self->State eq Authenticated) ? $self : undef);
 }
 
+sub separator {
+	my $self = shift;
+	my $target = shift || "INBOX";
+
+	# The fact that the response might end with {123} doesn't really matter here:
+
+	unless (exists $self->{$target,SEPARATOR}) {
+		my $list = (grep(/^\*\s+LIST\s+/, $self->list(undef,$target) ))[0];
+		$self->{$target,SEPARATOR} = substr(	
+			(split(/\s+/,$list))[3],
+			1,
+			length((split(/\s+/,$list))[3])-2
+		) ;
+	}
+
+	return $self->{$target,SEPARATOR};
+}
 
 sub list {
 	my $self = shift;
 	my ($reference, $target) = (shift, shift);
 	$reference 	||= "";	
 	$target 	||= '*';	
-	my $string 	=  qq(LIST "$reference" "$target");
+	$target 	  = $self->Massage($target);
+	my $string 	=  qq(LIST "$reference" $target);
 	$self->_imap_command($string)  or return undef;
-	return wantarray ? 	$self->History($self->Count) 	: 
+	return wantarray ? 	$self->History($self->Count) 		: 
 				$self->{"History"}{$self->Count}	;
 }
 
@@ -157,6 +174,9 @@ sub list {
 sub select {
 	my $self = shift;
 	my $target = shift or return undef;
+
+	$target = $self->Massage($target);
+
 	my $string 	=  qq/SELECT $target/;
 
 	my $old = $self->Folder;
@@ -174,6 +194,7 @@ sub select {
 sub examine {
 	my $self = shift;
 	my $target = shift or return undef;
+	$target = $self->Massage($target);
 	my $string 	=  qq/EXAMINE $target/;
 
 	my $old = $self->Folder;
@@ -219,10 +240,13 @@ sub _imap_command {
 	my ($code, $output);	
 	$output = "";
 
-	until ( ($code) = $output =~ /^$count (NO|BAD|$good|OK)/) {
-
+	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/) {
+		# print "Line +$output \t not '$count OK or BAD or NO or $good'\n" 
+		#	if $self->Debug;
 		$output = $self->_read_line;	
-		$self->_record($count,$output);
+		for my $o (split(/\r?\n/,$output)) { 
+			$self->_record($count,"$o\r\n");
+		}
 		if ($output =~ /^\*\s+BYE/) {
 			$self->State(Unconnected);
 			return undef ;
@@ -232,6 +256,7 @@ sub _imap_command {
 	return $code =~ /^OK|$good/ ? $self : undef ;
 
 }
+
 # _record saves the conversation into the History structure:
 sub _record {
 
@@ -266,9 +291,17 @@ sub _read_line {
 	my $sh		= $self->Socket;
 	
 	my $buffer	= undef; 
+	# my $count	= sysread($sh,$buffer,2048,0) ;	# first read is block read
 	my $count	= 0;
-
-	sysread($sh,$buffer,1,$count++) until $buffer =~ /\r\n$/;
+	until ($buffer =~ /\r?\n$/ ) {
+		sysread($sh,$buffer,1,$count++) ;
+	}
+	if ( $buffer =~ /\{(\d+)\}\r\n$/ ) {
+		my $len = $1 + 2;
+		my $newcount = 0;
+		$newcount += sysread($sh,$buffer,$len,$count+$newcount)
+			until $newcount >= $len;
+	}
 	print "Read: $buffer\n" if $self->Debug;
 	return defined($buffer) ? $buffer : undef ;
 }
@@ -308,25 +341,38 @@ sub logout {
 	return $self;
 }
 
-
 sub folders {
-	my $self = shift;
-	return wantarray ? @{$self->{Folders}} : $self->{Folders} if ref($self->{Folders});
-
-	my @folders = map { 
-		my @split = split(/\s+/,$_); 
-		my $pop = pop @split;
-		if ($pop =~ /"$/) {
-			$pop = pop(@split) . " $pop" until $pop =~ /^"/;
-		}		
-		$pop;
-	} @{$self->list};
-	pop @folders and shift @folders;
-	my @fixed;
-
-	$self->{Folders} = \@folders;
+        my $self = shift;
+        return wantarray ?      @{$self->{Folders}} :
+                                $self->{Folders} 
+                if ref($self->{Folders});
 	
-	return wantarray ? @folders : \@folders ;
+        my @folders ;  
+	my $list = $self->list;
+	
+	for (my $m = 0; $m < scalar(@$list); $m++ ) {
+	
+		if ($list->[$m]  =~ s/(\{\d+\})\r\n$// ) {
+			$list->[$m] .= $list->[$m+1];
+			$list->[$m+1] = "";	
+		}
+			
+		
+		push @folders, $1||$2 
+			if $list->[$m] =~
+                        /       ^\*\s+LIST              # * LIST
+                                \s+\([^\)]*\)\s+            # (Flags)
+                                "[^"]*"\s+              # "delimiter"
+                                (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
+                        /x;
+
+        } 
+
+        my @fixed;
+
+        $self->{Folders} = \@folders;
+
+        return wantarray ? @folders : \@folders ;
 }
 
 
@@ -350,12 +396,17 @@ sub AUTOLOAD {
 
 	my $self = shift;
 	return undef if $Mail::IMAPClient::AUTOLOAD =~ /DESTROY$/;
-	delete $self->{Folders}  if lc($Mail::IMAPClient::AUTOLOAD) =~ /::create$/i;
-	delete $self->{Folders}  if lc($Mail::IMAPClient::AUTOLOAD) =~ /::rename$/i;
-	delete $self->{Folders}  if lc($Mail::IMAPClient::AUTOLOAD) =~ /::delete$/i;
+	delete $self->{Folders}  ;
 	my $cmd = $Mail::IMAPClient::AUTOLOAD =~ s/.*:://;
 	if (scalar(@_)) {
-		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD / . join(" ",@_) )  or return undef;
+		my @a = @_;
+		if (	
+			$Mail::IMAPClient::AUTOLOAD =~ /^(?:create|delete|lsub|rename|search)$/i
+		) {
+			$a[-1] = $self->Massage($a[-1]) ;
+		}
+		print "Running: $Mail::IMAPClient::AUTOLOAD " . join(" ",@a) ,"\n" if $self->Debug;
+		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD / . join(" ",@a) )  or return undef;
 	} else {
 		$self->_imap_command(qq/$Mail::IMAPClient::AUTOLOAD/) or return undef;
 	}
@@ -370,6 +421,7 @@ sub status {
 
 	my $self = shift;
 	my $box = shift or return undef;
+	   $box = $self->Massage($box);
 	my @pieces = @_;
 	$self->_imap_command("STATUS $box (". (join(" ",@_)||'MESSAGES'). ")") or return undef;
 	return wantarray ? 	$self->History($self->Count) 	: 
@@ -380,7 +432,7 @@ sub status {
 sub parse_headers {
 
 	my($self,$msg,@fields) = @_;
-	my $string;
+	my $string; my $field;
 
 	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
 
@@ -394,7 +446,9 @@ sub parse_headers {
 	my $h = {};
 	for my $header (@raw) {
 		next if $header =~ /^\*/;
-		last if $header =~ /^\(/;	# ) for vi
+		next if $header =~ /^$/;
+		# ( for vi
+		last if $header =~ /^\)/;	
 		chomp $header;
 		$header =~ s/\r$//;	
 		if ($header =~ s/^(\S+): //) { 
@@ -443,11 +497,11 @@ for my $datum (
         no strict 'refs';
         *$datum = sub {
 		my $self = shift;
-		$self->_imap_command( "SEARCH $datum")
-			 or return undef;
-		my @results =  $self->History($self->Count)     ;
-
 		my @hits;
+
+		$self->_imap_command( "SEARCH $datum")
+			 or return wantarray ? @hits : \@hits ;
+		my @results =  $self->History($self->Count)     ;
 
 		for my $r (@results) {
 
@@ -490,11 +544,13 @@ sub DESTROY {
 sub search {
 
 	my $self = shift;
-	$self->_imap_command( "SEARCH ". join(' ',@_)) 
-		 or return undef;
+	my @hits;
+	my @a = @_;
+	$a[-1] = $self->Massage($a[-1]) if scalar(@a) > 1; # massage
+	$self->_imap_command( "SEARCH ". join(' ',@a)) 
+		 or return wantarray ? @hits : \@hits ;
 	my @results =  $self->History($self->Count) 	;
 
-	my @hits;
 
 	for my $r (@results) {
 			
@@ -526,7 +582,7 @@ sub delete_message {
 	}
 	
 
-	$self->store(join(',',@msgs),'+FLAGS.SILENT (\Deleted)') and $count++;
+	$self->store(join(',',@msgs),'+FLAGS.SILENT','(\Deleted)') and $count++;
 
 	return $count;
 }
@@ -548,6 +604,36 @@ sub has_capability {
 	my $self = shift;
 	$self->capability;
 	return $self->{CAPABILITY}{uc($_[0])};
+}
+
+sub is_parent {
+	my ($self, $folder) = (shift, shift);
+        my $list = $self->list(undef, $folder);
+	my $line;
+
+        for (my $m = 0; $m < scalar(@$list); $m++ ) {
+
+                if ($list->[$m]  =~ s/(\{\d+\})\r\n$// ) {
+                        $list->[$m] .= $list->[$m+1];
+                        $list->[$m+1] = "";
+                }
+
+	    	$line = $list->[$m]
+                        if $list->[$m] =~
+                        /       ^\*\s+LIST              # * LIST
+                                \s+\([^\)]*\)\s+            # (Flags)
+                                "[^"]*"\s+              # "delimiter"
+                                (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
+                        /x;
+	}	
+	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\)/;
+	return undef if $f =~ /NoInferiors/i;
+	unless ( $f =~ /\\/) {		# no flags at all unless there's a backslash
+		my $sep = $self->separator;
+		return 1 if scalar(grep /^$folder$sep/, $self->folders);
+		return 0;
+	}
+	return  $f =~ /HasChildren/i ? 1 : ( $f =~ /HasNoChildren/i ? 0 : undef ) ;
 }
 
 
@@ -608,6 +694,7 @@ sub append {
         return $code =~ /^OK/ ? $self : undef ;
 
 }
+
 
 sub authenticate {
 
@@ -697,6 +784,18 @@ sub size {
 	return $1;
 }
 
+sub Massage {
+	my $self = shift;
+	my $arg =  shift;
+	
+	if ($arg =~ /^[^"]+"/) {
+		$arg = "{" . length($arg) . "}\r\n$arg" if $arg =~ /^[^"]+"/;
+	} else {
+		$arg = qq("${arg}") unless $arg =~ /^"/;
+	}
+
+	return $arg;
+}
 
 # Status Routines:
 
@@ -1093,6 +1192,27 @@ successful if the object is in the B<Authenticated> or B<Selected> states.
 Returns true if the IMAP server to which the B<IMAPClient> object is connected has the capability
 specified as an argument to B<has_capability>.
 
+=item is_parent
+
+The B<is_parent> method accepts one argument, the name of a folder. It returns a value
+that indicates whether or not the folder has children. The value it returns is either
+1) a true value (indicating that the folder has children), 2) 0 if the folder has no
+children at this time, or 3) undef if the folder is not permitted to have children.
+
+Eg:
+	my $parenthood = $imap->is_parent($folder);
+	if (defined($parenthood)) { 
+		if ($parenthood) {
+			print "$folder has children.\n" ;
+		} else {
+			print "$folder is permitted children, but has none.\n";
+		}
+	} else {
+		print "$folder is not permitted to have children.\n";
+	}
+
+=cut
+
 =item list
 
 The B<list> method implements the IMAP LIST client command. Arguments are passed to the 
@@ -1189,6 +1309,8 @@ B<fetch> method yourself with the appropriate parameters and parse the data out 
 
 Currently, specifying a range of message numbers as the first argument is not supported. 
 
+=cut
+
 =item recent
 
 The B<recent> method performs an IMAP SEARCH RECENT search against the selected folder and returns
@@ -1232,6 +1354,15 @@ an array of sequence numbers of messages that have already been seen (ie their S
 
 The B<select> method selects a folder and changes the object's state to "Selected".
 It accepts one argument, which is the name of the folder to select.
+
+=cut
+
+=item separator
+
+The B<separator> method returns the character used as a separator character in 
+folder hierarchies. On unix-based servers, this is often a forward slash (/). It accepts one
+argument, the name of a folder whose hierarchy's separator should be returned. If no folder
+name is supplied then the separator from INBOX is returned, which probably is good enough.
 
 =cut
 

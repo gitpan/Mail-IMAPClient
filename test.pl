@@ -22,7 +22,9 @@ my $imap;
 my @tests;
 
 BEGIN { 
+	my $target; my $sep;
 
+	
 	push @tests, sub {
 		if ($imap) {
 			print "ok ",++$test,"\n";
@@ -32,16 +34,36 @@ BEGIN {
 	};
 
 	push @tests, sub {
-		if ( eval { $imap->select('inbox') } ) {
+		if ($sep = $imap->separator) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
-			print $imap->History,"\n";
 		}
 	};
 
 	push @tests, sub {
-		if ( eval { $imap->create("IMAPClient_$$") } ) {
+		my $isparent;
+		if (defined($isparent = $imap->is_parent("inbox"))) {
+			$target = "INBOX${sep}IMAPClient_$$";
+			print "ok ",++$test,"\n";
+		} else {	
+			$target = "IMAPClient_$$";
+			print "ok ",++$test,"\n";
+		}
+	};
+
+	
+	push @tests, sub {
+		if ( eval { $imap->select('inbox') } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+			# print $imap->History,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( eval { $imap->create("$target") } ) {
 			print "ok ",++$test,"\n";
 		} else {
 			print "not ok ",++$test,"\n";
@@ -49,7 +71,32 @@ BEGIN {
 	};
 
 	push @tests, sub {
-		if ( eval { $imap->exists("IMAPClient_$$") } ) {
+		if (defined($imap->is_parent($target))) {
+			if ( eval { $imap->create(qq($target${sep}has "quotes")) } ) {
+				print "ok ",++$test,"\n";
+			} else {
+				print "not ok ",++$test,"\n";
+			}
+			if ( eval { $imap->select(qq($target${sep}has "quotes")) } ) {
+				print "ok ",++$test,"\n";
+			} else {
+				print "not ok ",++$test,"\n";
+			}
+			if ( eval { $imap->delete(qq($target${sep}has "quotes")) } ) {
+				print "ok ",++$test,"\n";
+			} else {
+				print "not ok ",++$test,"\n";
+			}
+			# print $imap->Report;
+		} else { 
+			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n";
+			print "ok ",++$test,"\n";
+		}
+	};
+
+	push @tests, sub {
+		if ( eval { $imap->exists("$target") } ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -58,7 +105,7 @@ BEGIN {
 
 
 	push @tests, sub {
-		if ( eval { $imap->append("IMAPClient_$$",&testmsg)} ) {
+		if ( eval { $imap->append("$target",&testmsg)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -66,7 +113,7 @@ BEGIN {
 	};
 
 	push @tests, sub {
-		if ( eval { $imap->select("IMAPClient_$$") } ) {
+		if ( eval { $imap->select("$target") } ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -79,21 +126,25 @@ BEGIN {
 			and $h->{Subject}[0] =~ /^Testing from pid/} ) {
 			print "ok ",++$test,"\n";
 		} else {	
+			# use Data::Dumper;
+			# print Dumper($h);
+			# print "$h->{Subject}[0] \n";
 			print "not ok ",++$test,"\n";
+			# print $imap->Results;
 		}
 	};
 
 	my @hits = ();
 	push @tests, sub {
-		sleep 3;
-		eval { @hits = $imap->search(qq(SUBJECT "Testing")) } ;
+		eval { @hits = $imap->search('SUBJECT','Testing') } ;
 		if ( scalar(@hits) == 1 ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
-			#print "Found ",scalar(@hits), " hits (",join(", ",@hits),")-- expected 1\n";
-			#print $imap->Report;
-			#exit;
+			print "Found ",scalar(@hits), 
+			  " hits (",join(", ",@hits),")-- expected 1\n";
+			# print $imap->Results;
+			exit;
 		}
 	};
 
@@ -106,7 +157,20 @@ BEGIN {
 	};
 
 	push @tests, sub {
-		if ( $imap->delete("IMAPClient_$$") ) {
+		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
+		unless ( scalar(@hits)  ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+			#print "Found ",scalar(@hits), 
+			#  " hits (",join(", ",@hits),")-- expected 1\n";
+			#print $imap->Report;
+			#exit;
+		}
+	};
+
+	push @tests, sub {
+		if ( $imap->delete("$target") ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -114,7 +178,7 @@ BEGIN {
 	};
 
 	if ( -f "./.test" ) { 
-		print "1..@{[scalar(@tests)+1]}\n"; 
+		print "1..${\(scalar @tests + 3)}\n"; 
 	} else {		
 		print "1..1\n"; 	
 	}	
@@ -143,10 +207,9 @@ eval { $imap = Mail::IMAPClient->new(
 		Debug   => 0,
 ) } ;
 
-$imap->Clear(0);
 
 for my $test (@tests) { $test->(); }
-#print $imap->Report,"\n";
+# print $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}

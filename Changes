@@ -1,5 +1,31 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.03
+-----------------------
+Reworked several methods to support double-quote characters within folder names. This was 
+kind of hard. This has been successfully tested with create, delete, select, and folders, 
+to name the ones that come to mind.
+
+Reworked the undocumented method that reads the socket to accept and handle
+more gracefully lines ending in {nnn}\r\n ( where nnn is a number of characters to read)
+This seems to be part of the IMAP protocol although I am at a total loss as to where
+it's explained, other than a brief description of a "literal's" bnf syntax,
+which hardly counts. 
+
+Added separator object method, which returns the separator character in use by the 
+current server. 
+
+Added is_parent method, which returns 1, 0, or undef depending on whether a folder has
+children, has no children, or is not permitted to have children.
+
+Added tests to 'make test' to test new function. Also changed 'make test' to support
+IMAP systems that allow folders to be created only in the user's INBOX (which is the 
+exact opposite of what my IMAP server allows...oh, well).
+
+Fixed a bug that caused search to return an array of one undef'ed element rather than undef
+if there were no hits.
+
+
 Changes in version 1.02
 -----------------------
 Fixed bugs in search and folders methods. 
