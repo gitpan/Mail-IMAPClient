@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 19991216.15 2000/06/21 21:07:37 dkernen Exp $
+# $Id: IMAPClient.pm,v 19991216.16 2000/06/23 19:07:53 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.15';
-$Mail::IMAPClient::VERSION = '1.15';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.18';
+$Mail::IMAPClient::VERSION = '1.18';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -27,6 +27,7 @@ sub Selected 	  ()	{ return 3 ; }		# mailbox selected
 
 sub _debug {
 	my $self = shift;
+	return unless $self->Debug;
 	my $fh = $self->{Debug_fh} || \*STDERR; 
 	print $fh @_;
 }
@@ -104,6 +105,7 @@ sub new {
 	bless $self, ref($class)||$class;
 
 	$self->{Count} = 1;
+	$self->{Fast_io} = 1;
 	$self->State(Unconnected);
 	if (@_) {
 		my %conf = @_;
@@ -113,6 +115,8 @@ sub new {
 		}
 	}	
 	$self->{Debug_fh} ||= \*STDERR;
+ 	$self->_debug("Using Mail::IMAPClient version $Mail::IMAPClient::VERSION " .
+		"and perl version " . join(".",unpack("CCC",$^V)). " ($])\n") if $self->Debug;
 	$self->Clear(5) unless exists $self->{'Clear'};
 	$self->LastError(0);
 	return $self->connect if $self->Server and !$self->Socket;
@@ -134,18 +138,18 @@ sub connect {
                 Proto    => 'tcp' 			,
                 Timeout  => $self->Timeout||0		,
 		Debug	=> $self->Debug 		,
-	)						
-	or $@ = "Unable to connect: $!" and return undef;
+	)						;
+
+	$self->Socket($sock);
+	unless ( defined($sock) ) {
+		
+		$self->LastError( "Unable to connect to $self->{Server}: $!\n");	
+		$@ 		= "Unable to connect to $self->{Server}: $!";	
+		return undef;
+	}
 
 	$sock->autoflush(1)				;
 	
-	unless ( defined($sock) ) {
-		
-		$self->LastError( "Unable to connect to host: $!\n");	
-		$@ 		= "Unable to connect: $!";	
-		return undef;
-	}
-	$self->Socket($sock);
 	my ($code, $output);
         $output = "";
 
@@ -343,15 +347,15 @@ sub select {
 sub message_string {
 	my $self = shift;
 	my $msg  = shift;
-	my @head = $self->fetch($msg,"RFC822.HEADER");
-	my @torso = $self->fetch($msg,"RFC822.TEXT");
-	shift @head and pop @head and pop @head;
-	shift @torso and pop @torso and pop @torso;
+	my @head = $self->fetch($msg,"RFC822") or return undef;
+	#my @torso = $self->fetch($msg,"RFC822.TEXT");
+	$head[0] =~ s/.*FETCH \(.*RFC822 //i ;
+	pop @head and pop @head;
 	local($^W) = undef;
 	# $self->_debug "Last header is $head[$#head]";
 	until ($head[-1] =~ /\r\n\r\n$/) { $head[-1] .= "\r\n"} ;
 	# _debug $self, "Last header is $head[$#head]";
-	return join("",@head) . join("",@torso);
+	return join("",@head) ;
 }
 
 sub message_uid {
@@ -360,7 +364,7 @@ sub message_uid {
 	my @uid = $self->fetch($msg,"UID");
 	my $uid;
 	while ( my $u = shift @uid and !$uid) {
-		($uid) = $u =~ /\(UID\s+(\d+)\)\r?$/;
+		($uid) = $u =~ /\(UID\s+(\d+)\s*\)\r?$/;
 	}
 	return $uid;
 }
@@ -369,7 +373,8 @@ sub body_string {
 	my $self = shift;
 	my $msg  = shift;
 	my @torso = $self->fetch($msg,"RFC822.TEXT");
-	shift @torso and pop @torso and pop @torso;
+	$torso[0] =~ s/.*FETCH \(.*RFC822\.TEXT //i;
+	pop @torso and pop @torso;
 	return join("",@torso);
 }
 
@@ -427,16 +432,17 @@ sub _imap_command {
 
 	unless ($feedback) {
 		$self->LastError( "Error sending '$string' to IMAP: $!\n");
+		$@ = "Error sending '$string' to IMAP: $!";
 		return undef;
 	}
 
 	my ($code, $output);	
 	$output = "";
 
-	until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/mi ) {
+	READ: until ( ($code) = $output =~ /^$count (OK|BAD|NO|$good)/mi ) {
 		# _debug $self, "Line +$output \t not '$count OK or BAD or NO or $good'\n" 
 		#	if $self->Debug;
-		$output = $self->_read_line;	
+		$output = $self->_read_line or return undef;
 		for my $o (split(/\r?\n/,$output)) { 
 			$self->_record($count,"$o\r\n");
 		}
@@ -502,6 +508,8 @@ sub run {
 sub _record {
 
 	my ($self,$count,$line) = ( shift, shift, shift);
+	
+	if ( $line =~ /^\d+ LOGIN/i ) { $line =~ s/LOGIN.*/LOGIN XXXXXXXX XXXXXXXX/i }
 
 	push @{$self->{"History"}{$count}}, $line;
 
@@ -527,7 +535,7 @@ sub _send_line {
 			$dstring =~ 	s	(\b(?:$self->{Password}|$self->{User})\b)
 						('X' x length($self->{Password}))eg;
 		}
-		_debug $self, "Sending: $dstring\n" ;
+		_debug $self, "Sending: $dstring\n" if $self->Debug;
 	}
 	return	syswrite(	
 				$self->Socket, 
@@ -559,8 +567,10 @@ sub _read_line {
 		$newflags |= O_NONBLOCK;
 		fcntl($sh, F_SETFL, $newflags) and $readlen = 4096;
 	}
+	my $offset = 0;
 
 	until ($buffer =~ /\r?\n$/ ) {
+		# _debug $self,"Entering read engine.\n" if $self->Debug;
 		if ($timeout) {
 			vec($rvec, fileno($self->Socket), 1) = 1;
 			CORE::select( $ready = $rvec, undef, $errors = $rvec, $timeout) ;
@@ -569,23 +579,32 @@ sub _read_line {
 					": Timeout waiting for data from server\n");	
 				fcntl($sh, F_SETFL, $fcntl) 
 					if $self->Fast_io and defined($fcntl);
+				$self->_record($self->Transaction,$self->Transaction . "* NO Timeout during read from server\r\n");
+				$@ = "Timeout during read from server\r\n";
 				return undef;
 			}
 		}
-		my $newcount = $count;
-		my $oldW = $^W;
-		$^W = 0;
+		_debug($self,"count is $count and length of buffer is " . length($buffer) . "\n");
+		local($^W) = undef;
 		$count += sysread(
 					$sh,
 					$buffer,
 					$readlen,
-					$newcount
+					$offset
 		) ;
-		if ( $buffer =~ s/\{(\d+)\}\r\n$// ) {
-			_debug $self, "in literal logic\n" if $self->Debug;
-			$count = length($buffer);
+		$offset = $count ;
+		pos $buffer = 1;
+		LITERAL: while ( $buffer =~ /\{(\d+)\}\r\n/g ) {
+			_debug $self, 	"Buffer:\n$buffer" . ('-' x 30) . "\n" if $self->Debug;
 			my $len = $1 ;
-			my $newcount = 0;
+			$offset = $count - pos($buffer) ;
+			$count -= length("{" . "$len" . "}\r\n" ) ;
+
+			_debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
+
+			substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
+				
+
 			if ($timeout) {
 				vec($rvec, fileno($self->Socket), 1) = 1;
 				unless ( CORE::select( $ready = $rvec, 
@@ -596,17 +615,20 @@ sub _read_line {
 					$self->LastError("Tag " . $self->Transaction . 
 						": Timeout waiting for literal data from server\n");	
 					return undef;
-				}
+				}	
 			}
-			$newcount += sysread($sh,$buffer,$len-$newcount, 
-							$count+$newcount)
-				until $newcount >= $len;
-			$count += $newcount;
-			_debug $self, "Read so far: $buffer\n" if $self->Debug;
+			until ( $offset >= $len ) {
+				# _debug $self, "Reading literal data\n";
+				$offset += sysread($sh,$buffer,$len-$offset, $count+$offset) ;
+			}
+			$count += $offset;
+			#_debug $self, "Read so far: $buffer\n" if $self->Debug;
+			pos $buffer = 1;
 		}
-		$^W = $oldW;
-		_debug $self, "Read so far: $buffer\n" if $self->Debug;
+		$offset = length($buffer);
+		# _debug $self, "Read so far: $buffer\n" if $self->Debug;
 
+		pos $buffer = 1;
 	}
 	fcntl($sh, F_SETFL, $fcntl) if $self->Fast_io and defined($fcntl);
 	#	_debug $self, "Buffer is now $buffer\n";
@@ -674,7 +696,7 @@ sub folders {
                                 \s+\([^\)]*\)\s+            # (Flags)
                                 "[^"]*"\s+              # "delimiter"
                                 (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
-                        /x;
+                        /ix;
 
         } 
 
@@ -830,13 +852,13 @@ sub flags {
 		if (	$resultline =~ 
 			/	\*\s+(\d*)\s+FETCH\s*	# * nnn FETCH 
 				\(FLAGS\s*\((.*)\)	# (FLAGS (\Flag1 \Flag2)
-				(?:\sUID\s(\d+))*	# optional: UID nnn
+				(?:\sUID\s(\d+))?	# optional: UID nnn
 				\) 			# )
 			/x
 		) {
 			my $mailid = $u_f ? $3 : $1;
 			my $flagsString = $2;
-			my @flags = split(/\s+/, $flagsString);
+			my @flags = map { s/\s+$//; $_ } split(/\s+/, $flagsString);
 			$flagset->{$mailid} = \@flags;
 		}
 	}
@@ -850,11 +872,6 @@ sub flags {
 	# Or did he want a hash from msgid to flag array?
 	return $flagset;
 }
-
-
-
-
-
 
 # parse_headers modified to allow second param to also be a
 # reference to a list of numbers. If this is a case, the headers
@@ -917,7 +934,7 @@ sub parse_headers {
                		if ($hdr =~ s/^(\S+): //) { 
                        		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
                        		push @{$h->{$field}} , $hdr ;
-               		} elsif ($hdr =~ s/^.*FETCH \(BODY\[HEADER\.FIELDS.*\)\]\s(\S+): //) { 
+               		} elsif ($hdr =~ s/^.*FETCH\s\(.*BODY\[HEADER\.FIELDS.*\)\]\s(\S+): //) { 
                        		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
                        		push @{$h->{$field}} , $hdr ;
                		} elsif ( ref($h->{$field}) eq 'ARRAY') {
@@ -958,7 +975,7 @@ sub recent_count {
 
 	$self->status($folder, 'RECENT') or return undef;
 
-	chomp(my $r = ( grep { s/\*\s+STATUS\s+.*\(RECENT\s+(\d+)\)/$1/ }
+	chomp(my $r = ( grep { s/\*\s+STATUS\s+.*\(RECENT\s+(\d+)\s*\)/$1/ }
 			$self->History($self->Transaction)
 	)[0]);
 
@@ -970,10 +987,11 @@ sub recent_count {
 sub message_count {
 	
 	my ($self, $folder) = (shift, shift);
+	$folder ||= $self->Folder;
 	
 	$self->status($folder, 'MESSAGES') or return undef;
 
-	chomp(my $m =	   (	grep {s/\*\s+STATUS\s+.*\(MESSAGES\s+(\d+)\).*$/$1/ }
+	chomp(my $m =	   (	grep {s/\*\s+STATUS\s+.*\(MESSAGES\s+(\d+)\s*\).*$/$1/ }
 			$self->History($self->Transaction) 
 	)[0]);
 
@@ -1047,7 +1065,7 @@ for my $datum (
 		       $r =~ s/\r$//;
 		       $r =~ s/^\*\s+SEARCH\s+//i or next;
 		       push @hits, grep(/\d/,(split(/\s+/,$r)));
-			_debug $self, "Hits are now: ",join(',',@hits),"\n";
+			_debug $self, "Hits are now: ",join(',',@hits),"\n" if $self->Debug;
 		}
 
 		return wantarray ? @hits : \@hits;
@@ -1071,6 +1089,7 @@ sub disconnect { $_[0]->logout }
 sub DESTROY {
 	my $self = shift;
 	local($^W = 0);
+	local($@);
 	eval {
 		$self->logout if $self->IsConnected; 
 		$self->Socket->close if ref($self->Socket);
@@ -1109,12 +1128,12 @@ sub delete_message {
 
 	my $self = shift;
 	my $count = 0;
-	my @msgs;
+	my @msgs = ();
 	for my $arg (@_) {
 		if (ref($arg) eq 'ARRAY') {
-			push @msgs , @{$arg};
+			push @msgs, @{$arg};
 		} else {
-			push @msgs , split(/,/,$arg);
+			push @msgs, split(/\,/,$arg);
 		}
 	}
 	
@@ -1188,7 +1207,7 @@ sub is_parent {
                                 (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
                         /x;
 	}	
-	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\)/ if $line;
+	my($f) = $line =~ /^\*\s+LIST\s+\(([^\)]*)\s*\)/ if $line;
 	unless ( $f =~ /\\/) {		# no flags at all unless there's a backslash
 		my $sep = $self->separator($folder);
 		return 1 if scalar(grep /^$folder$sep/, $self->folders);
@@ -1331,9 +1350,9 @@ sub append_file {
 			$self->LastError("Error sending append msg text to IMAP: $!\n");
 			return undef;
 		}
-		_debug $self, "control points to $$control\n" if ref($control);
+		_debug $self, "control points to $$control\n" if ref($control) and $self->Debug;
 		$/ = 	$control ? 	$control : 	"\n";	
-		while ($text = <$fh>) {
+		while (defined($text = <$fh>)) {
 			$text =~ s/\r?\n/\r\n/g;
 			$self->_record($count,$text);
 			$feedback = $self->_send_line("$text",1);
@@ -1594,6 +1613,20 @@ B<IMAPClient> object can be in the B<Unconnected> state both before a server con
 and after it has ended. This differs slightly from RFC2060, which does not define a 
 pre-connection status. For a discussion of the methods available for examining the B<IMAPClient>
 object's status, see the section labeled "Status Methods", below.
+
+=head2 Errors
+
+If you attempt an operation that results in an error, then you can retrieve the text of the error
+message by using the B<LastError> method. However, since the B<LastError> method is an object method
+(and not a class method) you will only be able to use this method if you've successfully created your 
+object. Errors in the B<new> method can prevent your object from ever being created. Additionally, if
+you supply the I<Server>, I<User>, and I<Password> parameters to B<new>, it will attempt to call 
+B<connect> and B<login>, either of which could fail and cause your B<new> method call to return undef
+(in which case you're object will have been created but it's reference will have been discarded before
+ever being returned to you).
+
+If this happens to you, you can always check C<$@>. B<Mail::IMAPClient> will populate that variable with 
+something useful if either of the B<new>, B<connect>, or B<login> methods fail. 
 
 =head2 Transactions
 
@@ -1950,7 +1983,8 @@ on C<$/>).
 The B<append_file> method returns the UID of the new message (a true value) if successful, 
 or undef if not, if the IMAP server has the UIDPLUS capability. If it doesn't then you just 
 get true on success and undef on failure. If you supply a filename that doesn't exist then you
-get an automatic undef.
+get an automatic undef. The B<LastError> method will remind you of this if you forget that your
+file doesn't exist but somehow remember to check B<LastError>.
 
 In case you're wondering, B<append_file> is provided mostly as a way to allow large messages
 to be appended without having to have the whole file in memory. It uses the C<-s> operator to
@@ -2224,7 +2258,10 @@ then see the B<subscribed> method, below.
 
 The B<message_count> method accepts the name of a folder as an argument and returns the number
 of messages in that folder. Internally, it invokes the B<status> method (see above) and 
-parses out the results to obtain the number of messages. 
+parses out the results to obtain the number of messages. If you don't supply an argument to 
+B<message_count> then it will return the number of messages in the currently selected folder
+(assuming of course that you've used the B<select> or B<examine> method to select it instead of
+trying something funky).
 
 =cut
 
@@ -2722,6 +2759,22 @@ to which you are connecting. Note that in the latest versions of Mail::IMAPClien
 not print out the user or password from the login command line. However, if you use some other means
 of authenticating then you may need to edit the debugging output with an eye to security.
 
+- Don't be surprised if I come back asking for a trace of the problem. To provide this, you should create
+a file called I<.perldb> in your current working directory and include the following line of text in 
+that file:
+
+C<&parse_options("NonStop=1 LineInfo=mail_imapclient_db.out");>
+
+For your debugging convenience, a sample .perldb file, which was randomly assigned the name 
+F<sample.perldb>, is provided in the distribution.
+
+Next, without changing your working directory, debug the example script like this:
+C<perl -d example_script.pl [ args ]>
+
+Note that in these examples, the script that demonstrates your problem is named "example_script.pl"
+and the trace output will be saved in "mail_imapclient_db.out". You should change these to suite 
+your needs.
+
 =head1 AUTHOR
 
 	David J. Kernen
@@ -2761,6 +2814,11 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 19991216.16  2000/06/23 19:07:53  dkernen
+#
+# Modified Files:
+# 	Changes IMAPClient.pm Makefile test.txt  -- for v1.16
+#
 # Revision 19991216.15  2000/06/21 21:07:37  dkernen
 #
 # Modified Files: Changes IMAPClient.pm Makefile

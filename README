@@ -44,6 +44,9 @@ servers:
 -Cyrus IMAP4 v1.5.19
 -Mirapoint Message Server Appliances (OS versions 1.6.1, 1.7.1, and 2.0.2)
 
+I also know that it has some problems running against the InterMail server vM.4.001.02.00 
+(and probably other versions of InterMail as well).
+
 If your server requires the use of the AUTHENTICATE IMAP client command (say,
 for strong authentication) then you can still use this module, provided you can come 
 up with the appropriate responses to any challenges offered by your server. 
@@ -59,6 +62,13 @@ entering on the command line:
 perl -e 'use Socket; use IO::Socket;'
 
 If you get compile errors then you'll have trouble using Mail::IMAPClient.
+
+REPORING BUGS
+
+See the section on "REPORTING BUGS" in the module's documentation if you are having problems.
+YOU MUST FOLLOW THE INSTRUCTIONS IN THE DOCUMENTATION AND PROVIDE ALL OF THE NECESSARY 
+INFORMATION if you expect a response from your bug report. You should also look at the data you
+gather before you send it, since doing so will often solve your problem.
 
 INSTALLATION
 

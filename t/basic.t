@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.11 2000/06/21 21:07:44 dkernen Exp $
+# $Id: basic.t,v 19991216.12 2000/06/23 19:08:40 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -10,20 +10,18 @@ use Mail::IMAPClient;
 
 ######################### End of black magic.
 
-# Insert your test code below (better if it prints "ok 13"
-# (correspondingly "not ok 13") depending on the success of chunk 13
-# of the test code):
 
-my $test = 1;
+my $test = 0;
 my %parms;
 my $imap;
 my @tests;
 my $uid;
 
 BEGIN { 
-	my $target; my $sep;
+	$^W++;
+	my $target; my $sep; my $target2;
 
-	
+	push @tests, sub { $test++ } ; # 
 	push @tests, sub {	# 2
 		if (ref($imap)) {
 			print "ok ",++$test,"\n";
@@ -45,9 +43,11 @@ BEGIN {
 		$isparent = $imap->is_parent(INBOX);
 		if (defined($isparent)) {
 			$target = "INBOX${sep}IMAPClient_$$";
+			$target2 = "INBOX${sep}IMAPClient_2_$$";
 			print "ok ",++$test,"\n";
 		} else {	
 			$target = "IMAPClient_$$";
+			$target2 = "IMAPClient_2_$$";
 			print "ok ",++$test,"\n";
 		}
 		# print "target is $target\n";
@@ -70,6 +70,9 @@ BEGIN {
 			print "not ok ",++$test,"\n";
 		}
 	};
+	push @tests, 
+		sub { return "dummy test 8" },
+		sub { return "dummy test 9" };
 
 	push @tests, sub {	# 7,8,9
 		if (defined($imap->is_parent($target))) {
@@ -118,8 +121,21 @@ BEGIN {
 		}
 	};
 
-
-	push @tests, sub {	# 11
+	push @tests, 	sub {	# 11
+		if ( eval { $imap->create($target2) } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	}, 		sub {	# 12
+		if ( eval { $imap->exists($target2) } ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+			
+	push @tests, sub {	# 13
 		if ( eval { $uid = $imap->append("$target",&testmsg)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -127,7 +143,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 12
+	push @tests, sub {	# 14
 		if ( eval { $imap->select("$target") } ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -135,30 +151,8 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 13, 14
-		unless ($imap->has_capability("UIDPLUS") and !ref($uid)) {
-		      	print "ok ", ++$test," (skipped)\n";
-                       	print "ok ", ++$test," (skipped)\n";
-		 	return;
-		}
-		my $m1 ; 
-		eval { 
-		$imap->Uid(1); $m1 = $imap->message_string($uid) ; $imap->Uid(0)} ;
-		if ( !$? ) {	# 13
-			print "ok ",++$test,"\n";
-		} else {	
-			print "not ok ",++$test,"\n";
-		}
-	
-		if ( defined($m1) and length($m1))	{	# 14
-			print "ok ",++$test,"\n";
-		} else {
-			print "not ok ",++$test,"\n";
-		}
-	};
-
 	push @tests, sub {	# 15
-		if ( eval { my $uid2 = $imap->copy("$target",1)} ) {
+		if ( eval { my $uid2 = $imap->copy($target2,1)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
@@ -178,7 +172,7 @@ BEGIN {
 	push @tests, sub {	# 17
 		my $h;
 		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
-			and $h->{Subject}[0] =~ /^Testing from pid/} ) {
+			and $h->{Subject}[0] =~ /^Testing from pid/o } ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			# use Data::Dumper;
@@ -193,40 +187,16 @@ BEGIN {
 	push @tests, sub {	# 18
 		$imap->select("$target");
 		eval { @hits = $imap->search('SUBJECT','Testing') } ;
-		if ( scalar(@hits) == 2 ) {
+		if ( scalar(@hits) == 1 ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
 			print "Found ",scalar(@hits), 
 			  " hits (",join(", ",@hits),")-- expected 2\n";
-			print $imap->Report;
 		}
-	};
-	push @tests, sub {	# 19, 20
-		unless ( $imap->uid("search all") ) {
-			print "ok ",++$test," (skipped)\n";
-			print "ok ",++$test," (skipped)\n";
-			return;
-		}
-		eval { $imap->Uid(1); @uidhits = $imap->search('SUBJECT','Testing') } ;
-		if ( scalar(@uidhits) == 2 ) {
-			print "ok ",++$test,"\n";
-			if ($uidhits[0] == $uid) { 
-				print "ok ",++$test,"\n" ;
-			} elsif (ref($uid)) {
-				print "ok ",++$test," (skipped)\n" ;
-			} else {
-				print "not ok ",++$test,"\n";
-				print "Expected $uid but got $uidhits[0]\n";
-			}
-		} else {	
-			print "not ok ",++$test,"\n";
-			print "ok (skipped)",++$test,"\n";
-		}
-		eval { $imap->Uid(0) };
 	};
 
-	push @tests, sub {	# 21
+	push @tests, sub {	# 19
 		if ( $imap->delete_message(@hits) ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -234,20 +204,26 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 22
+	push @tests, sub {	# 20
+		$imap->select($target2);
+		if ( $imap->delete_message($imap->search("ALL")) and $imap->delete($target2) ) {
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+			print $imap->Report;
+		}
+	};
+
+	push @tests, sub {	# 21
 		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
 		unless ( scalar(@hits)  ) {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
-			#print "Found ",scalar(@hits), 
-			#  " hits (",join(", ",@hits),")-- expected 1\n";
-			#print $imap->Report;
-			#exit;
 		}
 	};
 
-	push @tests, sub {	# 23,24
+	push @tests, sub {	# 22,23
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";
@@ -264,10 +240,10 @@ BEGIN {
 				print "not ok ",++$test,"\n";
 			}
 		}
-	};
+	}, sub { return "dummy test 21" };
 
 	if ( -f "./test.txt" ) { 
-		print "1..${\(scalar @tests + 6)}\n";  # update here if adding test to existing sub
+		print "1..${\(scalar @tests)}\n";  # update here if adding test to existing sub
 	} else {		
 		print "1..1\n"; 	
 	}	
@@ -294,8 +270,7 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Debug   => 0,
-		Fast_IO   => 0,
-		Timeout	=> 4,
+		Fast_IO => 0,
 ) } ;
 
 
@@ -319,6 +294,13 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.12  2000/06/23 19:08:40  dkernen
+#
+# Modified Files:
+# 	Changes IMAPClient.pm Makefile test.txt  -- for v1.16
+# Modified Files: basic.t  -- to remove uidplus tests and to make copy test copy to different folder
+# Added Files: 	uidplus.t -- moved all uidplus tests here
+#
 # Revision 19991216.11  2000/06/21 21:07:44  dkernen
 #
 # Modified Files: Changes IMAPClient.pm Makefile

@@ -1,4 +1,52 @@
 Revision history for Perl extension IMAPClient.
+
+Changes in version 1.18
+-----------------------
+Timeouts during read operations now work correctly.
+
+Fixed several bugs in the I/O engine. This should correct various problems with Fast_io turned on (which
+is now the default).
+
+Reworked message_string and body_string methods to avoid bugs when Uid set to true.
+
+Changes in version 1.17
+-----------------------
+
+Added support for the Oracle IMAP4r1 server.
+
+Tinkered with the DESTROY method so that it does a local($@) before doing its evals. This will
+perserve the value of $@ when the "new" method fails during a login but the DESTROY's "logout" succeeds. 
+The module was setting the $@ variable, but on some versions of perl the DESTROY method would clobber $@ 
+before anything useful could be done with it! Thanks to Kimmo Hovi for reporting this problem, which was 
+harder to debug than you might think.
+
+Changes in version 1.16
+-----------------------
+
+IMPORTANT:  Made Fast_IO the default. You must specify Fast_io => 0 in your new method call or
+invoke the Fast_io method (and supply 0 as an arg) to get the old behavior. (This should 
+be transparent to most users, but as always your mileage may vary.)
+
+Reduced the number of debug msgs printed in the _read_line internal method and added a debug msg
+to report perl and Mail::IMAPClient versions.
+
+The message_count method will now return the number of messages in the currently select folder if
+no folder argument is supplied. 
+
+The message_string method now does an IMAP FETCH RFC822 (instead of a FETCH RFC822.HEADERS and
+a FETCH RFC822.TEXT), which should eliminate missing blank lines at the ends of some messages on 
+some IMAP server platforms. It also returns undef if for some reason the underlying FETCH fails
+(i.e. there is no folder selected), thanks to a suggestion by Pankaj Garg. It has also been slightly
+re-worked to support the changes in the I/O engine from version 1.14.
+
+Re-worked the body_string method to support the I/O engine changes from v1.14.
+
+Fixed a bug in parse_headers when used with multiple headers and the Uid parameter set to a true
+value.
+
+Documented in this file a fix for a bug in the flags method with the Uid parameter turned on. 
+(Belated thanks to Michael Lieberman for reporting this bug.)
+
 Changes in version 1.15
 -----------------------
 Fixes the test suite, which in v1.14 had an "exit" stmt that caused early termination of the tests.
@@ -19,11 +67,14 @@ Changes in version 1.13
 Changed the parse_headers method so that it uses BODY.PEEK instead of BODY. This prevents the
 parse_headers method from implicitly setting the "\Seen" flag for messages that have not been
 otherwise read. This change could produce an incompatibility in scripts that relied on the 
-parse_headers previous behavior.
+parse_headers previous behavior. 
+
+Fixed a bug in the flags method with the Uid parameter turned on.  (Thanks to Michael Lieberman 
+for reporting this bug.)
 
 Changes in version 1.12
 -----------------------
-Fixed a bug in the folders method when called with a second arg then once without a second arg.
+Fixed a bug in the folders method when called first with a second arg and then without a second arg.
 
 Tested sucessfully with perl-5.6.0. 
 
@@ -428,4 +479,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 19991216.16 2000/06/21 21:07:36 dkernen Exp $
+# $Id: Changes,v 19991216.17 2000/06/23 19:07:52 dkernen Exp $

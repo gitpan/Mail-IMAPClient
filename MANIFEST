@@ -16,3 +16,4 @@ examples/find_dup_msgs.pl
 examples/copy_folder.pl
 docs/rfc2060.txt
 test_template.txt
+sample.perldb
