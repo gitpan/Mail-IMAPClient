@@ -1,5 +1,59 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 2.0.0
+-----------------------
+NEW I/O ENGINE
+This version includes a major rewrite of the I/O engine. It's now cleaner and more reliable. 
+Also, output processing is less likely to match patterns that look like server output but are really, say, 
+message text contained in a literal or something like that. Also, various problems with blank lines at the 
+ends of messages either magically appearing or disappearing should now go away. Basically, it's much better 
+is what I'm trying to say.
+
+NEW DEFAULT
+The Uid parameter now defaults to true. This should be transparent to existing scripts (except for
+those scripts that produce embarrassing results because someone forgot to specify Uid=>1, in which case they'll
+magically start behaving somehow).
+
+NEW METHOD
+The namespace method has been added, thus implementing RFC2342. If you have any scripts that rely on 
+the old, "default method" style of namespace implementation then you should rename those method calls to be mixed
+case (thus forcing the AUTOLOADed default method). 
+
+NEW ERROR MESSAGES
+Mail::IMAPClient now issues a lot more warning messages when run in warn mode (i.e. $^W is 
+true). Of particular interest are methods implemented via the "default method" AUTOLOAD hack. They will 
+generate a warning telling you to use mixed- or upper-case method names (but only if warnings are turned on, 
+say with the -w switch or $^W++ or something).  The exception are certain unimplemented yet quite popular methods 
+that, if ever explicitly implemented, will behave the same way as they do via the default method. (Or at least 
+they will remain downwardly compatible. I may add bells and whistles by not by default.) Those methods
+are listed in the pod and right here:  store, copy, subscribe, create, delete and expunge.
+
+NEW VERSION NUMBERING SCHEME
+Changed the version numbering scheme to match perl's (as of perl v5.6.0).
+
+NEW INSTALLATION TESTS
+Added a few new tests to the test suite. (Still need more, though.) Also changed fast_io 
+and uidplus test suites so that they just "do" the basic tests but with different options set (i.e. Fast_io and 
+Uid, respectively).
+
+OTHER CHANGES
+- The expunge method now optionally accepts the name of the folder to be expunged. It's also been documented, even
+though it technically doesn't exist. (That won't stop it from working, though.) Since expunge deletes messages that
+you thought were already deleted, it's only appropriate to use a method that you thought existed but really doesn't,
+don't you think? And if you're wondering how I managed to change the behavior of a method that doesn't exist, well,
+I don't want to talk about it.
+
+- Speaking of methods that don't exist (also known as methods implemented via "the default method"), effective with
+this release there are a number of unimplemented methods that are guaranteed to always exhibit their current 
+behavior. In other words, even if I do eventually implement these methods explicitly, they will continue to accept
+the same arguments and return the same results that they do now via the default method. (Why I would even bother
+to do that is specifically not addressed in this document.) Currently this means that these methods will not 
+trigger warnings when called via all-lowercase letters (see "NEW ERROR MESSAGES", above). In the future I hope that
+it will also mean that these non-existant but functioning methods will also be documented in the pod.
+
+- Fixed a bug in the flags method introduced in 1.19.  (Thanks to the people at jwm3.org for reporting this!)
+
+
 Changes in version 1.19
 -----------------------
 Fixed a bug in which the Folder parameter returned quoted folder names, which sometimes caused other methods
@@ -524,4 +578,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.1 2000/10/10 17:32:12 dkernen Exp $
+# $Id: Changes,v 20001010.2 2000/10/27 14:43:23 dkernen Exp $

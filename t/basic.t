@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.13 2000/07/10 20:54:19 dkernen Exp $
+# $Id: basic.t,v 19991216.14 2000/10/27 14:43:59 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -16,12 +16,15 @@ my %parms;
 my $imap;
 my @tests;
 my $uid;
+my $fast||=0;
+my $uidplus||=0;
+use vars qw/*TMP/;
 
-BEGIN { 
+BEGIN {
 	$^W++;
 	my $target; my $sep; my $target2;
 
-	push @tests, sub { $test++ } ; # 
+	push @tests, sub { $test++ } ; # Dummy test 1
 	push @tests, sub {	# 2
 		if (ref($imap)) {
 			print "ok ",++$test,"\n";
@@ -75,12 +78,12 @@ BEGIN {
 		sub { return "dummy test 9" };
 
 	push @tests, sub {	# 7,8,9
-		if (defined($imap->is_parent($target))) {
+		if (defined($imap->is_parent($target))) {	#7 
 			if ( eval { $imap->create(qq($target${sep}has "quotes")) } ) {
-				print "ok ",++$test,"\n";
+				print "ok ",++$test,"\n";	
 			} else {
                           if ($imap->LastError =~ /NO Invalid.*name/) {
-                                print "ok skipping ",++$test,
+                                print "ok ",++$test,
 				 " $parms{server} doesn't support quotes in folder names--",
 				 "skipping next 2 tests\n";
                                 print "ok ", ++$test," (skipped)\n";
@@ -94,13 +97,13 @@ BEGIN {
                           }
 
 			}
-			if ( eval { $imap->select(qq($target${sep}has "quotes")) } ) {
+			if ( eval { $imap->select(qq($target${sep}has "quotes")) } ) { #8
 				print "ok ",++$test,"\n";
 			} else {
 				print "not ok ",++$test,"\n";
 			}
 			$imap->select('inbox');
-			if ( eval { $imap->delete(qq($target${sep}has "quotes")) } ) {
+			if ( eval { $imap->delete(qq($target${sep}has "quotes")) } ) { #9
 				print "ok ",++$test,"\n";
 			} else {
 				print "not ok ",++$test,"\n";
@@ -140,6 +143,7 @@ BEGIN {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
+			print STDERR $imap->Results;
 		}
 	};
 
@@ -150,8 +154,75 @@ BEGIN {
 			print "not ok ",++$test,"\n";
 		}
 	};
+	{
+	my $size; my $string; my $target;
+	push @tests, sub {	# 15, 16, 17
+		$target = ref($uid) ? ($imap->search("ALL"))[0] : $uid;
+		if ( eval { $size = $imap->size($target) } ) { # 15  test size
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		} 
+ 	}, sub {
+		if ( eval { $string = $imap->message_string($target) } ) { # 16  test message_string
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	}, sub {
+		if ( $size == length($string) ) {	# 17 test size = length of string
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+	};
+	}
 
-	push @tests, sub {	# 15
+	push @tests, sub {	# 18, 19, 20, 21, 22, 23, 24
+		my @unseen; my @seen;
+		if ( eval { @seen = $imap->seen } ) { # 18	test seen's success
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+		if ( @seen == 1 ) 			{ # 19	test seen's results
+			print "ok ",++$test,"\n";
+		} else {
+			print "not ok ",++$test,"\n";
+		}
+		
+		if ( eval { $imap->deny_seeing(\@seen) } ) { # 20 test deny_seeing's success
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+		if ( eval { @unseen = $imap->unseen } ) { # 21 test unseen's success
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+
+		if ( @unseen == 1 ) 		    { # 22 test deny_seeing's and unseen's results
+			print "ok ",++$test,"\n";
+		} else {
+			print "not ok ",++$test,"\n";
+		}
+		if ( eval { $imap->see(\@seen) } ) { # 23 test see's success
+			print "ok ",++$test,"\n";
+		} else {	
+			print "not ok ",++$test,"\n";
+		}
+		if ( @seen == 1 ) 			{ # 24 test seen's and see's success
+			print "ok ",++$test,"\n";
+		} else {
+			print "not ok ",++$test,"\n";
+		}
+		
+	};
+	# Add dummy tests to come up to 24 test routines:
+	push @tests, sub { 19 }, sub { 20 }, sub { 21 } , sub { 22 }, sub { 23 }, sub { 24 };
+
+	push @tests, sub {	# 25
 		if ( eval { my $uid2 = $imap->copy($target2,1)} ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -160,7 +231,7 @@ BEGIN {
 	};
 
 	
-	push @tests, sub {	# 16
+	push @tests, sub {	# 26
 		my @res;
 		if ( eval { @res = $imap->fetch(1,"RFC822.TEXT") } ) {
 			print "ok ",++$test,"\n";
@@ -169,7 +240,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 17
+	push @tests, sub {	# 27
 		my $h;
 		if ( eval {  $h = $imap->parse_headers(1,"Subject")  
 			and $h->{Subject}[0] =~ /^Testing from pid/o } ) {
@@ -184,7 +255,7 @@ BEGIN {
 	};
 
 	my @hits = ();
-	push @tests, sub {	# 18
+	push @tests, sub {	# 28
 		$imap->select("$target");
 		eval { @hits = $imap->search('SUBJECT','Testing') } ;
 		if ( scalar(@hits) == 1 ) {
@@ -196,15 +267,22 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 19
+	push @tests, sub {	# 29, 30
 		if ( $imap->delete_message(@hits) ) {
 			print "ok ",++$test,"\n";
+			my $flaghash = $imap->flags(\@hits);
+			my $flagflag = 0;
+			foreach my $v ( values %$flaghash ) { 
+				foreach my $f (@$v) { $flagflag++ if $f =~ /\\Deleted/}
+				print "",($flagflag == scalar(@hits) ? "ok " :  "not ok "),++$test,"\n"  ;
+			}
 		} else {	
 			print "not ok ",++$test,"\n";
+			print "not ok ",++$test,"\n";
 		}
-	};
+	}, sub { return "Dummy test 30"} ;
 
-	push @tests, sub {	# 20
+	push @tests, sub {	# 31
 		$imap->select($target2);
 		if ( $imap->delete_message($imap->search("ALL")) and $imap->delete($target2) ) {
 			print "ok ",++$test,"\n";
@@ -214,7 +292,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 21
+	push @tests, sub {	# 32
 		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
 		unless ( scalar(@hits)  ) {
 			print "ok ",++$test,"\n";
@@ -223,7 +301,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 22,23
+	push @tests, sub {	# 33, 34
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";
@@ -240,7 +318,7 @@ BEGIN {
 				print "not ok ",++$test,"\n";
 			}
 		}
-	}, sub { return "dummy test 21" };
+	}, sub { print "ok ",++$test,"\n"} ;		# At least this one will work !!
 
 	if ( -f "./test.txt" ) { 
 		print "1..${\(scalar @tests)}\n";  # update here if adding test to existing sub
@@ -263,16 +341,21 @@ BEGIN {
 	close TST;
 
 }
-# $db = IO::File->new(">/tmp/de.bug");
+$db = IO::File->new(">/tmp/de.bug");
+local *TMP = $db ;
+open(STDERR,">&TMP");
+select(((select($db),$|=1))[0]);
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
 		User 	=> "$parms{user}"  || scalar(getpwuid($<)),
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
-		Debug   => 0,
-		# Debug_fh   => $db,
-		Fast_IO => 0,
+		Timeout => 30,
+		Debug   => 1,
+		Debug_fh   => $db,
+		Fast_IO => $fast,
+		Uid 	=> $uidplus,
 ) 	or 
 	print STDERR "\nCannot log into $parms{server} as $parms{user}. Are server/user/password correct?\n" 
 	and exit
@@ -288,7 +371,7 @@ To: <$parms{user}\@$parms{server}>
 From: Perl <$parms{user}\@$parms{server}>
 Subject: Testing from pid $$
 
-This is a test message generated by 'make test' during the installation of 
+This is a test message generated by $0 during a 'make test' as part of the installation of
 that nifty Mail::IMAPClient module from CPAN. Like all things perl, it's 
 way cool.
 
@@ -299,6 +382,12 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.14  2000/10/27 14:43:59  dkernen
+#
+# Modified Files: Changes IMAPClient.pm Todo -- major rewrite of I/O et al.
+# Modified Files: basic.t fast_io.t uidplus.t -- more tests in basic.t. Other
+# tests just "do basic.t" with different options set.
+#
 # Revision 19991216.13  2000/07/10 20:54:19  dkernen
 #
 # Modified Files: Changes IMAPClient.pm MANIFEST Makefile README
