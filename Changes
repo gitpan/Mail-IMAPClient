@@ -1,15 +1,29 @@
 Revision history for Perl extension IMAPClient.
+Changes in version 2.0.3
+------------------------
+
+Did major rewrite of message_string method, which should now be both cleaner and more reliable.
+
+Fixed bug in move method that caused some folders to be incorrectly quoted. (Thanks go to Felix Finch for
+reporting this bug.) Also, at his suggestion I added information to move documentation explaining the need
+to expunge.
+
+Made many fixes and tweaks to pod text.
+
+Added a new method, Rfc2060_date, which takes times in the "seconds since 1/1/1970" format and returns
+a string in RFC2060's "dd-Mon-yyyy" format (which is the format you need to use in IMAP SEARCH commands).
 
 Changes in version 2.0.2
 ------------------------
 Fixed bug that caused a compile error on some earlier versions of perl5. 
 
-Noticed that some older versions of perl give spurious "Ambiguous use" warnings here and there, mostly because
-I'm not quoting the name of the "History" member of the underlying Mail::IMAPClient hash. These warnings will
-go away when you upgrade perl. (I may fix them later, or maybe not. Depends on if I have time.) 
+Noticed that some older versions of perl give spurious "Ambiguous use" warnings here and there, mostly 
+because I'm not quoting the name of the "History" member of the underlying Mail::IMAPClient hash. 
+These warnings will go away when you upgrade perl. (I may fix them later, or maybe not. Depends on if 
+I have time.) 
 
-Added new parameter (and eponymous method) Peek, along with new tests for 'make test' for same. See pod for 
-further info.
+Added new parameter (and eponymous method) Peek, along with new tests for 'make test' for same. See the 
+pod for further info.
 
 Added some error checking to avoid trying to read or write with an unconnected IMAPClient object.
 
@@ -21,86 +35,92 @@ the pod while I happened to be there. (I'm sure there are still plenty left.)
 Fixed bugs in append and append_file. (Thanks to Mauro Bartolomeoli and to the people at jwm3.org for reporting 
 these bugs.) 
 
-Made changes to call to syswrite to guarantee delivery of entire message. (Only affects appends of very large
-messages.)
+Made changes to call to syswrite to guarantee delivery of entire message. (Only affects appends of very 
+large messages.)
 
-Added the 'close' method to the list of lower-case-is-okay methods (see the section under version 2.0.0 on "NEW
-ERROR MESSAGES").
+Added the 'close' method to the list of lower-case-is-okay methods (see the section under version 2.0.0 
+on "NEW ERROR MESSAGES").
 
 Changes in version 2.0.1
 ------------------------
-Several bug fixes related to the flags method and to spurious warning messages when run with warnings turned on.
+Several bug fixes related to the flags method and to spurious warning messages when run with warnings 
+turned on.
 
-A new method, message_to_file, writes message text directly into a file. This bypasses saving the text in the history
-buffer and the overhead that entails, which could be especially important when processing big ass messages. Of course
-the bad news is that now you'll have to write all that shtuff out to a filehandle, but maybe you wanted to do 
-that anyway. Anyhow, between append_file and message_to_file, both of which take filehandle arguments, there should 
-be a way to "short circuit" the copying of mail between two imap sessions. I just haven't got it completely figured 
-out yet how it would work. Got any ideas? Anyhow, this method is currently considered experimental.
+A new method, message_to_file, writes message text directly into a file. This bypasses saving the text in 
+the history buffer and the overhead that entails, which could be especially important when processing 
+big ass messages. Of course the bad news is that now you'll have to write all that shtuff out to a 
+filehandle, but maybe you wanted to do that anyway. Anyhow, between append_file and message_to_file, both 
+of which take filehandle arguments, there should be a way to "short circuit" the copying of mail 
+between two imap sessions. I just haven't got it completely figured out yet how it would work. Got any 
+ideas? Anyhow, this method is currently considered experimental.
 
 A couple of new tests have been added to go along with our new little method.
 
-I've added a whole bunch more IMAP-related rfc's to the docs/ subdirectory. Trust me, you are going to need them.
+I've added a whole bunch more IMAP-related rfc's to the docs/ subdirectory. Trust me, you are going 
+to need them.
 
 Changes in version 2.0.0
 -----------------------
 NEW I/O ENGINE
 This version includes a major rewrite of the I/O engine. It's now cleaner and more reliable. 
-Also, output processing is less likely to match patterns that look like server output but are really, say, 
-message text contained in a literal or something like that. Also, various problems with blank lines at the 
-ends of messages either magically appearing or disappearing should now go away. Basically, it's much better 
-is what I'm trying to say.
+Also, output processing is less likely to match patterns that look like server output but are 
+really, say, message text contained in a literal or something like that. Also, various problems 
+with blank lines at the ends of messages either magically appearing or disappearing should now go away. 
+Basically, it's much better is what I'm trying to say.
 
 NEW DEFAULT
 The Uid parameter now defaults to true. This should be transparent to existing scripts (except for
-those scripts that produce embarrassing results because someone forgot to specify Uid=>1, in which case they'll
-magically start behaving somehow).
+those scripts that produce embarrassing results because someone forgot to specify Uid=>1, in which 
+case they'll magically start behaving somehow).
 
 NEW METHOD
 The namespace method has been added, thus implementing RFC2342. If you have any scripts that rely on 
-the old, "default method" style of namespace implementation then you should rename those method calls to be mixed
-case (thus forcing the AUTOLOADed default method). 
+the old, "default method" style of namespace implementation then you should rename those method calls 
+to be mixed case (thus forcing the AUTOLOADed default method). 
 
 NEW ERROR MESSAGES
 Mail::IMAPClient now issues a lot more warning messages when run in warn mode (i.e. $^W is 
-true). Of particular interest are methods implemented via the "default method" AUTOLOAD hack. They will 
-generate a warning telling you to use mixed- or upper-case method names (but only if warnings are turned on, 
-say with the -w switch or $^W++ or something).  The exception are certain unimplemented yet quite popular methods 
-that, if ever explicitly implemented, will behave the same way as they do via the default method. (Or at least 
-they will remain downwardly compatible. I may add bells and whistles by not by default.) Those methods
-are listed in the pod and right here:  store, copy, subscribe, close, create, delete and expunge.
+true). Of particular interest are methods implemented via the "default method" AUTOLOAD hack. 
+They will generate a warning telling you to use mixed- or upper-case method names (but only if 
+warnings are turned on, say with the -w switch or $^W++ or something).  The exception are certain 
+unimplemented yet quite popular methods that, if ever explicitly implemented, will behave the same way 
+as they do via the default method. (Or at least they will remain downwardly compatible. I may add bells 
+and whistles by not by default.) Those methods are listed in the pod and right here:  store, copy, 
+subscribe, close, create, delete and expunge.
 
 NEW VERSION NUMBERING SCHEME
 Changed the version numbering scheme to match perl's (as of perl v5.6.0).
 
 NEW INSTALLATION TESTS
 Added a few new tests to the test suite. (Still need more, though.) Also changed fast_io 
-and uidplus test suites so that they just "do" the basic tests but with different options set (i.e. Fast_io and 
-Uid, respectively).
+and uidplus test suites so that they just "do" the basic tests but with different options set (i.e. 
+Fast_io and Uid, respectively).
 
 OTHER CHANGES
-- The expunge method now optionally accepts the name of the folder to be expunged. It's also been documented, even
-though it technically doesn't exist. (That won't stop it from working, though.) Since expunge deletes messages that
-you thought were already deleted, it's only appropriate to use a method that you thought existed but really doesn't,
-don't you think? And if you're wondering how I managed to change the behavior of a method that doesn't exist, well,
-I don't want to talk about it.
+- The expunge method now optionally accepts the name of the folder to be expunged. It's also been 
+documented, even though it technically doesn't exist. (That won't stop it from working, though.) Since 
+expunge deletes messages that you thought were already deleted, it's only appropriate to use a method 
+that you thought existed but really doesn't, don't you think? And if you're wondering how I managed 
+to change the behavior of a method that doesn't exist, well, I don't want to talk about it.
 
-- Speaking of methods that don't exist (also known as methods implemented via "the default method"), effective with
-this release there are a number of unimplemented methods that are guaranteed to always exhibit their current 
-behavior. In other words, even if I do eventually implement these methods explicitly, they will continue to accept
-the same arguments and return the same results that they do now via the default method. (Why I would even bother
-to do that is specifically not addressed in this document.) Currently this means that these methods will not 
-trigger warnings when called via all-lowercase letters (see "NEW ERROR MESSAGES", above). In the future I hope that
-it will also mean that these non-existant but functioning methods will also be documented in the pod.
+- Speaking of methods that don't exist (also known as methods implemented via "the default method"), 
+effective with this release there are a number of unimplemented methods that are guaranteed to always 
+exhibit their current behavior. In other words, even if I do eventually implement these methods 
+explicitly, they will continue to accept the same arguments and return the same results that they 
+do now via the default method. (Why I would even bother to do that is specifically not addressed 
+in this document.) Currently this means that these methods will not trigger warnings when called 
+via all-lowercase letters (see "NEW ERROR MESSAGES", above). In the future I hope that it will also 
+mean that these non-existant but functioning methods will also be documented in the pod.
 
-- Fixed a bug in the flags method introduced in 1.19.  (Thanks to the people at jwm3.org for reporting this!)
+- Fixed a bug in the flags method introduced in 1.19.  (Thanks to the people at jwm3.org for reporting 
+this!)
 
 
 Changes in version 1.19
 -----------------------
-Fixed a bug in which the Folder parameter returned quoted folder names, which sometimes caused other methods
-to requote the folders an extra time. (The IMAP protocol is real picky about that.) Thanks go to Felix Finch
-for both reporting the bug and identifying the fix.
+Fixed a bug in which the Folder parameter returned quoted folder names, which sometimes caused 
+other methods to requote the folders an extra time. (The IMAP protocol is real picky about that.) 
+Thanks go to Felix Finch for both reporting the bug and identifying the fix.
 
 Siggy Thorarinsson contributed the new "unseen_count" method and suggested a new "peek mode" parameter.
 I have not yet gotten around to implementing the new parameter but have included the unseen_count method,
@@ -121,25 +141,26 @@ reporting this bug and for identifying the fix.
 
 Fixed bug in uidvalidity method where folder has special characters in it.
 
-Made several bug fixes to the example script examples/find_dup_msgs.pl. Thanks to Steve Mayer for identifying 
-these bugs.
+Made several bug fixes to the example script examples/find_dup_msgs.pl. Thanks to Steve Mayer for 
+identifying these bugs.
 
-Changed Fast_io to automatically turn itself off if running on a platform that does not provide the necessary
-fcntl macros (I won't mention any names, but it's initials are "NT"). This will occur silently unless warnings 
-are turned on or unless the Debug parameter is set to true. Previously scripts running on this platform had 
-to turn off fast_io by hand, which is lame. (Thank you Kevin Cutts for reporting this problem.)
+Changed Fast_io to automatically turn itself off if running on a platform that does not provide the 
+necessary fcntl macros (I won't mention any names, but it's initials are "NT"). This will occur silently 
+unless warnings are turned on or unless the Debug parameter is set to true. Previously scripts running 
+on this platform had to turn off fast_io by hand, which is lame. (Thank you Kevin Cutts for reporting this problem.)
 
-Updated logic that X's out login credentials when printing debug output so that funky characters in "User" or
-"Password" parameters won't break the regexp. (Kevin Cutts found this one, too.)
+Updated logic that X's out login credentials when printing debug output so that funky characters in 
+"User" or "Password" parameters won't break the regexp. (Kevin Cutts found this one, too.)
 
-Tinkered with the Strip_cr method so it can accept multiple arguments OR an array reference as an argument. See
-the updated pod for more info.
+Tinkered with the Strip_cr method so it can accept multiple arguments OR an array reference as an 
+argument. See the updated pod for more info.
 
-Fixed a typo in the documentation in the section describing the fetch method. There has been an entire paragraph
-missing from this section for who knows how long. Thanks to Adam Wells, who reported this documentation error.
+Fixed a typo in the documentation in the section describing the fetch method. There has been an 
+entire paragraph missing from this section for who knows how long. Thanks to Adam Wells, who reported 
+this documentation error.
 
-Fixed bug in seen, recent, and unseen methods that caused them to return empty arrays erroneously under certain 
-conditions.
+Fixed bug in seen, recent, and unseen methods that caused them to return empty arrays erroneously 
+under certain conditions.
 
 Changes in version 1.18
 -----------------------

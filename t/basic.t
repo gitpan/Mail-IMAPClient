@@ -330,7 +330,25 @@ BEGIN {
 		}
 	}, sub { return "Dummy test 35"} ;
 
-	push @tests, sub {	# 36
+	push @tests, sub {	# 36, 37
+		if ( $imap->restore_message(@hits) ) {
+			print "ok ",++$test,"\n";
+			my $flaghash = $imap->flags(\@hits);
+			my $flagflag = scalar(@hits);
+			foreach my $v ( values %$flaghash ) { 
+				foreach my $f (@$v) { $flagflag-- if $f =~ /\\Deleted/}
+			}
+			if ( $flagflag == scalar(@hits) ) {
+				print "ok ", ++$test,"\n";
+			} else {
+				print "not ok ", ++$test,"\n";
+			}
+		} else {	
+			print "not ok ",++$test,"\n";
+			print "not ok ",++$test,"\n";
+		}
+	}, sub { $imap->delete_message(@hits) } ;	# dummy 37
+	push @tests, sub {	# 38
 		$imap->select($target2);
 		if ( $imap->delete_message($imap->search("ALL")) and $imap->delete($target2) ) {
 			print "ok ",++$test,"\n";
@@ -340,7 +358,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 37
+	push @tests, sub {	# 39
 		eval { @hits = $imap->search(qq(SUBJECT "Productioning")) } ;
 		unless ( scalar(@hits)  ) {
 			print "ok ",++$test,"\n";
@@ -349,7 +367,7 @@ BEGIN {
 		}
 	};
 
-	push @tests, sub {	# 38, 39
+	push @tests, sub {	# 40, 41
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";
@@ -366,7 +384,7 @@ BEGIN {
 				print "not ok ",++$test,"\n";
 			}
 		}
-	}, sub { "Dummy 39" } ; 	
+	}, sub { "Dummy 41" } ; 	
 
 	if ( -f "./test.txt" ) { 
 		print "1..${\(scalar @tests)}\n";  # update here if adding test to existing sub
@@ -389,10 +407,18 @@ BEGIN {
 	close TST;
 
 }
+
+=begin debugging
+
 $db = IO::File->new(">/tmp/de.bug");
 local *TMP = $db ;
 open(STDERR,">&TMP");
 select(((select($db),$|=1))[0]);
+
+=end debugging
+
+=cut
+
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -401,7 +427,7 @@ eval { $imap = Mail::IMAPClient->new(
 		Clear   => 0,
 		Timeout => 30,
 		Debug   => 0,
-		Debug_fh   => $db,
+		Debug_fh   => undef,	#	$db,
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 ) 	or 
@@ -411,7 +437,7 @@ eval { $imap = Mail::IMAPClient->new(
 
 
 for my $test (@tests) { $test->(); }
-print $db $imap->Report,"\n";
+#print $db $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}
