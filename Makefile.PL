@@ -91,6 +91,12 @@ sub set_test_data {
 	chomp $port;
 	$port ||= 143; 
 	print TST "port=$port\n";
+	print "\nPlease provide the authentication mechanism to use on $server to run the test \n",
+		"(default is 'LOGIN', which uses the plain text LOGIN command) ==> ";
+	my $authmech = <STDIN>;
+	chomp $authmech;
+	$authmech ||= 'LOGIN'; 
+	print TST "authmechanism=$authmech\n";
 	close TST;
 	print "\nGracias! The information you provided (including the \n",
 		" password!) has been stored in ",cwd,"/test.txt and should be\n",

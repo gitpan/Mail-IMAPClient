@@ -1,5 +1,61 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
+Changes in version 2.2.7
+------------------------
+
+Added some new parameters to support alternate authentication mechanisms:
+
+	Prewritemethod
+      	Readmethod 
+
+Mail::IMAPClient has supported cram-md5 authentication "out of the box"
+as of 2.2.6 (courtesy of Ville Skyttä). I also have digest-md5 working
+in my lab with quality of protection levels "auth" and "integrity", but
+not "confidentiality". I'm hoping to get the confidentiality part working
+soon but so far have only managed to authenticate, send an encrypted command, 
+and receive and decrypt the response. This may sound like enough but I can't 
+seem to send a second command or receive a second response;-( In any event 
+2.2.8 will support at least qop=auth and qop=auth-int but maybe not 
+qop=auth-conf.
+
+Fixed a bug reported by Adrian that caused get_bodystructure to
+fail if the server returned a bodystructure with an embedded 
+literal. Also fixed the same bug in get_envelope, so I guess now
+everyone knows that get_envelope was just a tinkered-with copy of
+get_bodystructure... 
+
+Fixed two related bugs in Parser.pm that caused
+get_bodystructure and get_envelope to fail if the
+UID nnnnn part of a fetch response follows all the
+other stuff.  Thanks to Raphaël Langella for reporting this bug.
+
+Enhanced several methods to use MessageSets when the
+Ranges parameter is true. There are still more methods that
+need to be retrofitted to take advantage of the Range method
+(and its underlying MessageSet object). In the meantime, if you 
+need to get the functionality of the shorter message ranges provided
+by the Range method from a method that does not honor the Ranges
+parameter, then you should a) create a message set by passing the 
+messages to the Range method and then pass the scalar as a string
+to the method you want to use. For example, if you want to move 
+a whole lot of messages to Trash, do something like this:
+>
+>my $range = $imap->Range(scalar($imap->search("SentBefore", "01-Jan-2000"))); 
+>$imap->move("Trash","$range");
+>
+This will cause the range object to stringify out to what looks like
+a non-reference scalar before the move method gets the argument. If you
+omit the quotes around "$range" then this won't work.
+
+Fixed a bug in the list method that caused LIST "" "" to fail miserably.
+Thanks to John W Sopko Jr. for reporting this bug.
+
+Fixed a bug in the test suite that caused the cram-md5 tests to fail
+if you are not running the extended tests. (Introduced in 2.2.6)
+
+Fixed a bug that affected users on platforms that do not support 
+fcntl (i.e. NT).  Thanks to Raphaël Langella for reporting this bug.
+
 Changes in version 2.2.6
 ------------------------
 

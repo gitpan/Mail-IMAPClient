@@ -35,9 +35,12 @@ if (open TST,"./test.txt" ) {
                 $parms{$p}=$v if $v;
         }
         close TST;
+} else {
+
+	print "1..1\n";
+	print "ok 1 (skipped)\n";
+	exit;
 }
-
-
 exit unless		%parms 
 	and 	length 	$parms{server}
 	and 	length 	$parms{user}
@@ -54,7 +57,7 @@ eval { $imap = Mail::IMAPClient->new(
 		Debug_fh   => 	$ARGV[0]?IO::File->new(">imap1.debug"):undef,
 		Fast_IO => 1,
 		Uid 	=> 1,
-                Authmechanism  => $authmech||undef,
+                Authmechanism  => $parms{authmechanism}||undef,
 ) 	or 
 	print STDERR "\nCannot log into $parms{server} as $parms{user}. Are server/user/password correct?\n" 
 	and exit

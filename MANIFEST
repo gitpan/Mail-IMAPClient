@@ -1,6 +1,7 @@
 Changes
 Todo
 IMAPClient.pm
+IMAPClient.pod
 BodyStructure/BodyStructure.pm
 BodyStructure/Parse/Parse.pod
 INSTALL

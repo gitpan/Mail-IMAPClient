@@ -7,6 +7,13 @@ release:
 but if you get this to work or know someone who has I'd be really interested in
 hearing from you.
 
+- Support for more authentication mechanisms. Currently plain authentication and
+cram-md5 authentication are supported. I have DIGEST-MD5 working at the AUTH
+qop, but haven't incorporated it into a released version because I'm still trying
+to get at least the integrity qop working, and maybe even privacy, but considering
+how much trouble I'm having with just the integrity level I wouldn't hold my breath
+if I were you ;-).
+
 - Currently a number of IMAP Client commands are implemented using the 
 'default method', which is an AUTOLOAD hack. I'd like to reduce that if 
 possible to a bare minimum. (Some are still pending as of version 2.2.7.)

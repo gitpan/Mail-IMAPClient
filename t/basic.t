@@ -450,6 +450,10 @@ BEGIN {
                 	Server  => "$parms{server}"||"localhost",
                 	Port    => "$parms{port}"  || '143',
                 	User    => "$parms{user}"  || scalar(getpwuid($<)),
+                	( $authmech ? ( Authmechanism  => $authmech) : 
+				( $parms{authmechanism} eq "LOGIN" ? () : 
+				  Authmechanism => $parms{authmechanism}||undef )
+			),
                 	Password=> "$parms{passed}"|| scalar(getpwuid($<)),
                 	Clear   => 0,
                 	Timeout => 30,
@@ -457,7 +461,6 @@ BEGIN {
                 	#Debug_fh   => $ARGV[0]?IO::File->new(">./imap2.debug"):undef,
                 	Fast_IO => $fast,
                 	Uid     => $uidplus,
-                	Authmechanism  => $authmech||undef,
 		)       or
         	print STDERR 	"\nCannot log into $parms{server} as $parms{user}. ",
 				"Are server/user/password correct?\n"
@@ -595,6 +598,10 @@ eval { $imap = Mail::IMAPClient->new(
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
 		User 	=> "$parms{user}"  || scalar(getpwuid($<)),
+                ( $authmech ? ( Authmechanism  => $authmech) : 
+			( $parms{authmechanism} eq "LOGIN" ? () : 
+			  Authmechanism => $parms{authmechanism}||undef )
+		),
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Timeout => 30,
@@ -603,7 +610,6 @@ eval { $imap = Mail::IMAPClient->new(
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 		Range 	=> $range,
-                Authmechanism  => $authmech||undef,
 ) 	or 
 	print STDERR "\nCannot log into $parms{server} as $parms{user}. Are server/user/password correct?\n" 
 	and exit

@@ -269,13 +269,13 @@ bodystructure: 	 "(" part(s) ")"
 			$return||defined($return);
 		}
 
-start:		/.*\(.*BODYSTRUCTURE \(/i part(1)  /\)\)\r?\n?/
+start:		/.*\(.*BODYSTRUCTURE \(/i part(1)  /\).*\)\r?\n?/
 		{
 			$return = $item{part}[0] ;				
 			$return||defined($return);
 		}
 
-envelope:	/.*\(.*ENVELOPE/ envelopestruct ")" {
+envelope:	/.*\(.*ENVELOPE/ envelopestruct /.*\)/ {
 		$return = $item{envelopestruct} ;
 		$return||defined($return) ;
 		}
