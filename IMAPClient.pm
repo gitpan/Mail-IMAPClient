@@ -2,8 +2,8 @@ package Mail::IMAPClient;
 
 # $Id: IMAPClient.pm,v 19991216.8 2000/01/12 18:58:00 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '1.08';
-$Mail::IMAPClient::VERSION = '1.08';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.08a';
+$Mail::IMAPClient::VERSION = '1.08a';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -516,7 +516,7 @@ sub folders {
                 if ref($self->{Folders}) and !$what;
 	
         my @folders ;  
-	my $list = $self->list(undef,( $what? "$what" . $self->separator . "*" : undef ) );
+	my $list = $self->list(undef,( $what? "$what" . $self->separator($what) . "*" : undef ) );
 	
 	for (my $m = 0; $m < scalar(@$list); $m++ ) {
 	

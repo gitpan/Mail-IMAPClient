@@ -28,11 +28,15 @@ b<build_ldif.pl> I<-s servername -u username -p password -f folder [ -d ]>
 
 =item -s The servername of the IMAP server 
 
+=item -t Include "To" and "Cc" fields as well as "From"
+
 =item -u The user to log in as
 
 =item -p The password for the user specified in the I<-u> option
 
 =item -d Tells the IMAP client to turn on debugging info
+
+=item -n Suppress delivering message to folder
 
 =item -h Prints out this document
 
@@ -44,7 +48,7 @@ B<NOTE:> You can supply defaults for the above options by updating the script.
 
 use Getopt::Std;
 
-getopts('hs:u:p:f:d');
+getopts('hs:u:p:f:dtn');
 
 # Update the following to supply defaults:
 
@@ -53,8 +57,8 @@ $opt_s ||= "default server";
 $opt_u ||= "default user";
 $opt_p ||= "default password";	# security risk: use with caution!
 
-# Let the compiler know we're serious about these two variables:
-$opt_h = $opt_h or $opt_d = $opt_d ; 
+# Let the compiler know we're serious about these variables:
+$opt_0 = ( $opt_h or $opt_d or $opt_t or $opt_n or $opt_0); 
 
 exec "perldoc $0" if $opt_h;
 
@@ -65,7 +69,7 @@ my $imap = Mail::IMAPClient->new(
 		Debug	=> $opt_d||0 ,
 ) or die "can't connect to server\n";
 
-$imap->select($opt_f);
+$imap->select($opt_f); $imap->expunge;
 
 my @msgs = $imap->search("NOT SUBJECT",qq("buid_ldif.pl $opt_f Output"));
 my %list;
@@ -94,6 +98,38 @@ foreach my $m (@msgs) {
 	$addr =~ s/[\<\>]//g				;
 	$list{lc($addr)} = [ $addr, $name ]
 		unless exists $list{lc($addr)} 		;
+	if ($opt_t) {					# Do "To" and "Cc", too
+		my $ref = $imap->parse_headers($m,"To","Cc")		;
+		my @array = ( 	@{$ref->{To}}	, @{$ref->{Cc}}	)	;
+		my @members = ()					;
+		foreach my $text (@array) 				{
+		  while ( $text =~ /	"([^"\\]*(\\.[^"\\]*)*"[^,]*),?	|
+					([^",]+),?			|
+					,
+			/gx 
+		  ) {
+			push @members, defined($1)?$1:$3 		;
+		  }
+		}
+		foreach my $to (@members) 				{ 
+
+			my $name = $to					;
+
+			$name =~ s/<.*//				;
+			if ($name =~ /\@/) {
+				$name = $to				;
+				$name =~ s/\@.*//;			;
+			}
+			$name =~ s/\"//g				;
+			$name =~ s/^\s+|\s+$//g				;
+			my $addr = $to					; 
+			$addr =~ s/.*<//				;
+			$addr =~ s/[\<\>]//g				;
+			$list{lc($addr)} = [ $addr, $name ]
+				unless exists $list{lc($addr)} 		;
+		}
+	
+	}
 }
 
 my $text = join "",map {
@@ -117,12 +153,17 @@ $msg->attach(	Type     =>'text/ldif',
                 Data 	 => $text ,
 );
 print $text;
-$imap->append($opt_f, $msg->as_string);
+$imap->append($opt_f, $msg->as_string) unless $opt_n;
 print Dumper($imap) if $opt_d;
 $imap->logout;
 
-# $Id: build_ldif.pl,v 19991216.6 1999/12/28 13:56:59 dkernen Exp $
+# $Id: build_ldif.pl,v 19991216.7 2000/02/21 16:16:10 dkernen Exp $
 # $Log: build_ldif.pl,v $
+# Revision 19991216.7  2000/02/21 16:16:10  dkernen
+#
+# Modified Files: build_ldif.pl  -- to allow for "To:" and "Cc:" header handling and
+# to handle quoted names in headers
+#
 # Revision 19991216.6  1999/12/28 13:56:59  dkernen
 # Fixed -h option (help).
 #

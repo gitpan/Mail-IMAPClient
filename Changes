@@ -3,8 +3,16 @@ Revision history for Perl extension IMAPClient.
 Changes in version 1.08
 -----------------------
 
-Fixed bug in pod that failed to mention constraints on when the append method will return the uid
-of the appended message. (This feature only works with servers that have the UIDPLUS capability.)
+Maintenance release 1.08a fixes a bug in the folders method when supplying the optional argument
+(see "Enhanced folders method..." below) with some IMAP servers.
+
+Added option to build_ldif.pl (in the examples subdirectory) to allow new options and to better
+handle quoted comments in e-mail addresses. Thanks to Jeffrey Fiedl, whose book _Mastering 
+Regular Expressions_ (O'Reilly) helped me to figure out a good way to do this.
+
+Fixed documentation error that failed to mention constraints on when the append method will 
+return the uid of the appended message. (This feature only works with servers that have the 
+UIDPLUS capability.)
 
 Added/improved documentation somewhat.
 
