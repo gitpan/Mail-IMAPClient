@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.19 2003/06/12 21:35:50 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.20 2003/06/13 18:30:55 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.2.8';
-$Mail::IMAPClient::VERSION = '2.2.8';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.2.9';
+$Mail::IMAPClient::VERSION = '2.2.9';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -733,7 +733,7 @@ sub migrate {
 		# ( ref($msgs) ? join(", ",@$msgs) : $msgs) );
 
 	#MIGMSG:	foreach my $mid ( ref($msgs) ? @$msgs : (split(/,\s*/,$msgs)) ) {#}
-	MIGMSG:	foreach my $mid ( @$range ) {
+	MIGMSG:	foreach my $mid ( $range->unfold ) {
 		# Set up counters for size of msg and portion of msg remaining to
 		# process:
 		$self->_debug("Migrating message $mid in folder $folder\n") 
@@ -2803,6 +2803,43 @@ for my $datum (
 		return wantarray ? @hits : \@hits;
 	}
 }
+}
+
+sub or {
+
+	my $self = shift ;
+	my @what = @_; 
+	my @hits;
+
+	if ( scalar(@what) < 2 ) {
+		$self->LastError("Invalid number of arguments passed to or method.\n");
+		return undef;
+	}
+
+	my $or = "OR " . $self->Massage(shift @what);
+	$or .= " " . $self->Massage(shift @what);
+		
+
+	for my $w ( @what ) {
+		my $w = $self->Massage($w) ;
+		$or = "OR " . $or . " " . $w ;
+	}
+
+	$self->_imap_command( ($self->Uid ? "UID " : "") . "SEARCH $or")
+		or return undef;
+	my @results =  $self->History($self->Count)     ;
+
+	for my $r (@results) {
+
+	       chomp $r;
+	       $r =~ s/\r$//;
+	       $r =~ s/^\*\s+SEARCH\s+//i or next;
+	       push @hits, grep(/\d/,(split(/\s+/,$r)));
+		_debug $self, "Hits are now: ",join(',',@hits),"\n" 
+				if $self->Debug;
+	}
+
+	return wantarray ? @hits : \@hits;
 }
 
 #sub Strip_cr {

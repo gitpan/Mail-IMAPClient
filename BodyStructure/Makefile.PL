@@ -6,7 +6,7 @@ WriteMakefile(
     'NAME'		=> 'Mail::IMAPClient::BodyStructure',
     'VERSION_FROM'	=> '../IMAPClient.pm', # finds $VERSION
     'PREREQ_PM'		=> {
-			"Parse::RecDescent" 	=> 0,
+			"Parse::RecDescent" 	=> '1.94',
 			"Exporter" 		=> 0,
     }, 				
 );

@@ -6,6 +6,7 @@
 # Change 1..1 below to 1..last_test_to_print .
 
 use Mail::IMAPClient::BodyStructure;
+use warnings;
 
 BEGIN {
 	print "1..8\n";
@@ -17,7 +18,10 @@ my $bs=<<"END_OF_BS";
 (BODYSTRUCTURE ("TEXT" "PLAIN" ("CHARSET" "us-ascii") NIL NIL "7BIT" 511 20 NIL NIL NIL))^M
 END_OF_BS
 my $bsobj = Mail::IMAPClient::BodyStructure->new($bs) ;
-if ($bsobj) { print "ok 2\n" } else {print "not ok 2\n"}
+if ($bsobj) { print "ok 2\n" } else {
+	print "not ok 2\n"; 
+	exit;
+}
 if ($bsobj->bodytype eq 'TEXT') { print "ok 3\n" } 
 else {print "not ok 3 (expected 'TEXT' ; got '" . $bsobj->bodytype . "')\n"}
 if ($bsobj->bodysubtype eq 'PLAIN') { print "ok 4\n" } 

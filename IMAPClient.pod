@@ -65,7 +65,7 @@ all of your authentication questions it I<does> contain all the answers that I h
 which I admit are scant.
 
 Third of all, if you manage to get any advanced authentication mechanisms to work then
-consider please donating them to this module. I don't quite have a framework visualized
+please consider donating them to this module. I don't quite have a framework visualized
 for how different authentication mechanisms could "plug in" to this module but I would
 like to eventually see this module distributed with a number of helper modules to 
 implement various authentication schemes.
@@ -143,8 +143,8 @@ callback; in every other case not supplying the callback results in an error.
 
 Most advanced authentication mechanisms require a challenge-response exchange. After the
 L<authenticate> method sends "<tag> AUTHENTICATE <Authmechanism>\r\n"  to the IMAP 
-server, the server replies with a challenge. The authenticate then invokes the code 
-whose reference is stored in the I<Authcallback> parameter as follows:
+server, the server replies with a challenge. The B<authenticate> method then invokes 
+the code whose reference is stored in the I<Authcallback> parameter as follows:
 
 	$Authcallback->($challenge,$imap)
 
@@ -201,7 +201,7 @@ supply the I<Server>, I<User>, and I<Password> parameters to L<new>, it
 will attempt to call B<connect> and B<login>, either of which could
 fail and cause your L<new> method call to return C<undef> (in which case
 your object will have been created but its reference will have been
-discarded before ever being returned to you).
+discarded before ever having been returned to you).
 
 If this happens to you, you can always check C<$@>. B<Mail::IMAPClient>
 will populate that variable with something useful if either of the
@@ -3051,7 +3051,7 @@ experience problems you may want to try this just to see if it helps.
 If it does then that means you have found a bug and should report it
 immediately (by following the instructions in the section on
 L<"REPORTING BUGS">). Even if it doesn't fix the problem, testing with
-both I<Fast_io> turn on and with it turned off will often aid in
+both I<Fast_io> turned on and with it turned off will often aid in
 identifying the source of the problem. (If it doesn't help you, it may
 help me when you report it!)
 

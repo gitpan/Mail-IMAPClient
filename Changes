@@ -1,4 +1,23 @@
 Revision History for Perl extension Mail::IMAPClient.  
+Changes in version 2.2.9
+------------------------
+Fixed problem in migrate that caused problems in versions of perl earlier than 
+5.6.  Thanks go to Steven Roberts for reporting the problem and identifying its 
+cause.
+
+Fixed problem in the make process that caused tests for BodyStructure subclass 
+to fail if the grammer had been compiled under a different version of 
+Parse::RecDescent. This problem was detected by the dedicated people at 
+testers@cpan.org.
+
+Fixed a compatibility problem using Parse::RecDescent version 1.94.
+This caused BodyStructure and Thread to fail for 5.8.x users. A number
+of people reported this bug to CPAN but it took me a while to realize what
+was going on. Really it took me a while to realize my Parse::RecDescent was
+out of date. ;-) Now this module is delivered with two versions of each of
+the affected grammars and Makefile.PL determines which version to use. 
+Upgrading to Parse::RecDescent 1.94 will require you to re-run Makefile.PL
+and reinstall Mail::IMAPClient.
 
 Changes in version 2.2.8
 ------------------------

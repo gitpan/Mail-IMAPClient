@@ -1,4 +1,5 @@
 use ExtUtils::MakeMaker;
+use File::Copy;
 use Cwd;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
@@ -13,6 +14,8 @@ unless ($DO_BODYSTRUCTURE) {
 		"If you need these subclasses, install Parse::RecDescent \nand ",
 		"re-run Makefile.PL. \n\n";
 }
+
+&set_PRD_type if $DO_BODYSTRUCTURE;
 
 WriteMakefile(
     'DIR'		=> [ 'MessageSet', $DO_BODYSTRUCTURE ? ( 'BodyStructure' , 'Thread' ) : ()  ],
@@ -103,3 +106,43 @@ sub set_test_data {
 		" removed (either by hand or by 'make clean') after testing.\n";
 }
 
+
+sub set_PRD_type {
+
+	my $g = <<'	EOG';
+
+	start: thing(s)
+		{ $return = \%item; }
+
+	thing: /YES/ 
+		{ $return = \%item; }
+
+	EOG
+
+	my $p = Parse::RecDescent->new($g);
+
+	my $i = $p->start("YES YES");
+	if ( exists($i->{'thing(s)'}) ) {
+		print "Using new-style Parse::RecDescent grammars\n";
+		copy("./Thread/Thread.grammar_new","./Thread/Thread.grammar");
+
+		copy( 	"./BodyStructure/Parse/Parse.grammar_new",
+			"./BodyStructure/Parse/Parse.grammar"
+		);
+
+	} elsif ($i->{'thing'}) {
+		print "Using old-style Parse::RecDescent grammars\n";
+		print "If you upgrade Parse::RecDescent then you will ",
+		"have to re-run Makefile.PL and re-make and re-'make install'",
+		"Mail::IMAPClient.\n";
+		copy("./Thread/Thread.grammar_old","./Thread/Thread.grammar");
+		copy( 	"./BodyStructure/Parse/Parse.grammar_old",
+			"./BodyStructure/Parse/Parse.grammar"
+		);
+	} else {
+		print "Unable to parse simple Parse::RecDescent code. ",
+			"Skipping installation of advanced features.";
+		$DO_BODYSTRUCTURE = 0;
+	}
+}
+	

@@ -18,5 +18,8 @@ This gets around the problem by placing a copy of the necessary files
 in your installation directories, so that even though 'make test' 
 cannot find ../blib/lib, it can find the necessary .pm files in your 
 (production!) installation libraries so the tests will still succeed.
+However, you have to remember to do 'make install' first every time
+you install a new version of this module, or you will be testing the
+old version instead of the new one.
 
 

@@ -3,7 +3,9 @@ package Mail::IMAPClient::MessageSet;
 
 =head1 NAME
 
-Mail::IMAPClient::MessageSet
+Mail::IMAPClient::MessageSet -- an extension to Mail::IMAPClient that
+expresses lists of message sequence numbers or message UID's in the shortest
+way permissable by RFC2060.
 
 =cut
 
@@ -121,7 +123,8 @@ RFC2060 representation. The object is overloaded so that using it like a string
 returns this compact message set representation. You can also add messages to
 the set (using either a '.=' operator or a '+=' operator) or remove messages
 (with the '-=' operator). And if you use it as an array reference, it will 
-humor you and act like one by calling L<unfold> for you.
+humor you and act like one by calling L<unfold> for you. (But you need perl 5.6
+or above to do this.)
 
 RFC2060 specifies that multiple messages can be provided to certain IMAP
 commands by separating them with commas. For example, "1,2,3,4,5" would 

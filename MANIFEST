@@ -58,7 +58,8 @@ docs/rfc2683.txt
 docs/rfc2831.txt
 docs/draft-ietf-imapext-sort-06.txt
 BodyStructure/Parse/Makefile.PL
-BodyStructure/Parse/Parse.grammar
+BodyStructure/Parse/Parse.grammar_old
+BodyStructure/Parse/Parse.grammar_new
 BodyStructure/Parse/t/parse.t
 BodyStructure/Makefile.PL
 BodyStructure/t/bodystructure.t
@@ -66,7 +67,8 @@ docs/draft-crispin-imapv-17.txt
 docs/draft-ietf-imapext-annotate-04.txt
 docs/draft-ietf-imapext-thread-11.txt
 Thread/Thread.pod
-Thread/Thread.grammar
+Thread/Thread.grammar_old
+Thread/Thread.grammar_new
 Thread/Makefile.PL
 Thread/t/thread.t
 MessageSet/Makefile.PL

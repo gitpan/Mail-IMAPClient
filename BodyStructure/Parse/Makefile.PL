@@ -1,6 +1,7 @@
 use ExtUtils::MakeMaker;
 use Parse::RecDescent;
 
+unlink "./Parse.pm" if -f "./Parse.pm";
 sub MY::top_targets {
 	package MY;
 
