@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl							
-									#
+#$Id: populate_mailbox.pl,v 19991216.6 2000/12/11 21:58:53 dkernen Exp $									#
 use Time::Local								;
 use FileHandle								;
 use File::Copy								;
@@ -171,7 +171,7 @@ EOTRAH
 									}
 									#
 sub movemail 								{
-
+									#
 		my ($subj,$fold) 	=	@_			;
 		my $fh = Mail::IMAPClient->new				(
 				Debug	 => 0				,
@@ -230,8 +230,15 @@ return 		sprintf							(
 			$date[0]					)
 									;
 									}
-# $Id: populate_mailbox.pl,v 19991216.5 1999/12/16 17:19:15 dkernen Exp $
+# $Id: populate_mailbox.pl,v 19991216.6 2000/12/11 21:58:53 dkernen Exp $
 # $Log: populate_mailbox.pl,v $
+# Revision 19991216.6  2000/12/11 21:58:53  dkernen
+#
+# Modified Files:
+# 	build_dist.pl build_ldif.pl copy_folder.pl find_dup_msgs.pl
+# 	imap_to_mbox.pl populate_mailbox.pl
+# to add CVS data
+#
 # Revision 19991216.5  1999/12/16 17:19:15  dkernen
 # Bring up to same level
 #

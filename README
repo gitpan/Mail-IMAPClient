@@ -47,6 +47,12 @@ servers:
 I also know that it has some problems running against the InterMail server vM.4.001.02.00 
 (and probably other versions of InterMail as well).
 
+Version 2.0.3 has been tested with the mdaemon server with mixed results. It seems that mdaemon 
+does not comply strictly with RFC2060 and so you may have problems using this module
+with mdaemon, especially with folder names with embedded spaces or embedded double quotes. You may
+be able to get some simple tasks to work but you won't be able to run the test suite successfully. 
+Use with caution.
+
 If your server requires the use of the AUTHENTICATE IMAP client command (say,
 for strong authentication) then you can still use this module, provided you can come 
 up with the appropriate responses to any challenges offered by your server. 

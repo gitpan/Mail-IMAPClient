@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.6 2000/11/10 22:08:06 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.7 2000/12/20 19:36:52 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.0.3';
-$Mail::IMAPClient::VERSION = '2.0.3';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.0.5';
+$Mail::IMAPClient::VERSION = '2.0.5';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -89,6 +89,8 @@ sub _debug {
  }
 }
 
+sub Wrap { 	shift->Clear(@_); 	}
+
 # The following class method is for creating valid dates in appended msgs:
 
 sub Rfc822_date {
@@ -168,7 +170,7 @@ sub new {
 		Uid 		=> 1, 
 		Count 		=> 0,
 		Fast_io 	=> 1,
-		Clear 		=> 5, 
+		"Clear"		=> 5, 
 	};
 	while (scalar(@_)) {
 		$self->{ucfirst(lc($_[0]))} = $_[1]; shift, shift;
@@ -180,7 +182,8 @@ sub new {
 
 	$self->{Debug_fh} ||= \*STDERR;
  	$self->_debug("Using Mail::IMAPClient version $Mail::IMAPClient::VERSION " .
-		"and perl version " . join(".",unpack("CCC",$^V)). " ($])\n") if $self->Debug;
+		"and perl version " . ( defined $^V ? join(".",unpack("CCC",$^V)) : "") . 
+		" ($])\n") if $self->Debug;
 	$self->LastError(0);
 	return $self->connect if $self->Server and !$self->Socket;
 	return $self;
@@ -203,8 +206,6 @@ sub connect {
 		Debug	=> $self->Debug 		,
 	)						;
 
-	$self->Socket($sock);
-	$self->State(Connected);
 	unless ( defined($sock) ) {
 		
 		$self->LastError( "Unable to connect to $self->{Server}: $!\n");	
@@ -212,6 +213,8 @@ sub connect {
 		carp 		  "Unable to connect to $self->{Server}: $!" unless defined wantarray;	
 		return undef;
 	}
+	$self->Socket($sock);
+	$self->State(Connected);
 
 	$sock->autoflush(1)				;
 	
@@ -268,8 +271,8 @@ sub separator {
 	unless ( defined($target) ) {
 		my $sep ;
 		# 	separator is namespace's 1st thing's 1st thing's 2nd thing:
-		eval { 	$sep = $self->namespace->[0][0][1] } 	
-		and return $sep;
+		eval { 	$sep = $self->namespace->[0][0][1] } 	;
+		return $sep if $sep;
 	}	
 		
 	defined($target) or $target = "INBOX";
@@ -493,7 +496,7 @@ sub message_to_file {
         $output = "";
 
         READ: until ( $code)  {
-                $output = $self->_read_line($handle);
+                $output = $self->_read_line($handle) or return undef; # avoid possible infinite loop
                 for my $o (@$output) {
                         $self->_record($trans,$o);	# $o is a ref
                         # $self->_debug("Received from readline: ${\($o->[_DATA])}<<END OF RESULT>>\n");
@@ -539,6 +542,11 @@ sub body_string {
 	my $ref = $self->fetch($msg,"BODY" . ( $self->Peek ? ".PEEK" : "" ) . "[TEXT]");
 
         my $string = "";
+    	foreach my $result  (@{$ref}) 	{ 
+                $string .= $result->[_DATA] if $self->_is_literal($result) ;
+        }
+	return $string if $string;
+
         my $head = shift @$ref;
         $self->_debug("body_string: first shift = '$head'\n");
 
@@ -546,9 +554,14 @@ sub body_string {
                 $self->_debug("body_string: shifted '$head'\n");
                 $head = shift(@$ref) ;
         }
+	unless ( scalar(@$ref) ) {
+			$self->LastError("Unable to parse server response from " . $self->LastIMAPCommand );
+			return undef ;
+	}
+	my $popped ; $popped = pop @$ref until $popped =~ /\)\r\n$/;
 
         if      ($head =~ /BODY\[TEXT\]\s*$/i )     {       # Next line is a literal
-                        $string .= shift @$ref until $ref->[0] =~ /\)\r\n$/ ;
+                        $string .= shift @$ref while scalar(@$ref);
                         $self->_debug("String is now $string\n") if $self->Debug;
         }
 
@@ -619,7 +632,7 @@ sub _imap_command {
 	$output = "";
 
 	READ: until ( $code)  {
-		$output = $self->_read_line;
+              $output = $self->_read_line or return undef; # escape infinite loop if read_line never returns any data
 		for my $o (@$output) { 
 			$self->_record($count,$o);	# $o is a ref
 			# $self->_debug("Received from readline: ${\($o->[_DATA])}<<END OF RESULT>>\n");
@@ -818,6 +831,9 @@ sub _old_read_line {
 
 			# _debug($self, "Count = $count and offset = $offset\n") if $self->Debug;
 
+			# If I used anything from the buffer for my literal then it needs to come
+			# out of the buffer now:		(use substr to avoid regexp overhead)
+
 			substr($buffer , index($buffer, "{" . $len . "}\r\n"), length("{}\n\r" . $len)) = "";
 				
 
@@ -900,7 +916,7 @@ sub _read_line {
 			$oBuffer->[-1][_TYPE] 	eq "OUTPUT" 	and	# that thing is an output line
 			$iBuffer		eq "" 		# and	# and the input buffer has been MT'ed
 	) {
-		
+              my $transno = $self->Transaction;                       # used below in several places
 		if ($timeout) {
 			vec($rvec, fileno($self->Socket), 1) = 1;
 			my @ready = $self->{_select}->can_read($timeout) ;
@@ -924,30 +940,51 @@ sub _read_line {
 		local($^W) = undef;	# Now quiet down warnings
 
 		# read "$readlen" bytes (or less):
-		$count += sysread( $sh, $iBuffer, $readlen, length($iBuffer)) ;
+              # need to check return code from sysread in case other end has shut down!!!
+              my $ret = sysread( $sh, $iBuffer, $readlen, length($iBuffer)) ;
 		# $self->_debug("Read so far: $iBuffer<<END>>\n");
-		
+              if($timeout and ! defined($ret)) { # Blocking read error...
+                  my $msg = "Error while reading data from server: $!\r\n";
+                  $self->_record($transno,
+                                 [ $self->_next_index($transno),
+                                   "ERROR", "$transno * NO $msg "
+                                   ]);
+                  $@ = "$msg";
+                  return undef;
+              }
+              elsif(defined($ret) and $ret == 0) {    # Caught EOF...
+                  my $msg="Socket closed while reading data from server.\r\n";
+                  $self->_record($transno,
+                                 [ $self->_next_index($transno),
+                                   "ERROR", "$transno * NO $msg "
+                                   ]);
+                  $@ = "$msg";
+                  return undef;
+              }
+              # successfully wrote to other end, keep going...
+              $count += $ret;
 		LINES: while ( $iBuffer =~ s/^(.*?\r?\n)// ) {
 		   my $current_line = $1;
 
 		   # $self->_debug("BUFFER: pulled from buffer: <BEGIN>${current_line}<END>\n" .
 		   # 	"and left with buffer contents of: <BEGIN>${iBuffer}<END>\n");
 
-		   if ($current_line =~ s/\{(\d+)\}\r\n$//) {
-			# This part process IMAP "Literals", which according to rfc2060 look something like this:
+		   LITERAL: if ($current_line =~ s/\{(\d+)\}\r\n$//) {
+			# This part handles IMAP "Literals", which according to rfc2060 look something like this:
 			# [tag]|* BLAH BLAH {nnn}\r\n
-			# [nnn bytes of literally transmitted stuff]\r\n
-			# [rest of line with embedded literal data]\r\n
+			# [nnn bytes of literally transmitted stuff]
+			# [part of line that follows literal data]\r\n
 
 			# Set $len to be length of impending literal:
 			my $len = $1 ;
 			
-			# $self->_debug("LITERAL: received literal in line $current_line of length $len; ".
-			#"attempting to ".
-			#"retrieve from the " . length($iBuffer) . " bytes in: $iBuffer<END_OF_iBuffer>\n");
+			$self->_debug("LITERAL: received literal in line $current_line of length $len; ".
+			"attempting to ".
+			"retrieve from the " . length($iBuffer) . " bytes in: $iBuffer<END_OF_iBuffer>\n");
 
 			# Transfer up to $len bytes from front of $iBuffer to $litstring: 
 			my $litstring = substr($iBuffer, 0, $len);
+			$iBuffer = substr($iBuffer, length($litstring), length($iBuffer) - length($litstring) ) ;
 
 			# Figure out what's left to read (i.e. what part of literal wasn't in buffer):
 			my $remainder_count = $len - length($litstring);
@@ -957,7 +994,7 @@ sub _read_line {
 				$litstring = "";
 		
 			}
-			if ($remainder_count and $timeout) {
+			if ($remainder_count > 0 and $timeout) {
 				# If we're doing timeouts then here we set up select and wait for data from the
 				# the IMAP socket.
 				vec($rvec, fileno($self->Socket), 1) = 1;
@@ -972,16 +1009,36 @@ sub _read_line {
 						if $self->Debug or $^W;	
 					return undef;
 				}	
-			}
+			} 
 			
 			fcntl($sh, F_SETFL, $self->{_fcntl}) if $fast_io and defined($self->{_fcntl});
-			while ( $remainder_count > 0 ) {	   # As long as the literal isn't complete,
-				$remainder_count -= sysread(	   # decrement remainder_count by bytes read
+			while ( $remainder_count > 0 ) {	   # As long literal not done,
+				my $ret	= sysread(	   	   # bytes read
 						$sh, 		   # IMAP handle 
 						$litstring,	   # place to read into
 						$remainder_count,  # bytes left to read
-						length($litstring) # offset into litstring to read into
+						length($litstring) # offset to read into
 				) ;
+				if ( $timeout and !defined($ret)) { # possible timeout
+					$self->_record($transno, [ 
+							$self->_next_index($transno),
+							"ERROR",
+							"$transno * NO Error reading data from server: $!\r\n"	
+						]
+					);
+					return undef;
+				} elsif ( $ret == 0 and eof($sh) ) {
+					$self->_record($transno, [ 
+							$self->_next_index($transno),
+							"ERROR",
+							"$transno * ".
+							"BYE Server unexpectedly closed connection: $!\r\n"	
+						]
+					);
+					$self->State(Unconnected);
+					return undef;
+				}
+				$remainder_count -= $ret;	   # decrement remaining bytes by amt read
 				if ( defined($literal_callback) ) {
 					print $literal_callback $litstring;
 					$litstring = "";
@@ -998,33 +1055,18 @@ sub _read_line {
 			if ( $lastline and $lastline =~ /^(?:\*|(\d+))\s(BAD|NO|OK)/i ) {
 				$litstring =~ s/$lastline\r?\n//;
 				$embedded_output++;
-				$self->_debug("Got server output mixed in with literal: $lastline\n") 
+				$self->_debug("Got server output mixed in with literal: ",
+						"$lastline\n") 
 					if $self->Debug;
 			}
 
 		  	# Finally, we need to stuff the literal onto the end of the oBuffer:
 			push 	@$oBuffer , 	[ $index++, "OUTPUT",  $current_line 	] , 
 						[ $index++, "LITERAL", $litstring 	];
-			push @$oBuffer,		[ $index++, "OUTPUT",  $lastline 	] if $embedded_output;
 
-=begin debugging
+			push @$oBuffer,		[ $index++, "OUTPUT",  $lastline 	] 
+				if $embedded_output;
 
-			$self->_debug(
-					"Reading status: \n" .
-					"Requested literal length = $len; actual length grabbed = " . 
-					length($litstring) . "\n" .
-					"iBuffer = $iBuffer<END_OF_iBuffer>\n" .
-					"Current line = $current_line<END_OF_current_line>\n".
-					"litstring = $litstring<END_OF_litstring>\n".
-					"Output buffer = " . 
-						join("",map( { $_->[_DATA] } @$oBuffer)) . 
-						"<END_OF_oBuffer>\n"
-			)
-			if $self->Debug and $self->Debug_fh;
-
-=end debugging
-
-=cut
 
 		  } else { 
 			push @$oBuffer, [ $index++, "OUTPUT" , $current_line ]; 
@@ -1056,6 +1098,12 @@ sub Results {
 	return wantarray 							? 
 		map {$_->[_DATA] } 	@{$self->{"History"}{$transaction}}	: 
 		[ map {$_->[_DATA] }  	@{$self->{"History"}{$transaction}} ]	;
+}
+
+
+sub LastIMAPCommand {
+	my @a = map { $_->[_DATA] } @{$_[0]->{"History"}{$_[1]||$_[0]->Transaction}};
+	return shift @a;
 }
 
 
@@ -1127,8 +1175,10 @@ sub exists {
 sub fetch {
 
 	my $self = shift;
+	my $what = shift||"ALL";
+	ref($what) and $what = join(",",@$what);	
 	$self->_imap_command( ( $self->Uid ? "UID " : "" ) .
-				"FETCH " . ( @_ ? join(" ",@_) : 'ALL' )
+				"FETCH $what" . ( @_ ? " " . join(" ",@_) : '' )
 	) 	 					or return undef;
 	return wantarray ? 	$self->History($self->Count) 	: 
 				[ map { $_->[_DATA] } @{$self->{'History'}{$self->Count}} ];
@@ -1311,23 +1361,150 @@ sub parse_headers {
 	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
 
 		$string = 	"$msg body" . 
-		# use ".peek" if Peek parameter is a) defined and true, or b) undefined, but not if
-		# it's defined and untrue:
-				( defined($self->Peek) ? ( $self->Peek ? ".peek" : "" ) : ".peek" ) .
-				"[header]" 	; 
+		# use ".peek" if Peek parameter is a) defined and true, 
+		# 	or b) undefined, but not if it's defined and untrue:
+
+		( 	defined($self->Peek) 		? 
+			( $self->Peek ? ".peek" : "" ) 	: 
+			".peek" 
+		) .  "[header]" 			; 
+
 	} else {
 		$string	= 	"$msg body" .
-		# use ".peek" if Peek parameter is a) defined and true, or b) undefined, but not if
-		# it's defined and untrue:
-				( defined($self->Peek) ? ( $self->Peek ? ".peek" : "" ) : ".peek" ) .
-				"[header.fields (" 	. 
-				join(" ",@fields) 		. ')]' ;
+		# use ".peek" if Peek parameter is a) defined and true, or 
+		# b) undefined, but not if it's defined and untrue:
+
+		( defined($self->Peek) 			? 
+			( $self->Peek ? ".peek" : "" ) 	: 
+			".peek" 
+		) .  "[header.fields ("	. join(" ",@fields) 	. ')]' ;
 	}
 
 	my @raw=$self->fetch(	$string	) or return undef;
 
 	my $headers = {};	# hash from message ids to header hash
-	my $h = 0;		# reference to hash of current message id, or 0 for between messages
+	my $h = 0;		# reference to hash of current msgid, or 0 between msgs
+	
+        for my $header (map { split(/(?:\r\n)/,$_) } @raw) {
+                local($^W) = undef;
+                if ( $header =~ /^\*\s+\d+\s+FETCH\s+\(.*BODY\[HEADER(?:\]|\.FIELDS)/i) {
+                        if ($self->Uid) {
+                                if ( my($msgid) = $header =~ /UID\s+(\d+)/ ) {
+                                        $h = {};
+                                        $headers->{$msgid} = $h;
+                                } else {
+                                        $h = {};
+                                }
+                        } else {
+                                if ( my($msgid) = $header =~ /^\*\s+(\d+)/ ) {
+                                        #start of new message header:
+                                        $h = {};
+                                        $headers->{$msgid} = $h;
+                                }
+                        }
+                }
+#               my $pattern = $self->Uid ?      'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
+#                       if (    my($msgid) = $header =~ /$pattern/
+#                       and $header =~ /BODY\[HEADER(?:\]|\.FIELDS)/i
+#               ) {
+#                       # start of new message header:
+#                       $h = {};                  # new hash for headers for this mail
+#                       $headers->{$msgid} = $h;  # store in results, against this message
+#               }
+
+                next if $header =~ /^\s+$/;
+
+                # ( for vi
+                if ($header =~ /^\)/) {           # end of this message
+                        $h = 0;                   # set to be between messages
+                        next;
+                }
+                # check for '<optional_white_space>UID<white_space><UID_number><optional_white_space>)'
+                # when parsing headers by UID.
+                if ($self->Uid and my($msgid) = $header =~ /^\s*UID\s+(\d+)\s*\)/) {
+                        $headers->{$msgid} = $h;        # store in results against this message
+                        $h = 0;                 	# set to be between messages
+                        next;
+                }
+
+		if ($h != 0) {			  # do we expect this to be a header?
+               		my $hdr = $header;
+               		chomp $hdr;
+               		$hdr =~ s/\r$//;   
+               		if ($hdr =~ s/^(\S+):\s*//) { 
+                       		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
+                       		push @{$h->{$field}} , $hdr ;
+               		} elsif ($hdr =~ s/^.*FETCH\s\(.*BODY\[HEADER\.FIELDS.*\)\]\s(\S+):\s*//) { 
+                       		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
+                       		push @{$h->{$field}} , $hdr ;
+               		} elsif ( ref($h->{$field}) eq 'ARRAY') {
+			        
+					$hdr =~ s/^\s+/ /;
+                       			$h->{$field}[-1] .= $hdr ;
+               		}
+		}
+	}
+	my $candump = 0;
+	if ($self->Debug) {
+		eval {
+			require Data::Dumper;
+			Data::Dumper->import;
+		};
+		$candump++ unless $@;
+	}
+	# if we asked for one message, just return its hash,
+	# otherwise, return hash of numbers => header hash
+	if (ref($msgspec) eq 'ARRAY') {
+		#_debug $self,"Structure from parse_headers:\n", 
+		#	Dumper($headers) 
+		#	if $self->Debug;
+		return $headers;
+	} else {
+		#_debug $self, "Structure from parse_headers:\n", 
+		#	Dumper($headers->{$msgspec}) 
+		#	if $self->Debug;
+		return $headers->{$msgspec};
+	}
+}
+
+sub parse_headers2 {
+	my($self,$msgspec,@fields) = @_;
+	my(%fieldmap) = map { ( lc($_),$_ )  } @fields;
+	my $msg; my $string; my $field;
+
+	# Make $msg a comma separated list, of messages we want
+        if (ref($msgspec) eq 'ARRAY') {
+		$msg = join(',', @$msgspec);
+	} else {
+		$msg = $msgspec;
+	}
+
+	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
+
+		$string = 	"$msg body" . 
+		# use ".peek" if Peek parameter is a) defined and true, 
+		# 	or b) undefined, but not if it's defined and untrue:
+
+		( 	defined($self->Peek) 		? 
+			( $self->Peek ? ".peek" : "" ) 	: 
+			".peek" 
+		) .  "[header]" 			; 
+
+	} else {
+		$string	= 	"$msg body" .
+		# use ".peek" if Peek parameter is a) defined and true, or 
+		# b) undefined, but not if it's defined and untrue:
+
+		( defined($self->Peek) 			? 
+			( $self->Peek ? ".peek" : "" ) 	: 
+			".peek" 
+		) .  "[header.fields ("	. join(" ",@fields) 	. ')]' ;
+	}
+
+	my @raw=$self->fetch(	$string	) or return undef;
+
+	my $headers = {};	# hash from message ids to header hash
+	my $h = 0;		# reference to hash of current msgid, or 0 between msgs
 	
        	for my $header (map { split(/(?:\r\n)/,$_) } @raw) {
 		local($^W) = undef;
@@ -1387,7 +1564,6 @@ sub parse_headers {
 		return $headers->{$msgspec};
 	}
 }
-
 
 
 
@@ -1742,7 +1918,7 @@ sub append {
 				carp("Error trying to append: " . $o->[_DATA] ."; Disconnected") if $^W;
 				$self->State(Unconnected);
 
-			} elsif ( $o->[_DATA] =~ /^\d*\s*(NO|BAD)i/ ) {
+                      } elsif ( $o->[_DATA] =~ /^\d*\s*(NO|BAD)/i ) { # i and / transposed!!!
                 		$self->LastError("Error trying to append: " . $o->[_DATA]  . "\n");
 				$self->_debug("Error trying to append: " . $o->[_DATA] . "\n");
 				carp("Error trying to append: " . $o->[_DATA]) if $^W;
@@ -2243,7 +2419,7 @@ message by using the B<LastError> method. However, since the B<LastError> method
 object. Errors in the B<new> method can prevent your object from ever being created. Additionally, if
 you supply the I<Server>, I<User>, and I<Password> parameters to B<new>, it will attempt to call 
 B<connect> and B<login>, either of which could fail and cause your B<new> method call to return undef
-(in which case you're object will have been created but it's reference will have been discarded before
+(in which case your object will have been created but its reference will have been discarded before
 ever being returned to you).
 
 If this happens to you, you can always check C<$@>. B<Mail::IMAPClient> will populate that variable with 
@@ -2269,8 +2445,8 @@ The B<Transaction> method returns the number of the last transaction, and can be
 retrieve lines of text from the object's history. 
 
 The B<Clear> parameter is used to control the size of the session history so that long-running
-sessions do not eat up unreasonable amounts of memory. See the discussion of B<Clear> under the
-I<Parameters> section for more information.
+sessions do not eat up unreasonable amounts of memory. See the discussion of B<Clear> under 
+L<"parameters"> for more information.
 
 The B<Report> transaction returns the history of the entire IMAP session since the 
 initial connection or for the last I<Clear> transactions.  This provides a record of the entire 
@@ -2289,40 +2465,64 @@ object or anything like that.
 
 =over 4
 
-=item new
+=item new()
 
 The B<new> method creates a new instance of an B<IMAPClient> object. If the I<Server> parameter
-is passed as an argument to B<new>, then B<new> will implicitly call the B<connect> method. If
-the I<Server> parameter is not supplied then the B<IMAPClient> object is created in the 
+is passed as an argument to B<new>, then B<new> will implicitly call the B<connect> method, placing
+the new object in the I<Connected> state. If I<User> and I<Password> values are also provided, then 
+B<connect> will in turn call B<login>, and the resulting object will be returned from B<new> in the 
+I<Authenticated> state.
+
+If the I<Server> parameter is not supplied then the B<IMAPClient> object is created in the 
 I<Unconnected> state.
+
+If the B<new> method is passed arguments then those arguments will be treated as a list of key=>value
+pairs. The key should be one of the parameters as documented under L<"parameters">, below. 
+
+Here are some examples:
+
+	use Mail::IMAPClient;
+	
+	my $imap = Mail::IMAPClient->new;	# returns an unconnected Mail::IMAPClient object
+	#	...				# intervening code using the 1st object, then:
+	$imap = Mail::IMAPClient->new(		# returns a new, authenticated Mail::IMAPClient object
+			Server => $host,
+			User 	=> $id,
+			Password=> $pass,
+			Clear	=> 5,		# Unnecessary since '5' is the default
+	#		...			# Other key=>value pairs go here
+	)	or die "Cannot connect to $host as $id: $@";
+	
+	
+
+See also L<"parameters">, below, and L<"connect"> and L<"login"> for information on how to manually 
+connect and login after B<new>.
 
 =cut
 
-=item Unconnected
+=item Unconnected()
 
 returns a value equal to the numerical value associated with an object in the B<Unconnected> 
 state.
 
-
-=item Connected
+=item Connected()
 
 returns a value equal to the numerical value associated with an object in the B<Connected> 
 state.
 
-
-=item Authenticated
+=item Authenticated()
 
 returns a value equal to the numerical value associated with an object in the B<Authenticated> 
 state.
 
-=item Selected
+=item Selected()
 
 returns a value equal to the numerical value associated with an object in the B<Selected> 
 state.
 
-=item Strip_cr
+=item Strip_cr()
 
-The <Strip_cr> method strips carriage returns from IMAP client command output. Although 
+The B<Strip_cr> method strips carriage returns from IMAP client command output. Although 
 RFC2060 specifies that lines in an IMAP conversation end with <CR><LF>, it is often cumbersome
 to have the carriage returns in the returned data. This method accepts one or more lines of text as 
 arguments, and returns those lines with all <CR><LF> sequences changed to <LF>. Any input argument
@@ -2343,13 +2543,13 @@ B<NOTE: Strip_cr> does not remove new line characters.
 
 =cut
 
-=item Rfc2060_date
+=item Rfc2060_date()
 
 The B<Rfc2060_date> method accepts one input argument, a number of seconds since
 the epoch date. It returns an RFC2060 compliant date string for that date
 (as required in date-related arguments to SEARCH, such as "since", "before", etc.). 
 
-=item Rfc822_date
+=item Rfc822_date()
 
 The B<Rfc822_date> method accepts one input argument, a number of seconds since
 the epoch date. It returns an RFC822 compliant date string for that date
@@ -2357,8 +2557,6 @@ the epoch date. It returns an RFC822 compliant date string for that date
 calling B<append>.
 
 =back
-
-=cut
 
 =head2 Parameters
 
@@ -2397,9 +2595,14 @@ On the contrary, the available parameters are:
 
 =over 4
 
-=item Clear
+=item Clear()
 
-Specifies that the object's history buffer should be wrapped after every I<n> transactions, 
+The name of this parameter, for historical reasons, is somewhat misleading. It should be named
+I<Wrap>, because it specifies how many transactions are stored in the wrapped history buffer. But
+it didn't always work that way; the buffer used to actually get cleared. The name though remains 
+the same in the interests of backwards compatibility. 
+
+I<Clear> specifies that the object's history buffer should be wrapped after every I<n> transactions, 
 where I<n> is the value specified for the I<Clear> parameter.  Calling the eponymous B<Clear> 
 method without an argument will return the current value of the I<Clear> parameter but will not 
 cause clear the history buffer to wrap. 
@@ -2412,13 +2615,13 @@ course for that inevitable last transaction).
 
 The default I<Clear> value is set to five in order to conserve memory.
 
-=item Debug
+=item Debug()
 
 Sets the debugging flag to either a true or false value. Can be supplied with the B<new>
 method call or separately by calling the B<Debug> object method. Use of this parameter is
 strongly recommended when debugging scripts and required when reporting bugs.
 
-=item Debug_fh
+=item Debug_fh()
 
 Specifies the filehandle to which debugging information should be printed. It can either a
 filehandle object reference or a filehandle glob. The default is to print debugging info to
@@ -2447,8 +2650,9 @@ Or you can:
 						Server=>$server, Debug=> 1,
 						Debug_fh => *DBG
 	);
-	
-=item Folder
+
+
+=item Folder()
 
 The I<Folder> parameter returns the name of the currently-selected folder (in case you forgot).
 It can also be used to set the name of the currently selected folder, which is completely unnecessary if
@@ -2461,7 +2665,7 @@ won't do.
 
 =cut
 
-=item Password
+=item Password()
 
 Specifies the password to use when logging into the IMAP service on the host specified in the
 I<Server> parameter as the user specified in the I<User> parameter. Can be supplied with 
@@ -2473,7 +2677,7 @@ specified in I<Port> or the default port 143) and then logged on as the user spe
 the I<User> parameter (using the password provided in the I<Password> parameter). See the 
 discussion of the B<new> method, below.
 
-=item Peek
+=item Peek()
 
 Setting I<Peek> to a true value will prevent the B<body_string>, B<message_string> and B<message_to_file> 
 methods from automatically setting the I<\Seen> flag. Setting I<Peek> to 0 (zero) will force B<body_string>,
@@ -2485,13 +2689,13 @@ default state.
 
 =cut
 
-=item Port
+=item Port()
 
 Specifies the port on which the IMAP server is listening. The default is 143, which is the 
 standard IMAP port. Can be supplied with the B<new> method call or separately by calling 
 the B<Port> object method.
 
-=item Server
+=item Server()
 
 Specifies the hostname or IP address of the host running the IMAP server. If provided as part
 of the B<new> method call, then the new IMAP object will automatically be connected at the 
@@ -2500,7 +2704,7 @@ method call or separately by calling the B<Server> object method.
 
 =cut
 
-=item Socket
+=item Socket()
 
 The I<Socket> method can be used to obtain the socket handle of the current connection (say, to
 do I/O on the connection that is not otherwise supported by B<Mail::IMAPClient>) or to replace
@@ -2524,7 +2728,7 @@ Authenticated, etc).
 
 =cut
 
-=item Timeout
+=item Timeout()
 
 Specifies the timeout value in seconds for reads. Specifying a true value for I<Timeout> 
 will prevent B<Mail::IMAPClient> from blocking in a read.
@@ -2535,7 +2739,7 @@ zero, disables the timeout feature.
 
 =cut
 
-=item Uid
+=item Uid()
 
 If I<Uid> is set to a true value (i.e. 1) then the behavior of the B<fetch>, B<search>, B<copy>,
 and B<store> methods (and their derivatives) is changed so that arguments that would otherwise be 
@@ -2597,17 +2801,15 @@ turned off can lead to problems if changes to a folder's contents cause resequen
 
 By default, the I<Uid> parameter is turned on.
 
-=item User
+=item User()
 
 Specifies the userid to use when logging into the IMAP service. Can be supplied with the 
 B<new> method call or separately by calling the B<User> object method.
 
-=cut
-
-=back
-
 Parameters can be set during B<new> method invocation by passing named parameter/value pairs
 to the method, or later by calling the parameter's eponymous object method.
+
+=back
 
 =cut
 
@@ -2628,19 +2830,25 @@ The B<IMAPClient> object methods are:
 
 =over 4
 
-=item append
+=item append()
 
 The B<append> method adds a message to the specified folder. It takes two arguments, the
 name of the folder to append the message to, and the text of the message (including headers).
-Additional arguments are added to the message text, separated with a newline.
+Additional arguments are added to the message text, separated with <CR><LF>.
 
 The B<append> method returns the UID of the new message (a true value) if successful, 
 or undef if not, if the IMAP server has the UIDPLUS capability.  If it doesn't then you just 
 get true on success and undef on failure.
 
+Note that many servers will get really ticked off if you try to append a message that contains
+"bare newlines", which is the titillating term given to newlines that are not preceded by a 
+carrage return. To protect against this, B<append> will insert a carrage return before any newline
+that is "bare". If you don't like this behavior then you can avoid it by not passing naked newlines 
+to B<append>.
+
 =cut
 
-=item append_file
+=item append_file()
 
 The B<append_file> method adds a message to the specified folder. It takes two arguments, the
 name of the folder to append the message to, and the file name of an RFC822-formatted message.
@@ -2663,7 +2871,7 @@ on whether you supplied that optional third argument).
 
 =cut
 
-=item authenticate
+=item authenticate()
 
 The B<authenticate> method accepts two arguments, an authentication type to be used (ie CRAM-MD5)
 and a code or subroutine reference to execute to obtain a response. The B<authenticate> assumes that
@@ -2676,14 +2884,15 @@ a <CR><NL> sequence is appended if neccessary.
 
 =cut
 
-=item before
+=item before()
 
-The B<before> method works just like the B<since> method, below, except it returns a list of messages 
-whose internal system dates are before the date supplied as the argument to the B<before> method.
- 
+The B<before> method works just like the L<"since"> method, below, 
+except it returns a list of messages whose internal system dates 
+are before the date supplied as the argument to the B<before> method.
+
 =cut
 
-=item body_string
+=item body_string()
 
 The B<body_string> method accepts a message sequence number (or a message UID, if the I<Uid> parameter 
 is set to true) as an argument and returns the message body as a string. The returned value contains 
@@ -2691,14 +2900,14 @@ the entire message in one scalar variable, without the message headers.
 
 =cut
 
-=item capability
+=item capability()
 
 The B<capability> method returns an array of capabilities as returned by the CAPABILITY IMAP 
 Client command, or a reference to an array of capabilities if called in scalar context. 
 If the CAPABILITY IMAP Client command fails for any reason then the B<capability> method will
 return undef.
 
-=item close
+=item close()
 
 The B<close> method is implemented via the default method and is used to close the currently selected folder
 via the CLOSE IMAP client command.  According to RFC2060, the CLOSE command performs an implicit EXPUNGE,
@@ -2707,7 +2916,7 @@ now be deleted. If you haven't deleted any messages then B<close> can be thought
 
 See also B<delete_message>, B<expunge>, and your tattered copy of RFC2060.
 
-=item connect
+=item connect()
 
 The B<connect> method connects an imap object to the server. It returns C<undef> if it
 fails to connect for any reason. If values are available for the I<User> and I<Password>
@@ -2723,7 +2932,7 @@ supplied to the B<new> method then B<connect> is implicitly called during object
 The B<connect> method sets the state of the object to I<connected> if it successfully connects 
 to the server.
 
-=item copy
+=item copy()
 
 The B<copy> method requires a folder name as the first argument, and a list of one or more messages
 sequence numbers (or messages UID's, if the I<UID> parameter is set to a true value). The message 
@@ -2737,7 +2946,7 @@ messages in the target folder.
 
 =cut
 
-=item delete_message
+=item delete_message()
 
 The B<delete_message> method accepts a list of arguments. If the I<Uid> parameter is not set to 
 a true value, then each item in the list should be either: 
@@ -2805,7 +3014,7 @@ default method) to close a folder.  Oh, and don't forget about RFC2060.
 
 =cut
 
-=item deny_seeing
+=item deny_seeing()
 
 The B<deny_seeing> method accepts a list of one or more message sequence numbers, or a single 
 reference to an array of one or more message sequence numbers, as its argument(s). It then unsets 
@@ -2818,14 +3027,14 @@ C<$imap->unset_flag("Seen",@msgs)>.
 
 =cut
 
-=item disconnect
+=item disconnect()
 
 Disconnects the B<IMAPClient> object from the server. Functionally equivalent to the B<logout> 
 method.
 
 =cut
 
-=item examine
+=item examine()
 
 The B<examine> method selects a folder in read-only mode and changes the object's state to 
 "Selected".  The folder selected via the B<examine> method can be examined but no changes can
@@ -2835,14 +3044,14 @@ The B<examine> method accepts one argument, which is the name of the folder to s
 
 =cut
 
-=item exists
+=item exists()
 
 Accepts one argument, a folder name. Returns true if the folder exists or false if it does
 not exist.
 
 =cut
 
-=item expunge
+=item expunge()
 
 The B<expunge> method accepts one optional argument, a folder name. It expunges the folder specified as 
 the argument, or the currently selected folder if no argument is supplied. 
@@ -2857,10 +3066,11 @@ this stuff up.)
 Or you could use the B<close> method, which de-selects as well as expunges and which likewise 
 doesn't technically exist. As with any IMAP client command, that fact that these methods don't 
 exist will not stop them from working anyway. This is a feature of the B<Mail::IMAPClient> module.
+(See L<"Other IMAP Client Commands and the Default Method"> if you still don't believe me.)
 
 =cut
 
-=item fetch
+=item fetch()
 
 The B<fetch> method implements the FETCH IMAP client command. It accepts a list of
 arguments, which will be converted into a space-delimited list of arguments to the
@@ -2883,7 +3093,7 @@ is returned instead of the entire array.
 
 =cut
 
-=item flags
+=item flags()
 
 The B<flags> method implements the FETCH IMAP client command to list a single message's flags.
 It accepts one argument, a message sequence number (or a message UID, if the I<Uid> parameter is
@@ -2920,19 +3130,19 @@ e-mail related to your plans for world domination, you could do something like t
 
 =cut
 
-=item folders
+=item folders()
 
 The B<folders> method returns an array listing the available folders. It will only be 
 successful if the object is in the B<Authenticated> or B<Selected> states.
 
 =cut
 
-=item has_capability
+=item has_capability()
 
 Returns true if the IMAP server to which the B<IMAPClient> object is connected has the capability
 specified as an argument to B<has_capability>.
 
-=item is_parent
+=item is_parent()
 
 The B<is_parent> method accepts one argument, the name of a folder. It returns a value
 that indicates whether or not the folder has children. The value it returns is either
@@ -2955,7 +3165,7 @@ Eg:
 
 =cut
 
-=item list
+=item list()
 
 The B<list> method implements the IMAP LIST client command. Arguments are passed to the 
 IMAP server as received, separated from each other by spaces. If no arguments are supplied
@@ -2967,7 +3177,7 @@ see the B<folders> method, above.)
 
 =cut
 
-=item login
+=item login()
 
 The B<login> method uses the IMAP LOGIN client command (as defined in RFC2060) to log into
 the server.  The I<User> and I<Password> parameters must be set before the B<login> method
@@ -2976,7 +3186,7 @@ and sets the object status to I<Authenticated>. If unsuccessful, it returns unde
 
 =cut
 
-=item logout
+=item logout()
 
 The B<logout> method issues the LOGOUT IMAP client commmand. Since the LOGOUT IMAP client 
 command causes the server to end the connection, this also results in the B<IMAPClient> client 
@@ -2986,7 +3196,7 @@ a session later in the program.
 
 =cut
 
-=item lsub
+=item lsub()
 
 The B<lsub> method implements the IMAP LSUB client command. Arguments are passed to the 
 IMAP server as received, separated from each other by spaces. If no arguments are supplied
@@ -2998,7 +3208,7 @@ then see the B<subscribed> method, below.
 
 =cut
 
-=item message_count
+=item message_count()
 
 The B<message_count> method accepts the name of a folder as an argument and returns the number
 of messages in that folder. Internally, it invokes the B<status> method (see above) and 
@@ -3009,16 +3219,16 @@ trying something funky).
 
 =cut
 
-=item message_string
+=item message_string()
 
 The B<message_string> method accepts a message sequence number (or message UID if I<Uid> is true)
 as an argument and returns the message as a string. The returned value contains the entire message 
 in one scalar variable, including the message headers. Note that using this method will set the
-message's "\Seen" flag as a side effect.
+message's "\Seen" flag as a side effect, unless I<Peek> is set to a true value.
 
 =cut
 
-=item message_to_file
+=item message_to_file()
 
 The B<message_to_file> method accepts a filename or file handle and one or more message sequence numbers 
 (or message UIDs if I<Uid> is true) as arguments and places the message string(s) (including RFC822 headers) 
@@ -3038,7 +3248,7 @@ a better idea then I'd like to hear it.
 
 =cut
 
-=item message_uid
+=item message_uid()
 
 The B<message_uid> method accepts a message sequence number (or message UID if I<Uid> is true)
 as an argument and returns the message's UID. Yes, if I<Uid> is true then it will use the IMAP 
@@ -3047,7 +3257,7 @@ IMAP feature so don't complain to me about it.
 
 =cut
 
-=item move
+=item move()
 
 The B<move> method moves messages from the currently selected folder to the folder specified
 in the first argument to B<move>.  If the I<Uid> parameter is not true, then the rest of the arguments 
@@ -3096,7 +3306,7 @@ flag. To actually delete the original message you will need to run B<expunge> (o
 
 =cut
 
-=item namespace
+=item namespace()
 
 The namespace method runs the NAMESPACE IMAP command (as defined in RFC 2342). When called in a 
 list context, it returns a list of three references. Each reference looks like this:
@@ -3115,7 +3325,7 @@ might resemble this:
 
 	( [ "", "/" ] , undef, [ "#news", "." ] ) ;
 
-If the b<namespace> method is called in scalar context, it returns a reference to the 
+If the B<namespace> method is called in scalar context, it returns a reference to the 
 above-mentioned list of three references, thus creating a single structure that would 
 pretty-print something like this:
 
@@ -3159,14 +3369,12 @@ Or, to look at our previous example (where shared folders are unsupported) calle
 
 =cut
 
-=item on
+=item on()
 
 The B<on> method works just like the B<since> method, below, except it returns a list of messages 
 whose internal system dates are the same as the date supplied as the argument.
  
-=cut
-
-=item parse_headers 
+=item parse_headers ()
 
 The B<parse_headers> method accepts as arguments a message sequence number and a list of header
 fields. It returns a hash reference in which the keys are the header field names (without the colon) 
@@ -3241,14 +3449,14 @@ folder could look like this:
 
 =cut
 
-=item recent
+=item recent()
 
 The B<recent> method performs an IMAP SEARCH RECENT search against the selected folder and returns
 an array of sequence numbers (or UID's, if the I<Uid> parameter is true) of messages that are recent.
 
 =cut
 
-=item recent_count
+=item recent_count()
 
 The B<recent_count> method accepts as an argument a folder name. It returns the number of recent 
 messages in the folder (as returned by the IMAP client command "STATUS folder RECENT"), or undef 
@@ -3256,7 +3464,7 @@ in the case of an error. The B<recent_count> method was contributed by Rob Deker
 
 =cut
 
-=item rename
+=item rename()
 
 The B<rename> method accepts two arguments: the name of an existing folder, and a new name for
 the folder. The existing folder will be renamed to the new name using the RENAME IMAP client 
@@ -3264,7 +3472,7 @@ command. B<rename> will return a true value if successful, or undef if unsuccess
 
 =cut
 
-=item restore_message
+=item restore_message()
 
 The B<restore_message> method is used to undo a previous B<delete_message> operation (but not if there
 has been an intervening B<expunge> or B<close>).  The B<IMAPClient> object must be in I<Selected> status 
@@ -3310,31 +3518,31 @@ B<restore_messages> returns a more meaningful value.
 
 =cut
 
-=item run
+=item run()
 
 Like Perl itself, the B<Mail::IMAPClient> module is designed to make common things easy and 
 uncommon things possible. The B<run> method is provided to make those uncommon things possible.
 
 The B<run> method excepts one or two arguments. The first argument is a string containing 
 an IMAP Client command, including a tag and all required arguments. The optional second 
-argument is a string to look for That will indicate success. (The default is C</OK.*/>). 
-the B<run> method returns an array of output lines from the command, which you are free to parse 
-As you see fit.
+argument is a string to look for that will indicate success. (The default is C</OK.*/>). 
+The B<run> method returns an array of output lines from the command, which you are free to parse 
+as you see fit.
 
-the B<run> method does not do any syntax checking, other than rudimentary checking for a tag.
+The B<run> method does not do any syntax checking, other than rudimentary checking for a tag.
 
-when B<run> processes the command, it increments the transaction count and saves the command and 
-Responses in the History buffer in the same way other commands do. However, it also creates a 
-Special entry in the History buffer named after the tag supplied in the string passed as the 
-First argument. If you supply a numeric value as the tag then you may risk overwriting a previous
+When B<run> processes the command, it increments the transaction count and saves the command and 
+responses in the History buffer in the same way other commands do. However, it also creates a 
+special entry in the History buffer named after the tag supplied in the string passed as the 
+first argument. If you supply a numeric value as the tag then you may risk overwriting a previous
 transaction's entry in the History buffer.
 
-If you want the control of B<run> but you don't want to worry about the damn tags then see the
-B<tag_and_run> method, below.
+If you want the control of B<run> but you don't want to worry about the damn tags then see 
+L<"tag_and_run">, below.
 
 =cut
 
-=item search
+=item search()
 
 The B<search> method implements the SEARCH IMAP client command. Any argument supplied to
 B<search> is prefixed with a space and appended  to the SEARCH IMAP client command. This
@@ -3353,7 +3561,7 @@ will be passed, instead of the array itself.
 
 =cut
 
-=item see
+=item see()
 
 The B<see> method accepts a list of one or more messages sequence numbers, or a single reference to an 
 array of one or more message sequence numbers, as its argument(s). It then sets the "\Seen" flag for 
@@ -3365,7 +3573,7 @@ C<$imap->set_flag("Seen",@msgs)>.
 
 =cut
 
-=item seen
+=item seen()
 
 The B<seen> method performs an IMAP SEARCH SEEN search against the selected folder and returns
 an array of sequence numbers of messages that have already been seen (ie their SEEN flag is set).
@@ -3374,45 +3582,47 @@ in scalar context than a pointer to the array (rather than the array itself) wil
 
 =cut
 
-=item select
+=item select()
 
 The B<select> method selects a folder and changes the object's state to "Selected".
 It accepts one argument, which is the name of the folder to select.
 
 =cut
 
-=item sentbefore
+=item sentbefore()
 
-The B<sentbefore> works just like B<sentsince>, below, except it searches for messages that were 
+The B<sentbefore> works just like L<"sentsince">, below, except it searches for messages that were 
 sent before the date supplied as an argument to the method.
 
 =cut
 
-=item senton
+=item senton()
 
-The B<senton> works just like B<sentsince>, below, except it searches for messages that were 
+The B<senton> works just like L<"sentsince">, below, except it searches for messages that were 
 sent on the exact date supplied as an argument to the method.
 
 =cut
 
-=item sentsince
+=item sentsince()
 
 The B<sentsince> method accepts one argument, a date in either standard perl format (seconds since 
-1/1/1970, or as output by B<time> and as accepted by B<localtime>) or in the I<date_text> format as 
-defined in RFC2060 (dd-Mon-yyyy, where Mon is the English-language three-letter abbreviation for 
-the month). 
+1/1/1970, or as output by L<time|perlfunc/time> and as accepted by L<localtime|perlfunc/localtime>) 
+or in the I<date_text> format as defined in RFC2060 (dd-Mon-yyyy, where Mon is the English-language 
+three-letter abbreviation for the month). 
 
 It searches for items in the currently selected folder for messages sent since the day whose date 
-is provided as the argument. It uses the RFC822 I<Date:> header to determine the I<senton> date.
+is provided as the argument. It uses the RFC822 I<Date:> header to determine the I<sentsince> date.
 
 In the case of arguments supplied as a number of seconds, the returned result list will include 
 items sent on or after that day, regardless of whether they arrived before the specified time on 
 that day. The IMAP protocol does not support searches at a granularity finer than a day, so 
-neither do I. 
+neither do I. On the other hand, the only thing I check for in a I<date_text> argument is that it
+matches the pattern C</\d\d-\D\D\D-\d\d\d\d/> (notice the lack of anchors),  so if your server lets you 
+add something extra to a I<date_text> string then so will B<Mail::IMAPClient>.
 
 =cut
 
-=item separator
+=item separator()
 
 The B<separator> method returns the character used as a separator character in 
 folder hierarchies. On unix-based servers, this is often a forward slash (/). It accepts one
@@ -3421,12 +3631,13 @@ name is supplied then the separator for the INBOX is returned, which probably is
 
 =cut
 
-=item set_flag
+=item set_flag()
 
-The B<set_flag> method accepts the name of a flag as its first argument and a list of one or more messages sequence 
-numbers, or a single reference to an array of one or more message sequence numbers, as its next argument(s). 
-It then sets the flag specified for those message(s). Of course, if the I<Uid> parameter is set to a true value 
-then those message sequence numbers had better be unique message id's, but then you already knew that, didn't you?
+The B<set_flag> method accepts the name of a flag as its first argument and a list of one or more messages
+ sequence numbers, or a single reference to an array of one or more message sequence numbers, as its 
+next argument(s). It then sets the flag specified for those message(s). Of course, if the I<Uid> 
+parameter is set to a true value then those message sequence numbers had better be unique message id's, 
+just as you'd expect.
 
 Note that when specifying the flag in question, the preceding backslash (\) is entirely optional. (For you,
 that is. B<Mail::IMAPClient> still has remember to stick it in there before passing the command to the 
@@ -3435,31 +3646,31 @@ which is why you don't have to worry about it overly much.)
 
 =cut
 
-=item setacl
+=item setacl()
 
 The B<setacl> method accepts three input arguments, a folder name, a user id (or authentication
 identifier, to use the terminology of RFC2086), and an access rights modification string. See
-RFC2086 for more information.
+RFC2086 for more information. (This is somewhat experimental and its implementation may change.)
 
 =cut
 
-=item since
+=item since()
 
 The B<since> method accepts a date in either standard perl format (seconds since 1/1/1970, or
-as output by B<time> and as accepted by B<localtime>) or in the I<date_text> format as defined 
-in RFC2060 (dd-Mon-yyyy, where Mon is the English-language three-letter abbreviation for the month). 
+as output by L<perlfunc/time> and as accepted by L<perlfunc/localtime>) or in the I<date_text> 
+format as defined in RFC2060 (dd-Mon-yyyy, where Mon is the English-language three-letter 
+abbreviation for the month). 
 It searches for items in the currently selected folder for messages whose internal dates are on or
 after the day whose date is provided as the argument. It uses the internal system date for a 
 message to determine if that message was sent since the given date.
 
 In the case of arguments supplied as a number of seconds, the returned result list will include 
 items whose internal date is on or after that day, regardless of whether they arrived before the 
-specified time on that day. The IMAP protocol does not support searches at a granularity finer 
-than a day, so neither do I. 
+specified time on that day. 
 
 =cut
 
-=item size
+=item size()
 
 The B<size> method accepts one input argument, a sequence number (or message UID if the I<Uid> parameter
 is true). It returns the size of the message in the currently selected folder with the supplied 
@@ -3468,7 +3679,7 @@ this method.
 
 =cut
 
-=item status
+=item status()
 
 The B<status> method accepts one argument, the name of a folder (or mailbox, to use
 RFC2060's terminology), and returns an array containing the results of running the  IMAP 
@@ -3481,16 +3692,16 @@ rather than the array itself.
 
 The B<status> method should not be confused with the B<Status> method (with an uppercase 'S'),
 which returns information about the B<IMAPClient> object. (See the section labeled 
-B<Status Methods>, below).
+L<"Status Methods">, below).
 
 =cut
 
-=item subscribed
+=item subscribed()
 
 The B<subscribed> method works like the B<folders> method, above, except that the returned list (or
 array reference, if called in scalar context) contains only the subscribed folders. 
 
-=item tag_and_run
+=item tag_and_run()
 
 The B<tag_and_run> method accepts one or two arguments. The first argument is a string containing 
 an IMAP Client command, without a tag but with all required arguments. The optional second 
@@ -3505,17 +3716,17 @@ naming your own tags).
 
 =cut
 
-=item uidnext
+=item uidnext()
 
 The B<uidnext> method accepts one argument, the name of a folder, and returns the numeric string
 that is the next available message UID for that folder.
 
-=item uidvalidity
+=item uidvalidity()
 
 The B<uidvalidity> method accepts one argument, the name of a folder, and returns the numeric string
 that is the unique identifier validity value for the folder.
 
-=item unseen
+=item unseen()
 
 The B<unseen> method performs an IMAP SEARCH UNSEEN search against the selected folder and returns
 an array of sequence numbers of messages that have not yet been seen (ie their SEEN flag is not set).
@@ -3526,24 +3737,24 @@ Note that when specifying the flag in question, the preceding backslash (\) is e
 
 =cut
 
-=item unseen_count
+=item unseen_count()
 
 The B<unseen_count> method accepts the name of a folder as an argument and returns the number of unseen
 messages in that folder. If no folder argument is provided then it returns the number of unseen messages 
 in the currently selected Folder.
 
-=item unset_flag
+=item unset_flag()
 
 The B<unset_flag> method accepts the name of a flag as its first argument and a list of one or more 
 messages sequence numbers, or a single reference to an array of one or more message sequence numbers, 
 as its next argument(s). It then unsets the flag specified for those message(s). Of course, if the I<Uid> 
 parameter is set to a true value then those message sequence numbers had better be unique message id's, 
-but then you already knew that, didn't you?
+just as you'd expect.
 
 =cut
 
 
-=item Other IMAP Client Commands
+=item Other IMAP Client Commands and the Default Method()
 
 IMAP Client Commands not otherwise documented have been implemented via an AUTOLOAD hack and use 
 a default method.
@@ -3574,7 +3785,7 @@ then you will receive warnings whenever you use a lowercase method name that has
 exception to this is when you use certain common (yet unimplemented) methods that, if ever explicitly implemented,
 are guaranteed to behave just like the default method. To date, these are:
 
-=over 4
+=over 8
 
 =item store("$msg[,$msg2,$msg_n]", $flags)
 
@@ -3598,7 +3809,7 @@ Delete a folder (and its contents).
 
 =item expunge
 
-Remove messages previously marked as deleted. (This is also documented under B<object methods>, above.)
+Remove messages previously marked as deleted. (This is also documented under L<"object methods">, above.)
 
 =back
 
@@ -3631,22 +3842,12 @@ a single B<new> method invocation. The status methods are:
 
 =over 8
 
-=item 1. State 
+=item 1. History
 
-returns a numerical value that indicates the current status of the B<IMAPClient> object. If invoked
-with an argument, it will set the object's state to that value. If invoked without an argument, it
-behaves just like B<Status>, below. 
-
-Normally you will not have to invoke this function. An exception is if you are bypassing the
-B<Mail::IMAPClient> module's B<connect> and/or B<login> modules to set up your own connection
-(say, for example, over a secure socket), in which case you must manually do what the B<connect>
-and B<login> methods would otherwise do for you.
-
-=item 1. Status 
-
-returns a numerical value that indicates the current status of the B<IMAPClient> object. (Not to
-be confused with the B<status> method, all lower-case, which is the implementation of the
-STATUS IMAP client command.)
+The B<History> method is almost identical to the B<Results> method. Unlike the B<Results>
+method, however, the IMAP command that was issued to create the results being returned is
+not included in the returned results.  If called in a scalar context, B<History> returns an 
+array reference rather than an array.
 
 =item 2. IsUnconnected
 
@@ -3666,21 +3867,37 @@ B<Selected> state.
 
 returns a true value if the object is currently in a B<Selected> state.
 
-=item 6. Transaction 
+=item 6. LastError
 
-returns the tag value (or transaction number) of the last IMAP client command.
+Internally B<LastError> is implemented just like a parameter (as described in L<"Parameters">, above). 
+There is a I<LastError> attribute and an eponymous accessor method which returns the I<LastError> text 
+string describing the last error condition encountered by the server. 
 
-=item 7. Report
+Note that some errors are more serious than others, so I<LastError>'s value is only meaningful 
+if you encounter an error condition that you don't like. For example, if you use the B<exists> 
+method to see if a folder exists and the folder does not exist, then an error message will be 
+recorded in LastError even though this is not a particularly serious error. On the other hand, 
+if you didn't use B<exists> and just tried to B<select> a non-existing folder, then B<select> 
+would return undef after setting I<LastError> to something like "NO SELECT failed: Can't open 
+mailbox <mailbox>: no such mailbox".  At this point it would be useful to print out the contents 
+of I<LastError> as you B<die>.
+
+=item 7. LastIMAPCommand
+
+New in version 2.0.4, B<LastIMAPCommand> returns the exact IMAP command string to be sent to the 
+server. Useful mainly in constructing error messages when B<LastError> just isn't enough.
+
+=item 8. Report
 
 The B<Report> method returns an array containing a history of the IMAP session up to the
 point that B<Report> was called. It is primarily meant to assist in debugging but can also
 be used to retrieve raw output for manual parsing. The value of the B<Clear> parameter controls
-how many transactions are in the report. (See the discussion of B<Clear> in the I<Parameters> 
-section, above.)
+how many transactions are in the report. (See the discussion of B<Clear> in 
+L<"parameters">, above.)
 
 =cut
 
-=item 8. Results
+=item 9. Results
 
 The B<Results> method returns an array containing the results of one IMAP client command. 
 It accepts one argument, the transaction number of the command whose results are to be 
@@ -3690,14 +3907,26 @@ array reference rather than an array.
 
 =cut
 
-=item 9. History
+=item 10. State 
 
-The B<History> method is almost identical to the B<Results> method. Unlike the B<Results>
-method, however, the IMAP command that was issued to create the results being returned is
-not included in the returned results.  If called in a scalar context, B<History> returns an 
-array reference rather than an array.
+The B<State> method returns a numerical value that indicates the current status of the B<IMAPClient> 
+object. If invoked with an argument, it will set the object's state to that value. If invoked without 
+an argument, it behaves just like B<Status>, below. 
 
-=cut
+Normally you will not have to invoke this function. An exception is if you are bypassing the
+B<Mail::IMAPClient> module's B<connect> and/or B<login> modules to set up your own connection
+(say, for example, over a secure socket), in which case you must manually do what the B<connect>
+and B<login> methods would otherwise do for you.
+
+=item 11. Status 
+
+The B<Status> method returns a numerical value that indicates the current status of the B<IMAPClient> 
+object. (Not to be confused with the B<status> method, all lower-case, which is the implementation of the
+STATUS IMAP client command.)
+
+=item 12. Transaction 
+
+The B<Transaction> method returns the tag value (or transaction number) of the last IMAP client command.
 
 =back
 
@@ -3759,13 +3988,9 @@ it under the terms of either:
 
 =over 4
 
-=item
+=item a) the "Artistic License" which comes with this Kit, or
 
-a) the "Artistic License" which comes with this Kit, or
-
-=item
-
-b) the GNU General Public License as published by the Free Software Foundation; either 
+=item b) the GNU General Public License as published by the Free Software Foundation; either 
 version 1, or (at your option) any later version.
 
 =back
@@ -3780,6 +4005,13 @@ the GNU General Public License or the Artistic License for more details.
 my $not_void_context = '0 but true'; 		# return true value
 
 # $Log: IMAPClient.pm,v $
+# Revision 20001010.7  2000/12/20 19:36:52  dkernen
+#
+# ---------------------------------------------------------------------------------
+# Modified Files: IMAPClient.pm -- added bug fix to I/O engine, also cleaned up doc
+# 		Changes	      -- documented same
+# ---------------------------------------------------------------------------------
+#
 # Revision 20001010.6  2000/11/10 22:08:06  dkernen
 #
 # Modified Files: Changes IMAPClient.pm Makefile t/basic.t -- to add Peek parm and to make several bug fixes

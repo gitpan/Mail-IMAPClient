@@ -1,4 +1,5 @@
 #!/usr/local/bin/perl
+#$Id: build_dist.pl,v 19991216.6 2000/12/11 21:58:50 dkernen Exp $
 
 use Mail::IMAPClient;
 
@@ -107,8 +108,15 @@ $imap->append($opt_f,$append) or warn "Couldn't append the message.";
 
 $imap->logout;
 
-# $Id: build_dist.pl,v 19991216.5 1999/12/16 17:19:09 dkernen Exp $
+# $Id: build_dist.pl,v 19991216.6 2000/12/11 21:58:50 dkernen Exp $
 # $Log: build_dist.pl,v $
+# Revision 19991216.6  2000/12/11 21:58:50  dkernen
+#
+# Modified Files:
+# 	build_dist.pl build_ldif.pl copy_folder.pl find_dup_msgs.pl
+# 	imap_to_mbox.pl populate_mailbox.pl
+# to add CVS data
+#
 # Revision 19991216.5  1999/12/16 17:19:09  dkernen
 # Bring up to same level
 #

@@ -1,4 +1,5 @@
 #!/usr/local/bin/perl
+#$Id: copy_folder.pl,v 19991216.2 2000/12/11 21:58:51 dkernen Exp $
 ++$|;
 use Getopt::Std;
 use Mail::IMAPClient;
@@ -97,3 +98,13 @@ sub usage {
 	"\n"
 	;
 }
+
+# History:
+# $Log: copy_folder.pl,v $
+# Revision 19991216.2  2000/12/11 21:58:51  dkernen
+#
+# Modified Files:
+# 	build_dist.pl build_ldif.pl copy_folder.pl find_dup_msgs.pl
+# 	imap_to_mbox.pl populate_mailbox.pl
+# to add CVS data
+#

@@ -6,7 +6,7 @@
 # DESC: Reads a users IMAP folders, and converts them to mbox
 #       Good for an interim switch-over from say, Exchange to Cyrus IMAP.
 
-# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 19991216.5 1999/12/16 17:19:12 dkernen Exp $
+# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 19991216.6 2000/12/11 21:58:52 dkernen Exp $
 
 # TODO:
 # ----- 
@@ -28,9 +28,9 @@ if ($opt_h) {
 	# print help here
 }
 
-$SERVER		= $opt_s || 'imap.rtci.com';
-$USER		= $opt_u || 'tstromberg';
-$PASSWORD	= $opt_p || '';
+$SERVER		= $opt_s || 'mailhost';
+$USER		= $opt_u || 'userid';
+$PASSWORD	= $opt_p || 'password';
 $PORT		= $opt_P || '143';
 $INBOX_PATH	= $opt_i || "./mail/$USER"; 
 $FOLDERS_PATH	= $opt_f || "./folders/$USER"; 
@@ -117,8 +117,15 @@ sub write_folder {
 	print("\n");
 }
 
-# $Id: imap_to_mbox.pl,v 19991216.5 1999/12/16 17:19:12 dkernen Exp $ 
+# $Id: imap_to_mbox.pl,v 19991216.6 2000/12/11 21:58:52 dkernen Exp $ 
 # $Log: imap_to_mbox.pl,v $
+# Revision 19991216.6  2000/12/11 21:58:52  dkernen
+#
+# Modified Files:
+# 	build_dist.pl build_ldif.pl copy_folder.pl find_dup_msgs.pl
+# 	imap_to_mbox.pl populate_mailbox.pl
+# to add CVS data
+#
 # Revision 19991216.5  1999/12/16 17:19:12  dkernen
 # Bring up to same level
 #

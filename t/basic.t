@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.17 2000/11/10 22:08:15 dkernen Exp $
+# $Id: basic.t,v 19991216.18 2000/12/20 19:37:02 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -108,7 +108,6 @@ BEGIN {
 			} else {
 				print "not ok ",++$test,"\n";
 			}
-			# print $imap->Report;
 		} else { 
 			print "ok ",++$test,"\n";
 			print "ok ",++$test,"\n";
@@ -117,6 +116,7 @@ BEGIN {
 	};
 
 	push @tests, sub {	# 10
+		# print $db $imap->Report;
 		if ( eval { $imap->exists("$target") } ) {
 			print "ok ",++$test,"\n";
 		} else {	
@@ -408,16 +408,16 @@ BEGIN {
 
 }
 
-=begin debugging
+#=begin debugging
 
 $db = IO::File->new(">/tmp/de.bug");
 local *TMP = $db ;
 open(STDERR,">&TMP");
 select(((select($db),$|=1))[0]);
 
-=end debugging
+#=end debugging
 
-=cut
+#=cut
 
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
@@ -426,8 +426,8 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Timeout => 30,
-		Debug   => 0,
-		Debug_fh   => undef,	#	$db,
+		Debug   => 1,
+		Debug_fh   => 	$db,
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 ) 	or 
@@ -437,7 +437,7 @@ eval { $imap = Mail::IMAPClient->new(
 
 
 for my $test (@tests) { $test->(); }
-#print $db $imap->Report,"\n";
+print $db $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}
@@ -456,6 +456,13 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.18  2000/12/20 19:37:02  dkernen
+#
+# ---------------------------------------------------------------------------------
+# Modified Files: IMAPClient.pm -- added bug fix to I/O engine, also cleaned up doc
+# 		Changes	      -- documented same
+# ---------------------------------------------------------------------------------
+#
 # Revision 19991216.17  2000/11/10 22:08:15  dkernen
 #
 # Modified Files: Changes IMAPClient.pm Makefile t/basic.t -- to add Peek parm and to make several bug fixes

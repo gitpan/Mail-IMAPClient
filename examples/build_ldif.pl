@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-
+#$Id: build_ldif.pl,v 19991216.9 2000/12/11 21:58:51 dkernen Exp $
 use Mail::IMAPClient;
 use MIME::Lite;
 use Data::Dumper;
@@ -157,8 +157,15 @@ $imap->append($opt_f, $msg->as_string) unless $opt_n;
 print Dumper($imap) if $opt_d;
 $imap->logout;
 
-# $Id: build_ldif.pl,v 19991216.8 2000/03/02 19:57:13 dkernen Exp $
+# $Id: build_ldif.pl,v 19991216.9 2000/12/11 21:58:51 dkernen Exp $
 # $Log: build_ldif.pl,v $
+# Revision 19991216.9  2000/12/11 21:58:51  dkernen
+#
+# Modified Files:
+# 	build_dist.pl build_ldif.pl copy_folder.pl find_dup_msgs.pl
+# 	imap_to_mbox.pl populate_mailbox.pl
+# to add CVS data
+#
 # Revision 19991216.8  2000/03/02 19:57:13  dkernen
 #
 # Modified Files: build_ldif.pl -- to support new option to all "To:" and "Cc:" to be included in ldif file

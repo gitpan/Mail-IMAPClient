@@ -1,4 +1,5 @@
 #!/usr/local/bin/perl
+# $Id: find_dup_msgs.pl,v 19991216.3 2000/12/11 21:58:52 dkernen Exp $
 
 use Mail::IMAPClient;
 use Getopt::Std;
@@ -58,3 +59,12 @@ print 	"Found $total duplicate messages in $uid's mailbox. The breakdown is:\n",
 	"\tTOTAL\t$total\t$totms\n";
 
 
+# History:
+# $Log: find_dup_msgs.pl,v $
+# Revision 19991216.3  2000/12/11 21:58:52  dkernen
+#
+# Modified Files:
+# 	build_dist.pl build_ldif.pl copy_folder.pl find_dup_msgs.pl
+# 	imap_to_mbox.pl populate_mailbox.pl
+# to add CVS data
+#
