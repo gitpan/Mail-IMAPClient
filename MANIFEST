@@ -1,0 +1,12 @@
+Changes
+TODO
+IMAPClient.pm
+INSTALL
+MANIFEST
+README
+Makefile.PL
+test.pl
+Copying
+Artistic
+examples/populate_mailbox.pl
+docs/rfc2060.txt

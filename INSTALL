@@ -1,0 +1,14 @@
+Mail::IMAPClient Installation
+
+The Mail::IMAPClient is written entirely in Perl, so it should install on any version of Perl. 
+The installation is standard:
+
+	0) cd to installation directory
+	1) perl Makefile.PL
+	2) make					(optional)
+	3) make test 				(optional)
+	4) make install 				
+
+The 'make install' will do step 2 ('make') if you haven't done it already. Currently the test script
+is lame but I hope to incorporate more thorough testing in a future version.
+
