@@ -1,4 +1,38 @@
-Revision history for Perl extension IMAPClient.
+Revision History for Perl extension Mail::IMAPClient.
+
+Changes in version 2.0.8
+------------------------
+Made minor changes to the tests in t/basic.t so that folders are explicitly closed before they 
+are deleted. (Don't worry, only folders created by the tests are deleted. :-) Thanks go to Alan 
+Young for reporting that some servers require this.
+
+Changed the routine that massages folder names into IMAP-compliant strings so that single-quotes in a
+name do not force the folder to go through as "LITERAL" strings (as defined in RFC2060). This shouldn't
+cause a problem for anybody (and in fact should make life easier for some folks) but if you do have any
+trouble with single-quotes in folder names PLEASE LET ME KNOW ASAP!! 
+
+Divided the sending of literal strings into two I/O operations (as required by RFC2060). This should
+correct problems with sending literals to some servers that will not read any data sent before they
+reply with the "+ go ahead" message. (Thanks go to Keith Clay, who reported seeing this problem with 
+the M-Store IMAP server.)
+
+Changed the "create" method so that it will autoquote the first argument to create rather than
+the last. Normally the first argument is the last, but Cyrus users can specify an optional 2nd 
+argument, except when using pre-2.0.8 versions of Mail::IMAPClient ;-) Thank you Chris 
+Stratford for reporting this bug and identifying its cause.
+
+Fixed a bug in body_string when the message is empty. (Thanks go to Vladimir Jebelev for 
+finding this bug and providing the fix.)
+
+Added a new example to the examples subdirectory. cyrus_expunge.pl is a script you can use (after making
+minor tweaks) to periodically expunge your server's mail store. 
+
+Changes in version 2.0.7
+------------------------
+Fixed a bug in message_count. Thanks go to Alistair Adams for reporting this bug.
+
+Fixed a bug in folders that caused some foldernames to not be reported in the returned array.
+
 Changes in version 2.0.6
 ------------------------
 

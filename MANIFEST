@@ -6,6 +6,9 @@ MANIFEST
 README
 Makefile.PL
 t/basic.t
+t/fast_io.t
+t/uidplus.t
+t/uidfast.t
 Copying
 Artistic
 examples/populate_mailbox.pl
@@ -14,6 +17,7 @@ examples/build_dist.pl
 examples/build_ldif.pl
 examples/find_dup_msgs.pl
 examples/copy_folder.pl
+examples/cyrus_expunge.pl
 test_template.txt
 sample.perldb
 docs/rfc1731.txt

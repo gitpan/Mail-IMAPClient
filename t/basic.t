@@ -102,6 +102,7 @@ BEGIN {
 			} else {
 				print "not ok ",++$test,"\n";
 			}
+			$imap->close;
 			$imap->select('inbox');
 			if ( eval { $imap->delete(qq($target${sep}has "quotes")) } ) { #9
 				print "ok ",++$test,"\n";
@@ -350,8 +351,9 @@ BEGIN {
 	}, sub { $imap->delete_message(@hits) } ;	# dummy 37
 	push @tests, sub {	# 38
 		$imap->select($target2);
-		if ( $imap->delete_message($imap->search("ALL")) and $imap->delete($target2) ) {
+		if ( $imap->delete_message($imap->search("ALL")) and $imap->close and $imap->delete($target2) ) {
 			print "ok ",++$test,"\n";
+			
 		} else {	
 			print "not ok ",++$test,"\n";
 			print $imap->Report;
@@ -371,6 +373,7 @@ BEGIN {
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 			print "ok ",++$test,"\n";
+			$imap->close;
 			if ( $imap->delete("${target}NEW") ) {
 				print "ok ",++$test,"\n";
 			} else {	
@@ -378,6 +381,7 @@ BEGIN {
 			}
 		} else {	
 			print "not ok ",++$test,"\n";
+			$imap->close;
 			if ( $imap->delete("$target") ) {
 				print "ok ",++$test,"\n";
 			} else {	
@@ -408,16 +412,16 @@ BEGIN {
 
 }
 
-#=begin debugging
+=begin debugging
 
 $db = IO::File->new(">/tmp/de.bug");
 local *TMP = $db ;
 open(STDERR,">&TMP");
 select(((select($db),$|=1))[0]);
 
-#=end debugging
+=end debugging
 
-#=cut
+=cut
 
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
@@ -426,8 +430,8 @@ eval { $imap = Mail::IMAPClient->new(
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
 		Clear   => 0,
 		Timeout => 30,
-		Debug   => 1,
-		Debug_fh   => 	$db,
+		# Debug   => 1,
+		# Debug_fh   => 	$db,
 		Fast_IO => $fast,
 		Uid 	=> $uidplus,
 ) 	or 
@@ -437,7 +441,7 @@ eval { $imap = Mail::IMAPClient->new(
 
 
 for my $test (@tests) { $test->(); }
-print $db $imap->Report,"\n";
+#print $db $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}

@@ -2,8 +2,8 @@ package Mail::IMAPClient;
 
 # $Id: IMAPClient.pm,v 20001010.8 2001/01/09 19:24:29 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.0.6';
-$Mail::IMAPClient::VERSION = '2.0.6';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.0.9';
+$Mail::IMAPClient::VERSION = '2.0.9';  	# do it twice to make sure it takes
 
 use Fcntl qw(:DEFAULT);
 use Socket;
@@ -443,7 +443,11 @@ sub message_string {
 		$string .= $result->[_DATA] if $self->_is_literal($result) ;
 	}      
 	# BUG? should probably return undef if length != expected
-	if ( length($string) != $expected_size ) { warn "${self}::message_string: expected $expected_size bytes but received " . length($string) if $self->Debug; }
+	if ( length($string) != $expected_size ) { 
+		warn "${self}::message_string: expected $expected_size bytes but received " . 
+		length($string) 
+			if $self->Debug or $^W; 
+	}
 	if ( length($string) > $expected_size ) { $string = substr($string,0,$expected_size) }
 	if ( length($string) < $expected_size ) {
 		$self->LastError("${self}::message_string: expected $expected_size bytes but received " . 
@@ -560,7 +564,7 @@ sub body_string {
 			$self->LastError("Unable to parse server response from " . $self->LastIMAPCommand );
 			return undef ;
 	}
-	my $popped ; $popped = pop @$ref until $popped =~ /\)\r\n$/;
+	my $popped ; $popped = pop @$ref until $popped =~ /\)\r\n$/ or not grep(/\)\r\n$/,@$ref);
 
         if      ($head =~ /BODY\[TEXT\]\s*$/i )     {       # Next line is a literal
                         $string .= shift @$ref while scalar(@$ref);
@@ -742,7 +746,30 @@ sub _send_line {
 		$string .= "\r" unless $string =~ /\r$/;	
 		$string .= "\n" ;
 	}
-
+	if ( $string =~ /^[^\n{]*\{(\d+)\}\r\n/ ) {
+		my($p1,$p2,$len) ;
+		if ( ($p1,$len)   = $string =~ /^([^\n{]*\{(\d+)\}\r\n)/ 		# } for vi
+			and ($p2) = $string =~ /^[^\n{]*\{\d+\}\r\n(.{$len}.*\r\n)/ 	# } for vi
+		) {
+			$self->_debug("Sending literal string in two parts: $p1\n\tthen: $p2\n");
+			$self->_send_line($p1) or return undef;
+			$output = $self->_read_line or return undef;
+			foreach my $o (@$output) {
+				$self->_record($self->Count,$o);              # $o is already an array ref
+				($code) = $o->[_DATA] =~ /(^\+|NO|BAD)/i;
+				if ($o->[_DATA] =~ /^\*\s+BYE/) {
+					$self->State(Unconnected);
+					close $fh;
+					return undef ;
+				} elsif ( $o->[_DATA]=~ /^\d+\s+(NO|BAD)/i ) {
+					close $fh;
+					return undef;
+				}
+			}
+			if ( $code eq '+' ) { $string = $p2; } else { return undef ; }
+		}
+		
+	}
 	if ($self->Debug) {
 		my $dstring = $string;
 		if ( $dstring =~ m[\d+\s+Login\s+]i) {
@@ -762,6 +789,7 @@ sub _send_line {
 		return undef unless(defined $ret);	# avoid infinite loops on syswrite error
 		$total += $ret;
 	}
+	_debug $self,"Sent $total bytes\n" if $self->Debug;
 	return $total;
 }
 
@@ -1141,17 +1169,21 @@ sub folders {
         my @folders ;  
 	my @list = $self->list(undef,( $what? "$what" . $self->separator($what) . "*" : undef ) );
 	push @list, $self->list(undef, $what) if $what and $self->exists($what) ;
-	# my @list = map { $self->_debug("Pushing $_->[${\(_DATA)}] \n"); $_->[_DATA] } @$output;
+	# my @list = 
+	# foreach (@list) { $self->_debug("Pushing $_\n"); }
 	my $m;
 
 	for ($m = 0; $m < scalar(@list); $m++ ) {
+		# $self->_debug("Folders: examining $list[$m]\n");
+
 		if ($list[$m] && $list[$m]  !~ /\r\n$/ ) {
+			$self->_debug("folders: concatenating $list[$m] and " . $list[$m+1] . "\n") ;
 			$list[$m] .= $list[$m+1] ;
 			$list[$m+1] = "";	
+			$list[$m] .= "\r\n" unless $list[$m] =~ /\r\n$/;
 		}
 			
 		
-		# $self->_debug("Folders: examining $list[$m]\n");
 
 		push @folders, $1||$2 
 			if $list[$m] =~
@@ -1160,7 +1192,7 @@ sub folders {
                                 "[^"]*"\s+              # "delimiter"
                                 (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
                         /ix;
-
+		# $self->_debug("folders: line $list[$m]: 1=$1 and 2=$2\n");
         } 
 
         # for my $f (@folders) { $f =~ s/^\\FOLDER LITERAL:://;}
@@ -1198,7 +1230,8 @@ sub AUTOLOAD {
 	delete $self->{Folders}  ;
 	$Mail::IMAPClient::AUTOLOAD =~ s/.*:://;
 	if (	
-			$Mail::IMAPClient::AUTOLOAD =~ /^[a-z]+$/
+			$^W
+		and	$Mail::IMAPClient::AUTOLOAD =~ /^[a-z]+$/
 		and	$Mail::IMAPClient::AUTOLOAD !~ 
 				/^	(?:
 						store	 |
@@ -1210,7 +1243,6 @@ sub AUTOLOAD {
 						expunge
 					)$
 				/x 
-		and 	$^W
 	) {
 		carp 	"$Mail::IMAPClient::AUTOLOAD is all lower-case. " .
 			"May conflict with future methods. " .
@@ -1220,9 +1252,14 @@ sub AUTOLOAD {
 		my @a = @_;
 		if (	
 			$Mail::IMAPClient::AUTOLOAD =~ 
-				/^(?:subscribe|create|delete|myrights)$/i
+				/^(?:subscribe|delete|myrights)$/i
 		) {
 			$a[-1] = $self->Massage($a[-1]) ;
+		} elsif (	
+			$Mail::IMAPClient::AUTOLOAD =~ 
+				/^(?:create)$/i
+		) {
+			$a[0] = $self->Massage($a[0]) ;
 		} elsif (
 			$Mail::IMAPClient::AUTOLOAD =~ /^(?:store|copy)$/i
 		) {
@@ -1593,14 +1630,11 @@ sub message_count {
 	$folder ||= $self->Folder;
 	
 	$self->status($folder, 'MESSAGES') or return undef;
+        foreach my $result  (@{$self->{"History"}{$self->Transaction}}) {
+		return $1 if $result->[_DATA] =~	/\(MESSAGES\s+(\d+)\s*\)/ ;
+        }
 
-	chomp(my $m =	   (	grep {s/\*\s+STATUS\s+.*\(MESSAGES\s+(\d+)\s*\).*$/$1/ }
-			$self->History($self->Transaction) 
-	)[0]);
-
-	$m =~ s/\D//g;
-
-	return $m;
+	return undef;
 
 }
 
@@ -2301,7 +2335,7 @@ sub Massage {
                 and ! ( $self->STATUS(qq("$escaped_arg"),"(MESSAGES)"));
 
 
-	if ($arg =~ /["'\\]/) {
+	if ($arg =~ /["\\]/) {
 		$arg = "{" . length($arg) . "}\r\n$arg" ;
 	} else {
 		$arg = qq("${arg}") unless $arg =~ /^"/;
