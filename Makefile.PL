@@ -1,14 +1,46 @@
 use ExtUtils::MakeMaker;
+use Cwd;
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
+$DO_BODYSTRUCTURE	= eval "require 'Parse/RecDescent.pm'" ;
+unless ($DO_BODYSTRUCTURE) {
+	print 
+		"*** NOTE ***\n\n",
+		"Unable to find and load Parse::RecDescent.\n",
+		"Mail::IMAPClient will be installed without support for\n",
+		"the get_bodystructure method and without the \n",
+		"Mail::IMAPClient::BodyStructure subclasses. \n\n",
+		"If you need these subclasses, install Parse::RecDescent \nand ",
+		"re-run Makefile.PL. \n\n";
+}
+
 WriteMakefile(
-    'DIR'		=> ['BodyStructure', 'Parse'],
+    'DIR'		=> $DO_BODYSTRUCTURE ? ['BodyStructure'] : [],
     'NAME'		=> 'Mail::IMAPClient',
     'VERSION_FROM' 	=> 'IMAPClient.pm', # finds $VERSION
-    'clean' 		=> {	FILES 	=> 'test.txt'	}
+    'clean' 		=> {	FILES 	=> 'test.txt'	},
+    'PREREQ_PM'		=> { 	
+				'Errno'		=> 0,
+				'IO::Socket' 	=> 0,
+				'Fcntl'		=> 0,
+				'IO::Select'	=> 0,
+				'IO::File'	=> 0,
+				'Data::Dumper'	=> 0,
+				'Carp'		=> 0,
+    },
 
 );
 
+=begin prereqs
+
+The Mail::IMAPClient module uses the IO::Socket module to make a socket
+connection to an IMAP server and the Socket module to get some constants.
+It also uses Errno, Fcntl (for faster I/O) and IO::Select, IO::File, 
+Data::Dumper, and Carp.
+
+=end prereqs
+
+=cut
 
 &set_test_data;
 
@@ -22,7 +54,7 @@ sub set_test_data {
 	my $yes = <STDIN>;
 	return unless $yes =~ /^[Yy](?:[Ee]:[Ss]?)?$/ ;
 	unless (open TST,">./test.txt") { warn "ERROR: couldn't open ./test.txt: $!\n"; return }
-	print "\nPlease provide the hostname of a host running an IMAP server \n",
+	print "\nPlease provide the hostname or IP address of a host running an IMAP server \n",
 		"(or QUIT to skip the extended tests) ==> ";
 	my $server = <STDIN>;
 	chomp $server;

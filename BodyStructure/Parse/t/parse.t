@@ -1,11 +1,11 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.20 2001/02/07 20:20:43 dkernen Exp $
+# $Id: parse.t,v 1.1 2002/08/23 14:34:29 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
 
-use Mail::IMAPClient::Parse;
+use Mail::IMAPClient::BodyStructure::Parse;
 
 BEGIN {
 	print "1..1\n";
@@ -17,4 +17,10 @@ END {print "not ok 1\n" unless $main::loaded;}
 
 
 # History:
-# $Log$
+# $Log: parse.t,v $
+# Revision 1.1  2002/08/23 14:34:29  dkernen
+#
+# Modified Files:	Changes IMAPClient.pm Makefile Makefile.PL test.txt for version 2.2.0
+# Added Files: Makefile Makefile.PL Parse.grammar Parse.pm Parse.pod  version 2.2.0
+# Added Files: parse.t  for version 2.2.0
+#

@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl							
-#$Id: populate_mailbox.pl,v 19991216.6 2000/12/11 21:58:53 dkernen Exp $									#
+#$Id: populate_mailbox.pl,v 19991216.7 2002/08/23 13:29:49 dkernen Exp $									#
 use Time::Local								;
 use FileHandle								;
 use File::Copy								;
@@ -16,6 +16,7 @@ my $default_pswd  = 'default'						;
 # 	HOST 	 = Target host (defaults to localhost)			#
 # 	CLEAN 	 = 1   (defaults to 0; used to clean out mailbox 1st) 	#
 # 	CLEANONLY= 1   (defaults to 0; if 1 then only CLEAN is done)	#
+# 	DOMAIN   = x.com (no default) the mail domain for UID's address #
 #									#
 # EG: 	populate_mailbox.pl DATE=200001010100 UID=testuser 		#
 #									#
@@ -43,6 +44,7 @@ while 	(my ($k,$v) = each %hash ) 					{
 	print "Running with $k set to $v\n"				;
 									}
 									#
+my $domain 	= $hash{DOMAIN} or die "No mail domain provided.\n"	;
 my $now 	= seconds($hash{DATE}) || time  			;
 									#
 my $six 	= $now - (   6 * 24 * 60 * 60 ) 			;
@@ -109,7 +111,7 @@ sub sendmail 								{
 									#	
 	my($to,$date,$subject) = @_					;
 	my $text = <<EOTEXT						;
-To: $to\@bms.com
+To: $to\@$hash{DOMAIN}						
 Date: @{[&rfc822_date($date)]}
 Subject: $subject
 
@@ -230,8 +232,17 @@ return 		sprintf							(
 			$date[0]					)
 									;
 									}
-# $Id: populate_mailbox.pl,v 19991216.6 2000/12/11 21:58:53 dkernen Exp $
+# $Id: populate_mailbox.pl,v 19991216.7 2002/08/23 13:29:49 dkernen Exp $
 # $Log: populate_mailbox.pl,v $
+# Revision 19991216.7  2002/08/23 13:29:49  dkernen
+#
+# Modified Files: Changes IMAPClient.pm INSTALL MANIFEST Makefile Makefile.PL README Todo test.txt
+# Made changes to create version 2.1.6.
+# Modified Files:
+# imap_to_mbox.pl populate_mailbox.pl
+# Added Files:
+# cleanTest.pl migrate_mbox.pl
+#
 # Revision 19991216.6  2000/12/11 21:58:53  dkernen
 #
 # Modified Files:

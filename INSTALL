@@ -42,14 +42,17 @@ If, when replying to the "perl Makefile.PL" prompts, you supply server, id, and 
 credentials for an id that has a ridiculously huge number of folders and subfolders then 
 the 'make test' may run approximately forever. Next time try an id with less stuff. 
 
-As of
-
 For examples on using Mail::IMAPClient, check out the examples subdirectory. If you have 
 better examples, then why haven't you e-mailed them to me? Also, I totally recommend that you
 have a copy of RFC2060 handy when using this module, since the documentation for this module
 is meant to compliment, not replace, RFC2060. In fact, I am so convinced that you'll need the
 RFC that I've included a copy of it in the distribution, under the "docs/" subdirectory. It's
 a smashing good read so have at it.
+
+One of the examples in the examples/ subdirectory is called cleanTest.pl. If you find your
+'make test' has had trouble and left some folders named "IMAPClient_*" in your test account,
+you can run this example to clean up the account. But probably only after you've fixed any 
+problems encountered with 'make test'!
 
 Now go and write IMAP clients.
 

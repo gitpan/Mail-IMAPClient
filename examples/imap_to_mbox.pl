@@ -6,7 +6,7 @@
 # DESC: Reads a users IMAP folders, and converts them to mbox
 #       Good for an interim switch-over from say, Exchange to Cyrus IMAP.
 
-# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 19991216.6 2000/12/11 21:58:52 dkernen Exp $
+# $Header: /usr/CvsRepository/Mail/IMAPClient/examples/imap_to_mbox.pl,v 19991216.7 2002/08/23 13:29:48 dkernen Exp $
 
 # TODO:
 # ----- 
@@ -118,8 +118,17 @@ sub write_folder {
 	print("\n");
 }
 
-# $Id: imap_to_mbox.pl,v 19991216.6 2000/12/11 21:58:52 dkernen Exp $ 
+# $Id: imap_to_mbox.pl,v 19991216.7 2002/08/23 13:29:48 dkernen Exp $ 
 # $Log: imap_to_mbox.pl,v $
+# Revision 19991216.7  2002/08/23 13:29:48  dkernen
+#
+# Modified Files: Changes IMAPClient.pm INSTALL MANIFEST Makefile Makefile.PL README Todo test.txt
+# Made changes to create version 2.1.6.
+# Modified Files:
+# imap_to_mbox.pl populate_mailbox.pl
+# Added Files:
+# cleanTest.pl migrate_mbox.pl
+#
 # Revision 19991216.6  2000/12/11 21:58:52  dkernen
 #
 # Modified Files:
