@@ -1,10 +1,16 @@
 Revision history for Perl extension IMAPClient.
 
+Changes in version 1.02
+-----------------------
+Fixed bugs in search and folders methods. 
+
+Fixed bug in new method that ignored Clear => 0 when specified as arguments to new.
+
 Changes in version 1.01
 -----------------------
 Fixed a bug in test.pl that caused tests to fail if the extended tests were not used.
 
-Added method 'parse_header' to parse the header fields of a message in the IMAP store into
+Added method 'parse_headers' to parse the header fields of a message in the IMAP store into
 a perl data structure.
 
 Changes in version 1.00

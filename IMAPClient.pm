@@ -1,7 +1,7 @@
 package Mail::IMAPClient;
 
-$Mail::IMAPClient::VERSION = '1.01';
-$Mail::IMAPClient::VERSION = '1.01';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '1.02';
+$Mail::IMAPClient::VERSION = '1.02';  	# do it twice to make sure it takes
 
 use Socket;
 use IO::Socket;
@@ -99,7 +99,7 @@ sub new {
 			$self->$k($v);
 		}
 	}	
-	$self->Clear(5) unless $self->Clear;
+	$self->Clear(5) unless exists $self->{Clear};
 	return $self->connect if $self->Server;
 	return $self;
 }
@@ -217,16 +217,16 @@ sub _imap_command {
 	}
 
 	my ($code, $output);	
+	$output = "";
 
-	$output = $self->_read_line;	
-	
 	until ( ($code) = $output =~ /^$count (NO|BAD|$good|OK)/) {
+
+		$output = $self->_read_line;	
 		$self->_record($count,$output);
 		if ($output =~ /^\*\s+BYE/) {
 			$self->State(Unconnected);
 			return undef ;
 		}
-		$output = $self->_read_line;	
 	}	
 	
 	return $code =~ /^OK|$good/ ? $self : undef ;
@@ -500,7 +500,7 @@ sub search {
 			
                chomp $r;
                $r =~ s/\r$//;
-               $r =~ s/^.*SEARCH\s+//;
+               $r =~ s/^\*\s+SEARCH\s+// or next;
                push @hits, grep(/\d/,(split(/\s+/,$r)));
 
 	}

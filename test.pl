@@ -91,6 +91,9 @@ BEGIN {
 			print "ok ",++$test,"\n";
 		} else {	
 			print "not ok ",++$test,"\n";
+			#print "Found ",scalar(@hits), " hits (",join(", ",@hits),")-- expected 1\n";
+			#print $imap->Report;
+			#exit;
 		}
 	};
 
@@ -136,11 +139,14 @@ eval { $imap = Mail::IMAPClient->new(
 		Port 	=> "$parms{port}"  || '143',
 		User 	=> "$parms{user}"  || scalar(getpwuid($<)),
 		Password=> "$parms{passed}"|| scalar(getpwuid($<)),
+		Clear   => 0,
 		Debug   => 0,
 ) } ;
 
-for my $test (@tests) { $test->(); }
+$imap->Clear(0);
 
+for my $test (@tests) { $test->(); }
+#print $imap->Report,"\n";
 
 sub testmsg {
 		my $m = qq{Date:  @{[$imap->Rfc822_date(time)]}
