@@ -8,7 +8,8 @@ has "Mail::IMAPClient" in the path, and 'make test' fails for
 the subcomponents of Mail::IMAPClient from that path; the test
 harness is unable to locate the ../lib/blib subdirectory and so
 cannot load the .pm file. If I install from a different directory 
-without "::"'s then everything tests okay.
+without "::"'s then everything tests okay. I do not see this with
+earlier versions of perl.
 
 A work around is to not install from a subdirectory with "::".
 

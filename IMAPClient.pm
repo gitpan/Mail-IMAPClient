@@ -1,9 +1,9 @@
 package Mail::IMAPClient;
 
-# $Id: IMAPClient.pm,v 20001010.14 2002/09/03 13:49:35 dkernen Exp $
+# $Id: IMAPClient.pm,v 20001010.15 2002/09/26 17:55:58 dkernen Exp $
 
-$Mail::IMAPClient::VERSION = '2.2.2';
-$Mail::IMAPClient::VERSION = '2.2.2';  	# do it twice to make sure it takes
+$Mail::IMAPClient::VERSION = '2.2.4';
+$Mail::IMAPClient::VERSION = '2.2.4';  	# do it twice to make sure it takes
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket();
@@ -25,12 +25,23 @@ Mail::IMAPClient - An IMAP Client API
 =cut
 
 use constant Unconnected => 0;
+
 use constant Connected         => 1;         	# connected; not logged in
+
 use constant Authenticated => 2;      		# logged in; no mailbox selected
+
 use constant Selected => 3;   		        # mailbox selected
+
 use constant INDEX => 0;              		# Array index for output line number
-use constant TYPE => 1;               		# Array index for output line type (OUTPUT,INPUT, or LITERAL)
+
+use constant TYPE => 1;               		# Array index for line type 
+						#    (either OUTPUT, INPUT, or LITERAL)
+
 use constant DATA => 2;                       	# Array index for output line data
+
+use constant NonFolderArg => 1;			# Value to pass to Massage to 
+						# indicate non-folder argument
+
 
 
 my %SEARCH_KEYS = map { ( $_ => 1 ) } qw/
@@ -155,7 +166,8 @@ return          sprintf(
 		) ;
 }
 
-# The following class method strips out <CR>'s so lines end with <LF> instead of <CR><LF>:
+# The following class method strips out <CR>'s so lines end with <LF> 
+#	instead of <CR><LF>:
 
 sub Strip_cr {
 	my $class = shift;
@@ -163,8 +175,11 @@ sub Strip_cr {
 		(my $string = $_[0]) =~ s/\x0d\x0a/\x0a/gm;
 		return $string;
 	}
-	return wantarray ?     	map { s/\x0d\x0a/\0a/gm ; $_ }  (ref($_[0]) ? @{$_[0]}  : @_)  : 
-				[ map { s/\x0d\x0a/\x0a/gm ; $_ } ref($_[0]) ? @{$_[0]} : @_ ] ;
+	return wantarray ?     	map { s/\x0d\x0a/\0a/gm ; $_ }  
+				(ref($_[0]) ? @{$_[0]}  : @_)  		: 
+				[ map { s/\x0d\x0a/\x0a/gm ; $_ } 
+				  ref($_[0]) ? @{$_[0]} : @_ 
+				] ;
 }
 
 # The following defines a special method to deal with the Clear parameter:
@@ -178,8 +193,8 @@ sub Clear {
 
 	my (@keys) = sort { $b <=> $a } keys %{$self->{"History"}}  ;
 
-	for ( my $i = $clear; $i < @keys ; $i++ ) { delete $self->{'History'}{$keys[$i]} }
-
+	for ( my $i = $clear; $i < @keys ; $i++ ) 
+		{ delete $self->{'History'}{$keys[$i]} }
 
 	return $oldclear;
 }
@@ -206,7 +221,7 @@ sub new {
 
 	$self->{Debug_fh} ||= \*STDERR;
  	$self->_debug("Using Mail::IMAPClient version $Mail::IMAPClient::VERSION " .
-		"and perl version " . ( defined $^V ? join(".",unpack("CCC",$^V)) : "") . 
+		"and perl version " . (defined $^V ? join(".",unpack("CCC",$^V)) : "") . 
 		" ($])\n") if $self->Debug;
 	$self->LastError(0);
 	$self->Maxtemperrors or $self->Maxtemperrors("unlimited") ;
@@ -235,7 +250,8 @@ sub connect {
 		
 		$self->LastError( "Unable to connect to $self->{Server}: $!\n");	
 		$@ 		= "Unable to connect to $self->{Server}: $!";	
-		carp 		  "Unable to connect to $self->{Server}: $!" unless defined wantarray;	
+		carp 		  "Unable to connect to $self->{Server}: $!" 
+				unless defined wantarray;	
 		return undef;
 	}
 	$self->Socket($sock);
@@ -250,7 +266,8 @@ sub connect {
 
                 $output = $self->_read_line or return undef;
                 for my $o (@$output) {
-			$self->_debug("Connect: Received this from readline: " . join("/",@$o) . "\n");
+			$self->_debug("Connect: Received this from readline: " . 
+					join("/",@$o) . "\n");
                         $self->_record($self->Count,$o);	# $o is a ref
                       next unless $o->[TYPE] eq "OUTPUT";
                       ($code) = $o->[DATA] =~ /^\*\s+(OK|BAD|NO)/i  ;
@@ -308,11 +325,12 @@ sub separator {
 	# The fact that the response might end with {123} doesn't really matter here:
 
 	unless (exists $self->{"$target${;}SEPARATOR"}) {
-		my $list = (grep(/^\*\s+LIST\s+/, $self->list(undef,$target) ))[0] || qq("/");
+		my $list = (grep(/^\*\s+LIST\s+/, $self->list(undef,$target) ))[0] || 
+				qq("/");
 		my $s = (split(/\s+/,$list))[3];
-		$self->{"$target${;}SEPARATOR"} = ( $s eq 'NIL' ? 'NIL' : substr($s, 1,length($s)-2) );
+		$self->{"$target${;}SEPARATOR"} = 
+				( $s eq 'NIL' ? 'NIL' : substr($s, 1,length($s)-2) );
 	}
-
 	return $self->{$target,'SEPARATOR'};
 }
 
@@ -343,8 +361,9 @@ sub list {
 	$target 	  = $self->Massage($target);
 	my $string 	=  qq(LIST "$reference" $target);
 	$self->_imap_command($string)  or return undef;
-	return wantarray ? 	$self->History($self->Count) 		: 
-                              [ map { $_->[DATA] } @{$self->{'History'}{$self->Count}} ]      ;
+	return wantarray ? 	
+			$self->History($self->Count) 				  : 
+                       	[ map { $_->[DATA] } @{$self->{'History'}{$self->Count}}] ;
 }
 
 sub lsub {
@@ -365,10 +384,12 @@ sub subscribed {
 
         my @folders ;  
 
-	my @list = $self->lsub(undef,( $what? "$what" . $self->separator($what) . "*" : undef ) );
+	my @list = $self->lsub(undef,( $what? "$what" . 
+		$self->separator($what) . "*" : undef ) );
 	push @list, $self->lsub(undef, $what) if $what and $self->exists($what) ;
 
-      # my @list = map { $self->_debug("Pushing $_->[${\(DATA)}] \n"); $_->[DATA] } @$output;
+      	# my @list = map { $self->_debug("Pushing $_->[${\(DATA)}] \n"); $_->[DATA] } 
+	#	@$output;
 
 	my $m;
 
@@ -423,7 +444,10 @@ sub setacl {
         $acl              =~ s/"/\\"/g;
         my $string      =  qq(SETACL $target "$user" "$acl");
         $self->_imap_command($string)  or return undef;
-        return wantarray?$self->History($self->Count):[map{$_->[DATA]}@{$self->{'History'}{$self->Count}}];
+        return wantarray			?
+		$self->History($self->Count)	:
+		[map{$_->[DATA]}@{$self->{'History'}{$self->Count}}]
+	;
 }
 
 
@@ -435,17 +459,20 @@ sub getacl {
         my $string      =  qq(GETACL $mtarget);
         $self->_imap_command($string)  or return undef;
 	my @history = $self->History($self->Count);
-	#$self->_debug("Getacl history: " . join("|",@history) . ">>>End of History<<<" ) ;
+	#$self->_debug("Getacl history: ".join("|",@history).">>>End of History<<<" ) ;
 	my $perm = ""; 
 	my $hash = {};
 	for ( my $x = 0; $x < scalar(@history) ; $x++ ) {
         	if ( $history[$x] =~ /^\* ACL/ ) {
 			
-			$perm = $history[$x] =~ /^\* ACL $/ ? $history[++$x].$history[++$x] : 
+			$perm = $history[$x]=~ /^\* ACL $/	? 
+				$history[++$x].$history[++$x] 	: 
 				$history[$x];		
+
 			$perm =~ s/\s?\x0d\x0a$//;
 			piece:  until ( $perm =~ /\Q$target\E"?$/ or !$perm) {
-				#$self->_debug(qq(Piece: permline=$perm and pattern = /\Q$target\E"? \$/));
+				#$self->_debug(qq(Piece: permline=$perm and " 
+				#	"pattern = /\Q$target\E"? \$/));
 				$perm =~ s/\s([^\s]+)\s?$// or last piece;
 				my($p) = $1;
 				$perm =~ s/\s([^\s]+)\s?$// or last piece;
@@ -510,17 +537,21 @@ sub message_string {
 	my $string = "";
 
 	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
-              $string .= $result->[DATA] if defined($result) and $self->_is_literal($result) ;
+              $string .= $result->[DATA] 
+		if defined($result) and $self->_is_literal($result) ;
 	}      
 	# BUG? should probably return undef if length != expected
 	if ( length($string) != $expected_size ) { 
-		carp "${self}::message_string: expected $expected_size bytes but received " . 
-		length($string) 
+		carp "${self}::message_string: " .
+			"expected $expected_size bytes but received " . 
+			length($string) 
 			if $self->Debug or $^W; 
 	}
-	if ( length($string) > $expected_size ) { $string = substr($string,0,$expected_size) }
+	if ( length($string) > $expected_size ) 
+	{ $string = substr($string,0,$expected_size) }
 	if ( length($string) < $expected_size ) {
-		$self->LastError("${self}::message_string: expected $expected_size bytes but received " . 
+		$self->LastError("${self}::message_string: expected ".
+			"$expected_size bytes but received " . 
 			length($string)."\n");
 		return undef;
 	}
@@ -547,7 +578,8 @@ sub bodypart_string {
 	my $string = "";
 
 	foreach my $result  (@{$self->{"History"}{$self->Transaction}}) { 
-              $string .= $result->[DATA] if defined($result) and $self->_is_literal($result) ;
+              $string .= $result->[DATA] 
+		if defined($result) and $self->_is_literal($result) ;
 	}      
 	return $string;
 }
@@ -704,7 +736,7 @@ sub migrate {
 		# If msg size is less than buffersize then do whole msg in one 
 		# transaction:
 		if ( $size <= $bufferSize ) {
-			my $new_mid = $peer->append($folder,$self->message_string($mid) ) ;
+			my $new_mid = $peer->append($peer->Massage($folder),$self->message_string($mid) ) ;
 		        $self->_debug("Copied message $mid in folder $folder to " . $peer->User .
 				    '@' . $peer->Server . ". New Message UID is $new_mid.\n" 
 		        ) if $self->Debug;
@@ -741,8 +773,8 @@ sub migrate {
 
 		# Now let's warn the peer that there's a message coming:
 
-		my $pstring = 	"$ptrans APPEND $folder " .  
-				"$flags $intDate {" . $size . "}"  ;
+		my $pstring = 	"$ptrans APPEND " . $self->Massage($folder) .  
+				" $flags $intDate {" . $size . "}"  ;
 
 		$peer->_debug("About to issue APPEND command to peer for msg $mid\n")
 			if $peer->Debug;
@@ -854,20 +886,77 @@ sub migrate {
 		#$self->_debug("migrateRead: chunk=$chunk readSoFar=$readSoFar " .
 		#	"Buffer=$fromBuffer<END_OF_BUFFER\n") if $self->Debug;
 
-		my $wroteSoFar = 0;
+		my $wroteSoFar 	= 0;
+		my $temperrs 	= 0;
+		my $optimize 	= 0;
+
 		until ( $wroteSoFar >= $chunk ) {
-			#$peer->_debug("Chunk $chunkCount: Next write will attempt to write " .
-			#	"this substring:\n" .
-			#	substr($fromBuffer,$wroteSoFar,$chunk-$wroteSoFar) .
-			#	"<END_OF_SUBSTRING>\n"
-			#);
-			$wroteSoFar += syswrite(
-					$toSock,
-					$fromBuffer,
-					$chunk - $wroteSoFar, 
-					$wroteSoFar )||0
-			until $wroteSoFar >= $readSoFar;
-			$peer->_debug("Chunk $chunkCount: Wrote $wroteSoFar bytes (out of $chunk)\n");
+		 #$peer->_debug("Chunk $chunkCount: Next write will attempt to write " .
+		 #	"this substring:\n" .
+		 #	substr($fromBuffer,$wroteSoFar,$chunk-$wroteSoFar) .
+		 #	"<END_OF_SUBSTRING>\n"
+		 #);
+
+		 until ( $wroteSoFar >= $readSoFar ) {
+
+		    my $ret = syswrite(
+				$toSock,
+				$fromBuffer,
+				$chunk - $wroteSoFar, 
+				$wroteSoFar )||0 ;
+
+		    $wroteSoFar += $ret;
+
+		    if ($! == &EAGAIN ) {
+			if ( 	$self->{Maxtemperrors} !~ /^unlimited/i
+			    	and $temperrs++ > ($self->{Maxtemperrors}||10) 
+			) {
+				$self->LastError("Persistent '${!}' errors\n");
+				$self->_debug("Persistent '${!}' errors\n");
+				return undef;
+			}
+			$optimize = 1;
+		    } else {
+			# avoid infinite loops on syswrite error
+			return undef unless(defined $ret);	 
+		    }
+		    # Optimization of wait time between syswrite calls
+		    # only runs if syscalls run too fast and fill the 
+		    # buffer causing "EAGAIN: Resource Temp. Unavail" errors. The
+		    # premise is that $maxwrite will be approx. the same as 
+		    # the smallest buffer between the sending and receiving side. 
+		    # Waiting time between syscalls should ideally be exactly as 
+		    # long as it takes the receiving side to empty that buffer, 
+		    # minus a little bit to prevent it from
+		    # emptying completely and wasting time in the select call.
+		    if ($optimize) {
+		    	$maxwrite = $ret if $maxwrite < $ret;
+		    	push( @last5writes, $ret );
+		    	shift( @last5writes ) if $#last5writes > 5;
+			    my $bufferavail = 0;
+			    $bufferavail += $_ for ( @last5writes );
+			    $bufferavail /= ($#last5writes||1);
+			    # Buffer is staying pretty full; 
+			    # we should increase the wait period
+			    # to reduce transmission overhead/number of packets sent
+			    if ( $bufferavail < .4 * $maxwrite ) {
+				$waittime *= 1.3;
+
+			    # Buffer is nearly or totally empty; 
+			    # we're wasting time in select
+			    # call that could be used to send data, 
+			    # so reduce the wait period
+			    } elsif ( $bufferavail > .9 * $maxwrite ) {
+				$waittime *= .5;
+			    }
+		    	CORE::select(undef, undef, undef, $waittime);
+		    }
+		    if ( defined($ret) ) {
+			$temperrs = 0  ;
+		    }
+		    $peer->_debug("Chunk $chunkCount: " +
+			"Wrote $wroteSoFar bytes (out of $chunk)\n");
+		   }
 		}
 		$position += $readSoFar ;
 		$leftSoFar -= $readSoFar;
@@ -877,9 +966,12 @@ sub migrate {
 		{
 		my $code = 0;
 		until ( $code)  {
+
 			# escape infinite loop if read_line never returns any data:
-			$self->_debug("Reading from source server; expecting ') OK' type response\n")
-				if $self->Debug;
+
+			$self->_debug("Reading from source server; expecting " .
+				"') OK' type response\n") if $self->Debug;
+
 			$output = $self->_read_line or return undef; 
 			for my $o (@$output) {
 
@@ -914,9 +1006,11 @@ sub migrate {
                 my $code = 0;
                 until ( $code)  {
                         # escape infinite loop if read_line never returns any data:
-			$peer->_debug("Reading from target: expecting new uid in response\n")
-				if $peer->Debug;
+			$peer->_debug("Reading from target: " .
+				"expecting new uid in response\n") if $peer->Debug;
+
                         $output = $peer->_read_line or next MIGMSG;
+
                         for my $o (@$output) {
 
                                 $peer->_record($ptrans,$o);      # $o is a ref
@@ -1054,6 +1148,53 @@ sub examine {
 	}
 }
 
+sub idle {
+	my $self = shift;
+	my $good = '+';
+	my $count = $self->Count +1;
+	return $self->_imap_command("IDLE",$good) ? $count : undef;
+}
+
+sub done {
+	my $self 	= shift;
+
+	my $count 	= shift||$self->Count;
+
+	my $clear = "";
+	$clear = $self->Clear;
+
+	$self->Clear($clear) 
+		if $self->Count >= $clear and $clear > 0;
+
+	my $string = "DONE\x0d\x0a";
+	$self->_record($count,[ $self->_next_index($count), "INPUT", "$string\x0d\x0a"] );
+
+	my $feedback = $self->_send_line("$string",1);
+
+	unless ($feedback) {
+		$self->LastError( "Error sending '$string' to IMAP: $!\n");
+		return undef;
+	}
+
+	my ($code, $output);	
+	$output = "";
+
+	until ( $code and $code =~ /(OK|BAD|NO)/m ) {
+
+		$output = $self->_read_line or return undef;	
+		for my $o (@$output) { 
+			$self->_record($count,$o);	# $o is a ref
+			next unless $self->_is_output($o);
+                      	($code) = $o->[DATA] =~ /^(?:$count) (OK|BAD|NO)/m  ;
+                      if ($o->[DATA] =~ /^\*\s+BYE/) {
+				$self->State(Unconnected);
+			}
+		}
+	}	
+	return $code =~ /^OK/ ? @{$self->Results} : undef ;
+
+}
+
 sub tag_and_run {
 	my $self = shift;
 	my $string = shift;
@@ -1074,7 +1215,7 @@ sub _imap_command {
 	my $string 	= shift 	or return undef;
 	my $good 	= shift 	|| 'GOOD';
 
-	$good = quotemeta($good);
+	my $qgood = quotemeta($good);
 
 	my $clear = "";
 	$clear = $self->Clear;
@@ -1108,7 +1249,12 @@ sub _imap_command {
 			$self->_record($count,$o);	# $o is a ref
                       # $self->_debug("Received from readline: ${\($o->[DATA])}<<END OF RESULT>>\n");
 			next unless $self->_is_output($o);
-                      ($code) = $o->[DATA] =~ /^$count (OK|BAD|NO|$good)/mi ;
+			if ( $good eq '+' ) {
+                      		$o->[DATA] =~ /^$count (OK|BAD|NO|$qgood)|^($qgood)/mi ;
+				$code = $1||$2 ;
+			} else {
+                      		($code) = $o->[DATA] =~ /^$count (OK|BAD|NO|$qgood)/mi ;
+			}
                       if ($o->[DATA] =~ /^\*\s+BYE/im) {
 				$self->State(Unconnected);
 				return undef ;
@@ -1117,7 +1263,7 @@ sub _imap_command {
 	}	
 	
 	# $self->_debug("Command $string: returned $code\n");
-	return $code =~ /^OK|$good/im ? $self : undef ;
+	return $code =~ /^OK|$qgood/im ? $self : undef ;
 
 }
 
@@ -1130,10 +1276,9 @@ sub run {
 
 	unless ($tag) {
 		$self->LastError("Invalid string passed to run method; no tag found.\n");
-		return undef;
 	}
 
-	$good = quotemeta($good);
+	my $qgood = quotemeta($good);
 
 	my $clear = "";
 	$clear = $self->Clear;
@@ -1143,7 +1288,7 @@ sub run {
 
 	$self->_record($count,[ $self->_next_index($count), "INPUT", "$string\x0d\x0a"] );
 
-	my $feedback = $self->_send_line("$string");
+	my $feedback = $self->_send_line("$string",1);
 
 	unless ($feedback) {
 		$self->LastError( "Error sending '$string' to IMAP: $!\n");
@@ -1153,20 +1298,26 @@ sub run {
 	my ($code, $output);	
 	$output = "";
 
-	until ( ($code) = $output =~ /^$tag (OK|BAD|NO|$good)/m ) {
+	until ( $code =~ /(OK|BAD|NO|$qgood)/m ) {
 
 		$output = $self->_read_line or return undef;	
 		for my $o (@$output) { 
 			$self->_record($count,$o);	# $o is a ref
 			next unless $self->_is_output($o);
-                      ($code) = $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$good)/m  ;
+			if ( $good eq '+' ) {
+			   $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$qgood)|(^$qgood)/m  ;
+			   $code = $1||$2;
+			} else {
+                      		($code) = 
+				   $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$qgood)/m  ;
+			}
                       if ($o->[DATA] =~ /^\*\s+BYE/) {
 				$self->State(Unconnected);
 			}
 		}
 	}	
 	$self->{'History'}{$tag} = $self->{"History"}{$count} unless $tag eq $count;
-	return $code =~ /^OK|$good/ ? @{$self->Results} : undef ;
+	return $code =~ /^OK|$qgood/ ? @{$self->Results} : undef ;
 
 }
 #sub bodystruct {	# return bodystruct 
@@ -1200,9 +1351,12 @@ sub _record {
 #_send_line writes to the socket:
 sub _send_line {
 	my($self,$string,$suppress) = (shift, shift, shift);
+
 	#$self->_debug("_send_line: Connection state = " . 
-	#		$self->State . " and socket fh = " . ($self->Socket||"undef") . "\n")
+	#		$self->State . " and socket fh = " . 
+	#		($self->Socket||"undef") . "\n")
 	#if $self->Debug;
+
 	unless ($self->IsConnected and $self->Socket) {
 		$self->LastError("NO Not connected.\n");
 		carp "Not connected" if $^W;
@@ -1216,22 +1370,38 @@ sub _send_line {
 		$string .= "\x0a" ;
 	}
 	if ( 
-		$string =~ /^[^\x0a{]*\{(\d+)\}\x0d\x0a/ 	# ;-}
+		$string =~ /^[^\x0a{]*\{(\d+)\}\x0d\x0a/ 	   # ;-}
 	) 	{
 		my($p1,$p2,$len) ;
-		if ( ($p1,$len)   = $string =~ /^([^\x0a{]*\{(\d+)\}\x0d\x0a)/ 		# } for vi
+		if ( ($p1,$len)   = 
+			$string =~ /^([^\x0a{]*\{(\d+)\}\x0d\x0a)/ # } for vi
 			and  (
 				$len < 32766 ? 
-				( ($p2) = $string =~ /^[^\x0a{]*\{\d+\}\x0d\x0a(.{$len}.*\x0d\x0a)/  ) :	
-				( ($p2) = $string =~ /^[^\x0a{]*\{\d+\}\x0d\x0a(.*\x0d\x0a)/ and length($p2) == $len  )
-				# }} for vi
-			)
+				( ($p2) = $string =~ /
+					^[^\x0a{]*
+					\{\d+\}
+					\x0d\x0a
+					(
+						.{$len}
+						.*\x0d\x0a
+					)
+				/x ) :
+
+				( ($p2) = $string =~ /	^[^\x0a{]*
+							\{\d+\}
+							\x0d\x0a
+							(.*\x0d\x0a)
+						    /x 	
+				   and length($p2) == $len  ) # }} for vi
+		     )
 		) {
-			$self->_debug("Sending literal string in two parts: $p1\n\tthen: $p2\n");
+			$self->_debug("Sending literal string " .
+				"in two parts: $p1\n\tthen: $p2\n");
 			$self->_send_line($p1) or return undef;
 			$output = $self->_read_line or return undef;
 			foreach my $o (@$output) {
-				$self->_record($self->Count,$o);              # $o is already an array ref
+				# $o is already an array ref:
+				$self->_record($self->Count,$o);              
                               ($code) = $o->[DATA] =~ /(^\+|NO|BAD)/i;
                               if ($o->[DATA] =~ /^\*\s+BYE/) {
 					$self->State(Unconnected);
@@ -1242,20 +1412,27 @@ sub _send_line {
 					return undef;
 				}
 			}
-			if ( $code eq '+' ) { $string = $p2; } else { return undef ; }
+			if ( $code eq '+' ) 	{ $string = $p2; } 
+			else 			{ return undef ; }
 		}
 		
 	}
 	if ($self->Debug) {
 		my $dstring = $string;
 		if ( $dstring =~ m[\d+\s+Login\s+]i) {
-			$dstring =~ 	s	(\b(?:\Q$self->{Password}\E|\Q$self->{User}\E)\b)
-						('X' x length($self->{Password}))eg;
+			$dstring =~ 
+			  s(\b(?:\Q$self->{Password}\E|\Q$self->{User}\E)\b)
+			('X' x length($self->{Password}))eg;
 		}
 		_debug $self, "Sending: $dstring\n" if $self->Debug;
 	}
 	my $total = 0;
 	my $temperrs = 0;
+	my $optimize = 0;
+     	my $maxwrite = 0;
+     	my $waittime = .02;
+     	my @last5writes = (1);
+
 	until ($total >= length($string)) {
 		my $ret =	syswrite(	
 					$self->Socket, 
@@ -1264,19 +1441,50 @@ sub _send_line {
 					$total
 					);
 		if ($! == &EAGAIN ) {
-			if ( 	$self->{Maxtemperrors} !~ /^unlimited/i 	and
-				$temperrs++ > ( $self->{Maxtemperrors}||10) 
+			if ( 	$self->{Maxtemperrors} !~ /^unlimited/i
+			    	and $temperrs++ > ($self->{Maxtemperrors}||10) 
 			) {
 				$self->LastError("Persistent '${!}' errors\n");
 				$self->_debug("Persistent '${!}' errors\n");
 				return undef;
 			}
-			CORE::select(undef, undef, undef, .25 * $temperrs);
+			$optimize = 1;
 		} else {
 			# avoid infinite loops on syswrite error
 			return undef unless(defined $ret);	 
 		}
-		
+		# Optimization of wait time between syswrite calls
+		# only runs if syscalls run too fast and fill the 
+		# buffer causing "EAGAIN: Resource Temp. Unavail" errors. The
+		# premise is that $maxwrite will be approx. the same as 
+		# the smallest buffer between the sending and receiving side. 
+		# Waiting time between syscalls should ideally be exactly as 
+		# long as it takes the receiving side to empty that buffer, 
+		# minus a little bit to prevent it from
+		# emptying completely and wasting time in the select call.
+		if ($optimize) {
+		    $maxwrite = $ret if $maxwrite < $ret;
+		    push( @last5writes, $ret );
+		    shift( @last5writes ) if $#last5writes > 5;
+		    my $bufferavail = 0;
+		    $bufferavail += $_ for ( @last5writes );
+		    $bufferavail /= $#last5writes;
+		    # Buffer is staying pretty full; 
+		    # we should increase the wait period
+		    # to reduce transmission overhead/number of packets sent
+		    if ( $bufferavail < .4 * $maxwrite ) {
+			$waittime *= 1.3;
+
+		    # Buffer is nearly or totally empty; 
+		    # we're wasting time in select
+		    # call that could be used to send data, 
+		    # so reduce the wait period
+		    } elsif ( $bufferavail > .9 * $maxwrite ) {
+			$waittime *= .5;
+		    }
+		    $self->_debug("Output buffer full; waiting $waittime seconds for relief\n");
+		    CORE::select(undef, undef, undef, $waittime);
+		}
 		if ( defined($ret) ) {
 			$temperrs = 0  ;
 			$total += $ret ;
@@ -1555,17 +1763,24 @@ sub _read_line {
 							undef, 
 							$errors = $rvec, 
 							$timeout) 
-				) {	# Select failed; that means bad news. Better tell someone.
+				) {	
+					# Select failed; that means bad news. 
+					# Better tell someone.
 					$self->LastError("Tag " . $transno . 
-						": Timeout waiting for literal data from server\n");	
-					carp "Timeout waiting for literal data from server" 
+						": Timeout waiting for literal data " .
+						"from server\n");	
+					carp "Tag " . $transno . 
+						": Timeout waiting for literal data " .
+						"from server\n"
 						if $self->Debug or $^W;	
 					return undef;
 				}	
 			} 
 			
-			fcntl($sh, F_SETFL, $self->{_fcntl}) if $fast_io and defined($self->{_fcntl});
-			while ( $remainder_count > 0 ) {	   # As long literal not done,
+			fcntl($sh, F_SETFL, $self->{_fcntl}) 
+				if $fast_io and defined($self->{_fcntl});
+			while ( $remainder_count > 0 ) {	   # As long as not done,
+
 				my $ret	= sysread(	   	   # bytes read
 						$sh, 		   # IMAP handle 
 						$litstring,	   # place to read into
@@ -1574,24 +1789,28 @@ sub _read_line {
 				) ;
 				if ( $timeout and !defined($ret)) { # possible timeout
 					$self->_record($transno, [ 
-							$self->_next_index($transno),
-							"ERROR",
-							"$transno * NO Error reading data from server: $!\n"	
+						$self->_next_index($transno),
+						"ERROR",
+						"$transno * NO Error reading data " .
+						"from server: $!\n"
 						]
 					);
 					return undef;
 				} elsif ( $ret == 0 and eof($sh) ) {
 					$self->_record($transno, [ 
-							$self->_next_index($transno),
-							"ERROR",
-							"$transno * ".
-							"BYE Server unexpectedly closed connection: $!\n"	
+						$self->_next_index($transno),
+						"ERROR",
+						"$transno * ".
+						"BYE Server unexpectedly " .
+						"closed connection: $!\n"	
 						]
 					);
 					$self->State(Unconnected);
 					return undef;
 				}
-				$remainder_count -= $ret;	   # decrement remaining bytes by amt read
+				# decrement remaining bytes by amt read:
+				$remainder_count -= $ret;	   
+
 				if ( defined($literal_callback) ) {
 					if ( $literal_callback =~ /GLOB/ ) {
 						print $literal_callback $litstring;
@@ -1691,9 +1910,9 @@ sub Escaped_results {
       			push @a, $line->[DATA] ;
 		}
 	}
-	shift @a;	# $a[0] is the ALWAYS the command ; I make sure of that in _imap_command
+	# $a[0] is the ALWAYS the command ; I make sure of that in _imap_command
+	shift @a;	
 	return wantarray ? @a : \@a ;
-
 }
 
 sub Unescape {
@@ -1815,7 +2034,68 @@ sub fetch {
                               [ map { $_->[DATA] } @{$self->{'History'}{$self->Count}} ];
 
 }
-	
+
+
+sub fetch_hash {
+	my $self = shift;
+	my $hash = ref($_[-1]) ? pop @_ : {};
+	my @words = @_;
+	for (@words) { 
+		s/([\( ])FAST([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE$2/i  ;
+		s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i  ;
+	}
+	my $msgref = scalar($self->messages);
+	my $output = scalar($self->fetch($msgref,"(" . join(" ",@_) . ")")) 
+	; #	unless grep(/\b(?:FAST|FULL)\b/i,@words);
+	my $x;
+	for ($x = 0;  $x <= $#$output ; $x++) {
+		my $entry = {};
+		my $l = $output->[$x];
+		if ($self->Uid) {	
+			my($uid) = $l =~ /\((?:.* )?UID (\d+).*\)/i;
+			next unless $uid;
+			if ( exists $hash->{$uid} ) {
+				$entry = $hash->{$uid} ;
+			} else {
+				$hash->{$uid} ||= $entry;
+			}
+		} else {
+			my($mid) = $l =~ /^\* (\d+) FETCH/i;
+			next unless $mid;
+			if ( exists $hash->{$mid} ) {
+				$entry = $hash->{$mid} ;
+			} else {
+				$hash->{$mid} ||= $entry;
+			}
+		}
+			
+		foreach my $w (@words) {
+		   if ( $l =~ /\Q$w\E\s*$/i ) {
+			$entry->{$w} = $output->[$x+1];
+			$entry->{$w} =~ s/(?:\x0a?\x0d)+$//g;
+			chomp $entry->{$w};
+		   } else {
+			$l =~ /\( 	    # open paren followed by ... 
+				(?:.*\s)?   # ...optional stuff and a space
+				\Q$w\E\s    # escaped fetch field<sp>
+				(?:"	    # then: a dbl-quote
+				  (\\.|   # then bslashed anychar(s) or ...
+				   [^"]+)   # ... nonquote char(s)
+				"|	    # then closing quote; or ...
+				\(	    # ...an open paren
+				  (\\.|     # then bslashed anychar or ...
+				   [^\)]+)  # ... non-close-paren char
+				\)|	    # then closing paren; or ...
+				(\S+))	    # unquoted string
+				(?:\s.*)?   # possibly followed by space-stuff
+				\)	    # close paren
+			/xi;
+			$entry->{$w}=defined($1)?$1:defined($2)?$2:$3;
+		   }
+		}
+	}
+	return wantarray ? %$hash : $hash;
+}
 sub AUTOLOAD {
 
 	my $self = shift;
@@ -2100,105 +2380,12 @@ sub parse_headers {
 	}
 }
 
-sub parse_headers2 {
-	my($self,$msgspec,@fields) = @_;
-	my(%fieldmap) = map { ( lc($_),$_ )  } @fields;
-	my $msg; my $string; my $field;
-
-	# Make $msg a comma separated list, of messages we want
-        if (ref($msgspec) eq 'ARRAY') {
-		$msg = join(',', @$msgspec);
-	} else {
-		$msg = $msgspec;
-	}
-
-	if ($fields[0] 	=~ 	/^[Aa][Ll]{2}$/ 	) { 
-
-		$string = 	"$msg body" . 
-		# use ".peek" if Peek parameter is a) defined and true, 
-		# 	or b) undefined, but not if it's defined and untrue:
-
-		( 	defined($self->Peek) 		? 
-			( $self->Peek ? ".peek" : "" ) 	: 
-			".peek" 
-		) .  "[header]" 			; 
-
-	} else {
-		$string	= 	"$msg body" .
-		# use ".peek" if Peek parameter is a) defined and true, or 
-		# b) undefined, but not if it's defined and untrue:
-
-		( defined($self->Peek) 			? 
-			( $self->Peek ? ".peek" : "" ) 	: 
-			".peek" 
-		) .  "[header.fields ("	. join(" ",@fields) 	. ')]' ;
-	}
-
-	my @raw=$self->fetch(	$string	) or return undef;
-
-	my $headers = {};	# hash from message ids to header hash
-	my $h = 0;		# reference to hash of current msgid, or 0 between msgs
-	
-       	for my $header (map { split(/(?:\x0d\x0a)/,$_) } @raw) {
-		local($^W) = undef;
-		my $pattern = $self->Uid ? 	'UID\\s+(\\d+)' : '^\\*\\s(\\d+)' ;
-               	if (	my($msgid) = $header =~ /$pattern/ 
-			and $header =~ /BODY\[HEADER(?:\]|\.FIELDS)/i
-		) {	  
-			# start of new message header:
-			$h = {};		  # new hash for headers for this mail
-			$headers->{$msgid} = $h;  # store in results, against this message
-		}
-
-                next if $header =~ /^\s+$/;
-
-                # ( for vi
-		if ($header =~ /^\)/) {		  # end of this message
-			$h = 0;			  # set to be between messages
-			next;
-		}
-
-		if ($h != 0) {			  # do we expect this to be a header?
-               		my $hdr = $header;
-               		chomp $hdr;
-               		$hdr =~ s/\r$//;   
-               		if ($hdr =~ s/^(\S+): //) { 
-                       		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
-                       		push @{$h->{$field}} , $hdr ;
-               		} elsif ($hdr =~ s/^.*FETCH\s\(.*BODY\[HEADER\.FIELDS.*\)\]\s(\S+): //) { 
-                       		$field = exists $fieldmap{lc($1)} ? $fieldmap{lc($1)} : $1 ;
-                       		push @{$h->{$field}} , $hdr ;
-               		} elsif ( ref($h->{$field}) eq 'ARRAY') {
-			        
-					$hdr =~ s/^\s+/ /;
-                       			$h->{$field}[-1] .= $hdr ;
-               		}
-		}
-	}
-	my $candump = 0;
-	if ($self->Debug) {
-		eval {
-			require Data::Dumper;
-			Data::Dumper->import;
-		};
-		$candump++ unless $@;
-	}
-	# if we asked for one message, just return its hash,
-	# otherwise, return hash of numbers => header hash
-	if (ref($msgspec) eq 'ARRAY') {
-		#_debug $self,"Structure from parse_headers:\n", 
-		#	Dumper($headers) 
-		#	if $self->Debug;
-		return $headers;
-	} else {
-		#_debug $self, "Structure from parse_headers:\n", 
-		#	Dumper($headers->{$msgspec}) 
-		#	if $self->Debug;
-		return $headers->{$msgspec};
-	}
+sub rfc822_header {
+	my($self , $msg, $header ) = @_;
+	my $val = 0;
+	eval { $val = $_[0]->parse_headers($_[1],$_[2])->[0] };
+	return defined($val)? $val : undef;
 }
-
-
 
 sub recent_count {
 	my ($self, $folder) = (shift, shift);
@@ -2536,6 +2723,7 @@ sub namespace {
 			$self->LastError("$error\n") ;
 			$@ = $error;
 			carp "$@" if $^W;
+			return undef;
 	}
 	my $namespace = (map({ /^\* NAMESPACE (.*)/ ? $1 : () } @{$self->_imap_command("NAMESPACE")->Results}))[0] ;
 	$namespace =~ s/\x0d?\x0a$//;
@@ -3168,6 +3356,10 @@ sub quota_usage 	{
 	return (	map { s/.*STORAGE\s+(\d+)\s+\d+.*\n$/$1/ ? $_ : () } $self->Results
 	)[0] ;
 }
+sub Quote {
+	my($class,$arg) = @_;
+	return $class->Massage($arg,NonFolderArg);
+}
 
 sub Massage {
 	my $self= shift;
@@ -3180,7 +3372,7 @@ sub Massage {
 
 	if ($arg =~ /["\\]/) {
 		$arg = "{" . length($arg) . "}\x0d\x0a$arg" ;
-	} elsif ($arg =~ /\s|[()]/) {
+	} elsif ($arg =~ /\s|[{}()]/) {
 		$arg = qq("${arg}") unless $arg =~ /^"/;
 	} 
 
@@ -3454,6 +3646,67 @@ Example:
 
 returns a value equal to the numerical value associated with an object
 in the B<Selected> state.
+
+<NOTE:> For a more programmer-friendly idiom, see the L<IsUnconnected>,
+L<IsConnected>, L<IsAuthenticated>, and L<IsSelected> object methods. You 
+will usually want to use those methods instead of one of the above.
+
+=head2 Quote
+
+Example:
+
+	$imap->search(HEADER => 'Message-id' => $imap->Quote($msg_id));
+
+The B<Quote> method accepts a value as an argument.  It returns its argument as a 
+correctly quoted string or a literal string.
+
+Note that you should not use this on folder names, since methods that accept
+folder names as an argument will quote the folder name arguments appropriately
+for you. (Exceptions to this rule are methods that come with IMAP extensions 
+that are not explicitely supported by this documentation.)
+
+If you are getting unexpected results when running methods with values that 
+have (or might have) embedded spaces, double quotes, braces, or parentheses, 
+then you may wish to call B<Quote> to quote these values. You should B<not> 
+use this method with foldernames or with arguments that are wrapped in quotes 
+or parens because the RFC2060 spec requires the quotes or parentheses. 
+
+Of course, the fact that sometimes these characters are sometimes required 
+delimiters is precisely the reason you must quote them when they are I<not> 
+delimiting. For example:
+
+
+	$imap->Search('SUBJECT',"(no subject)");
+	# WRONG! Sends this to imap server: 
+	#<TAG> Search SUBJECT (no subject)\r\n
+	
+	$imap->Search('SUBJECT',$imap->Quote("(no subject)"));
+	# Correct! Sends this to imap server: 
+	#<TAG> Search SUBJECT "(no subject)"\r\n
+	
+
+On the other hand:
+
+	$imap->store('+FLAGS',$imap->Quote("(\Deleted)"));
+	# WRONG! Sends this to imap server: 
+	#<TAG> [UID] STORE +FLAGS "(\Deleted)"\r\n
+	
+	
+	$imap->store($imap->Quota('+FLAGS'),"(\Deleted)");
+	# CORRECT! Sends this to imap server: 
+	#<TAG> [UID] STORE +FLAGS (\Deleted)\r\n
+
+In the above, I had to abandon the many methods available to B<Mail::IMAPClient>
+programmers (such as L<delete_message> and all-lowercase L<search>) for the sake
+of coming up with an example. However, there are times when unexpected values in
+certain places will for you to B<Quote>. An example is RFC822 Message-id's, which 
+usually don't contain quotes or parens. Usually you won't worry about it, until 
+suddenly searches for certain message-id's fail for no apparent reason. (A failed 
+search is not simply a search that returns no hits; it's a search that flat out 
+didn't happen.) This normally happens to me at about 5:00 pm on a day when I 
+was hoping to leave on time. 
+
+=head2 message_count
 
 =head2 Strip_cr
 
@@ -4006,6 +4259,32 @@ for L<logout>.)
 
 =cut
 
+=head2 done
+
+Example:
+	
+	my $idle = $imap->idle or warn "Couldn't idle: $@\n";
+	&goDoOtherThings;
+	$imap->done($idle) or warn "Error from done: $@\n";
+
+The B<done> method tells the IMAP server that the connection is finished
+idling. See L<idle> for more information. It accepts one argument, 
+which is the transaction number you received from the previous call
+to L<idle>.
+
+If you pass the wrong transaction number to B<done> then your perl program
+will probably hang. If you don't pass any transaction number to B<done>
+then it will try to guess, and if it guesses wrong it will hang.
+
+If you call done without previously having called L<idle> then your 
+server will mysteriously respond with I<* BAD Invalid tag>.
+
+If you try to run any other mailbox method after calling L<idle> but
+before calling L<done>, then that method will not only fail but also
+take you out of the IDLE state. This means that when you eventually
+remember to call B<done> you will just get that I<* BAD Invalid tag>
+thing again.
+
 =head2 examine
 
 Example:
@@ -4089,6 +4368,83 @@ If B<fetch> is called in a scalar context, then a reference to an array
 
 B<fetch> returns C<undef> on failure. Inspect L<LastError> or C<$@> for
 an explanation of your error.
+
+=cut
+
+=head2 fetch_hash
+
+Example:
+	my $hashref = {} ;
+	$imap->fetch_hash("RFC822.SIZE",$hashref) ;
+	print "Msg #$m is $hashref->{$m} bytes\n" foreach my $m (keys %$hashref);
+
+The B<fetch_hash> method accepts a list of message attributes to be fetched 
+(as described in RFC2060). It returns a hash whose keys are all the messages 
+in the currently selected folder and whose values are key-value pairs of fetch 
+keywords and the message's value for that keyword (see sample output below).
+
+If B<fetch_hash> is called in scalar context, it returns a reference to the hash
+instead of the hash itself. If the last argument is a hash reference, then that 
+hash reference will be used as the place where results are stored (and that 
+reference will be returned upon successful completion). If the last argument is 
+not a reference then it will be treated as one of the FETCH attributes and a new 
+hash will be created and returned (either by value or by reference, depending on 
+the context in which B<fetch_hash> was called).
+
+For example, if you have a folder with 3 messages and want the size and internal 
+date for each of them, you could do the following:
+
+	use Mail::IMAPClient;
+	use Data::Dumper;
+	# ...	other code goes here
+	$imap->select($folder);
+	my $hash = $imap->fetch_hash("RFC822.SIZE","INTERNALDATE");
+	# (Same as:
+	#  my $hash = $imap->fetch_hash("RFC822.SIZE");
+	#  $imap->fetch_hash("INTERNALDATE",$hash);
+	# ).
+	print Data::Dumper->Dumpxs([$hash],['$hash']);
+
+This would result in L<Data::Dumper> output similar to the following:
+
+   $hash = {
+	'1' => {
+                          'INTERNALDATE' => '21-Sep-2002 18:21:56 +0000',
+                          'RFC822.SIZE' => '1586',
+               },
+	'2' => {
+                          'INTERNALDATE' => '22-Sep-2002 11:29:42 +0000',
+                          'RFC822.SIZE' => '1945',
+               },
+	'3' => {
+                          'INTERNALDATE' => '23-Sep-2002 09:16:51 +0000',
+                          'RFC822.SIZE' => '134314',
+	       }
+     };
+
+You can specify I<BODY[HEADER.FIELDS ($fieldlist)> as an argument, but you
+should keep the following in mind if you do:
+
+B<1.>	You can only specify one argument of this type per call. If you need
+multiple fields, then you'll have to call B<fetch_hashref> multiple times, 
+each time specifying a different FETCH attribute but the same.  
+
+B<2.>	Fetch operations that return RFC822 message headers return the whole
+header line, including the field name and the colon. For example, if you
+do a C<$imap-E<gt>fetch_hash("BODY[HEADER.FIELDS (Subject)]")>, you will
+get back subject lines that start with "Subject: ".
+
+By itself this method may be useful for, say, speeding up programs that 
+want the size of every message in a folder. It issues one command and 
+receives one (possibly long!) response from the server. However, it's true
+power lies in the as-yet-unwritten methods that will rely on this method
+to deliver even more powerful result hashes (and which may even remove the
+restrictions mentioned in B<1> and B<2>, above). Look for more new function
+in later releases.
+
+This method is new with version 2.2.3 and is thus still experimental. If you
+decide to try this method and run into problems, please see the section on
+L<REPORTING BUGS>.
 
 =cut
 
@@ -4181,6 +4537,40 @@ Example:
 Returns true if the IMAP server to which the B<IMAPClient> object is
 connected has the capability specified as an argument to
 B<has_capability>.
+
+=head2 idle
+
+Example:
+	
+	my $idle = $imap->idle or warn "Couldn't idle: $@\n";
+	&goDoOtherThings;
+	$imap->done($idle) or warn "Error from done: $@\n";
+
+The B<idle> method places the IMAP connection in an IDLE state. Your
+server must support the IMAP IDLE extension to use this method. (See
+RFC2177 for a discussion of the IDLE IMAP extension.) The B<idle> method
+accepts no arguments and returns a transaction number. This transaction 
+number must be supplied as the argument for L<done> when the L<done>
+method is later called.
+
+Use the L<done> method to tell the IMAP server that the connection is 
+finished idling. 
+
+If you attempt to use the B<idle> method against a server that does not
+have the IDLE capability then the B<idle> method will return C<undef>.
+If you then attempt to use the B<idle> method a second time the B<idle> 
+method will return C<undef> again.
+
+If you successfully run the B<idle> method, then you must use the L<done>
+method to stop idling (or to continue, in the parlance of RFC2177). 
+Failure to do so will only encourage your server to call you I<BAD> 
+and to rant about a I<Bogus IDLE continuation>.
+
+If you try to run any other mailbox method after calling L<idle> but
+before calling L<done>, then that method will not only fail but also
+take you out of the IDLE state. This means that when you eventually
+remember to call B<done> you will just get an I<* BAD Invalid tag>
+message.
 
 =head2 imap4rev1
 
@@ -4386,6 +4776,25 @@ Note that specifying C<$imap-E<gt>see(@msgs)> is just a shortcut for
 specifying C<$imap-E<gt>set_flag("Flagged",@msgs)>. 
 
 =cut
+
+=head2 Massage
+
+Example:
+
+	$imap->search(HEADER => 'Message-id' => $imap->Massage($msg_id,1));
+
+The B<Massage> method accepts a value as an argument and, optionally, a second 
+value that, when true, indicates that the first argument is not the name of an 
+existing folder.
+
+It returns its argument as a correctly quoted string or a literal string.
+
+Note that you should rarely use this on folder names, since methods that accept
+folder names as an argument will call B<Massage> for you. In fact, it was originally 
+developed as an undocumented helper method meant for internal Mail::IMAPClient methods 
+only. 
+
+You may also want to see the L<Quote> method, which is related to this method.
 
 =head2 message_count
 
@@ -4950,7 +5359,8 @@ options and possible arguments. I'm not going to repeat them here.
 
 Remember that if your argument needs quotes around it then you must
 make sure that the quotes will be preserved when passing the argument.
-I.e. use C<qq/"$arg"/> instead of C<"$arg">.
+I.e. use C<qq/"$arg"/> instead of C<"$arg">. When in doubt, use the
+L<Quote> method.
 
 The B<search> method returns an array containing sequence numbers of
 messages that passed the SEARCH IMAP client command's search criteria.
@@ -5528,8 +5938,9 @@ whose name is in C<$folder>
 
 Subscribe to a folder
 
-B<CAUTION:> Once again, remember to quote your quotes if you want
-quotes to be part of the IMAP command string. 
+B<CAUTION:> Once again, remember to quote your quotes (or use the
+L<Quote> method) if you want quotes to be part of the IMAP command 
+string. 
 
 You can also use the default method to override the behavior of
 implemented IMAP methods by changing the case of the method name,
@@ -6026,7 +6437,6 @@ parameter's eponymous object method.
 
 =head1 Status Methods
 
-
 There are several object methods that return the status of the object.
 They can be used at any time to check the status of an B<IMAPClient>
 object, but are particularly useful for determining the cause of
@@ -6294,15 +6704,16 @@ under the terms of either:
 
 =item a) the "Artistic License" which comes with this Kit, or
 
-=item b) the GNU General Public License as published by the Free Software Foundation; either 
-version 1, or (at your option) any later version.
+=item b) the GNU General Public License as published by the Free Software 
+Foundation; either version 1, or (at your option) any later version.
 
 =back
 
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See either the GNU
-General Public License or the Artistic License for more details.
+General Public License or the Artistic License for more details. All your
+base are belong to us.
 
 =cut
 

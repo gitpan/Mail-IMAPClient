@@ -25,6 +25,7 @@ examples/imap_to_mbox.pl
 examples/migrate_mbox.pl
 examples/migrate_mail2.pl
 examples/populate_mailbox.pl
+examples/sharedFolder.pl
 test_template.txt
 sample.perldb
 docs/rfc1731.txt

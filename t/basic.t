@@ -1,6 +1,6 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
-# $Id: basic.t,v 19991216.22 2002/08/30 20:48:52 dkernen Exp $
+# $Id: basic.t,v 19991216.23 2002/09/26 17:56:58 dkernen Exp $
 ######################### We start with some black magic to print on failure.
 
 # Change 1..1 below to 1..last_test_to_print .
@@ -16,8 +16,8 @@ my %parms;
 my $imap;
 my @tests;
 my $uid;
-my $fast||=0;
-my $uidplus||=0;
+$fast||=0;
+$uidplus||=0;
 use vars qw/*TMP/;
 
 BEGIN {
@@ -503,11 +503,27 @@ BEGIN {
 	};	# end of the anonysub and push	
 	} # end of migrate method tests' scope
 
-	push @tests, sub {	# 44
+	push @tests, sub { 	# 44
+		if ( $imap->has_capability("IDLE") ) {
+		   eval {
+			my $idle = $imap->idle;
+			sleep 1;
+			$imap->done($idle);
+		   } ;
+		   if ($@) {
+			print "not ok ",++$test,"\n$@\n";
+		   } else {
+			print "ok ",++$test,"\n";	#44
+		   }
+		} else {
+			print "ok (skipped)",++$test,"\n";
+		}
+	};
+	push @tests, sub {	# 45
 		$imap->select('inbox');
 		if ( $imap->rename($target,"${target}NEW") ) {
 
-			print "ok ",++$test,"\n"; #44
+			print "ok ",++$test,"\n"; #45
 			$imap->close;
 			$imap->select("${target}NEW") ;
 			$imap->delete_message(@{$imap->messages}) if $imap->message_count;
@@ -518,13 +534,13 @@ BEGIN {
 
 			print "not ok ",++$test,"\n";
 			print STDERR "\nTest $test failed:\n$@\n";
-			$imap->delete_message(@{$imap->messages}) if $imap->message_count;
+			$imap->delete_message(@{$imap->messages}) 
+				if $imap->message_count;
 			$imap->close;
 			$imap->delete("$target") ;
 		}
-	}, 
-		# sub { "commented out #45" } ,
-	; 	
+	} ;
+		#push @tests,  sub { "commented out #46" } ; 	
 
 
 	open TST,"./test.txt" ;
@@ -569,7 +585,7 @@ exit unless		%parms
 	and 	length 	$parms{server}
 	and 	length 	$parms{user}
 	and 	length 	$parms{passed} ;
-
+print "Uid=$uidplus and Fast = $fast\n";
 eval { $imap = Mail::IMAPClient->new( 
 		Server 	=> "$parms{server}"||"localhost",
 		Port 	=> "$parms{port}"  || '143',
@@ -586,7 +602,7 @@ eval { $imap = Mail::IMAPClient->new(
 	and exit
 } ;
 
-
+$imap->Debug_fh and $imap->Debug_fh->autoflush();
 for my $test (@tests) { $test->(); }
 #print $db $imap->Report,"\n";
 
@@ -607,6 +623,16 @@ way cool.
 
 # History:
 # $Log: basic.t,v $
+# Revision 19991216.23  2002/09/26 17:56:58  dkernen
+#
+# Modified Files:
+# BUG_REPORTS Changes IMAPClient.pm INSTALL_perl5.80 MANIFEST
+# Makefile.PL for version 2.2.3. See the Changes file for details.
+# Modified Files: BodyStructure.pm -- cosmetic changes to pod doc
+# Modified Files:
+# 	migrate_mail2.pl -- fixed a small little bug and added a feature
+# Modified Files: basic.t -- to add tests for idle/done
+#
 # Revision 19991216.22  2002/08/30 20:48:52  dkernen
 #
 # #

@@ -1,5 +1,5 @@
 package Mail::IMAPClient::BodyStructure;
-#$Id: BodyStructure.pm,v 1.1 2002/08/30 20:58:51 dkernen Exp $
+#$Id: BodyStructure.pm,v 1.2 2002/09/26 17:56:14 dkernen Exp $
 #use Parse::RecDescent;
 use Mail::IMAPClient;
 use Mail::IMAPClient::BodyStructure::Parse;
@@ -593,8 +593,8 @@ from the mailbox you're poking around in, by the way.)
 
 =item cc_addresses
 
-Returns a list of cc'ed recipients' email addresses. If called in a scalar context
-it returns a reference to an array of email addresses.
+Returns a list of cc'ed recipients' email addresses. If called in a scalar 
+context it returns a reference to an array of email addresses.
 
 =item from_addresses
 
@@ -631,8 +631,9 @@ optimize your development time.
 
 =head1 Addresses and the Mail::IMAPClient::BodyStructure::Address
 
-Several components of an envelope structure are address structures. They are each parsed
-into their own object, B<Mail::IMAPClient::BodyStructure::Address>, which looks like this:
+Several components of an envelope structure are address structures. They are each 
+parsed into their own object, B<Mail::IMAPClient::BodyStructure::Address>, which 
+looks like this:
 
 	  {
             mailboxname 	=> 'somebody.special',
@@ -651,8 +652,8 @@ Each of these objects has the following methods available to it:
 
 =item mailboxname
 
-Returns the "mailboxname" portion of the address, which is the part to the left of the
-'@' sign.
+Returns the "mailboxname" portion of the address, which is the part to the left 
+of the '@' sign.
 
 =item hostname
 
@@ -661,8 +662,8 @@ Returns the "hostname" portion of the address, which is the part to the right of
 
 =item personalname
 
-Returns the "personalname" portion of the address, which is the part of the address that's
-treated like a comment.
+Returns the "personalname" portion of the address, which is the part of 
+the address that's treated like a comment.
 
 =item sourceroute
 
@@ -670,15 +671,16 @@ Returns the "sourceroute" portion of the address, which is typically "NIL".
 
 =back
 
-Taken together, the parts of an address structure form an address that will look something
-like this:
+Taken together, the parts of an address structure form an address that will 
+look something like this:
 
 C<personalname E<lt>mailboxname@hostnameE<gt>>
 
-Note that because the B<Mail::IMAPClient::BodyStructure::Address> objects come in arrays,
-it's generally easier to use the methods available to B<Mail::IMAPClient::BodyStructure::Envelope>
-to obtain all of the addresses in a particular array in one operation. These methods are provided,
-however, in case you'd rather do things the hard way. (And also because the aforementioned methods
+Note that because the B<Mail::IMAPClient::BodyStructure::Address> objects come in 
+arrays, it's generally easier to use the methods available to 
+B<Mail::IMAPClient::BodyStructure::Envelope> to obtain all of the addresses in a 
+particular array in one operation. These methods are provided, however, in case 
+you'd rather do things the hard way. (And also because the aforementioned methods
 from B<Mail::IMAPClient::BodyStructure::Envelope> need them anyway.)
 
 =cut
@@ -697,6 +699,13 @@ to understand the internals of this module.
 
 # History: 
 # $Log: BodyStructure.pm,v $
+# Revision 1.2  2002/09/26 17:56:14  dkernen
+#
+# Modified Files:
+# BUG_REPORTS Changes IMAPClient.pm INSTALL_perl5.80 MANIFEST
+# Makefile.PL for version 2.2.3. See the Changes file for details.
+# Modified Files: BodyStructure.pm -- cosmetic changes to pod doc
+#
 # Revision 1.1  2002/08/30 20:58:51  dkernen
 #
 # In Mail::IMAPClient/IMAPClient, added files: BUG_REPORTS getGrammer runtest sample.perldb

@@ -1,20 +1,64 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
-Changes in version 2.2.1
+Changes in version 2.2.4
+-------------------------
+Fixed a bug in the done method (new in 2.2.3). 
+
+Added tests for idle and done. (That's how I found the bug in the done method, above.)
+
+Fixed minor bugs in test suite. (The test suite worked but wasn't always using the options
+I wanted tested. <sigh>)
+
+
+Changes in version 2.2.3
+-------------------------
+
+NOTE: This version was distributed to beta testers only.
+
+Fixed the "Changes in version 2.2.2" section so that it correctly specifies
+version 2.2.2 (instead of being yet another 2.2.1 section).
+
+Fixed a bug in the migrate method that affected folders with spaces in their 
+names.
+
+Fixed a bug in the Massage method that affected folders with braces ({}) in 
+their names.
+
+Added a new class method, "Quote", that will quote your arguments for you. (So you
+no longer have to worry so much about quoting your quotes.
+
+Added optimizations to the migrate method and to the core I/O engine inspired
+by Jules Agee. (Actually they were not so much inspired by him as they were
+lifted right out of a patch he had out on sourceForge.net. I had to refit them
+for this version, and reformat his comments so they could fit in my window. Thanks
+Jules, wherever you are.)
+
+Added the fetch_hash method, which will fetch an entire folder's contents into a 
+hash indexed by message UID (or message sequence number if that's all you've got).
+
+Added a new example to the examples subdirectory, and corrected some minor bugs
+in existing examples.
+
+Added the idle and done methods, which together implement the IMAP IDLE extension
+(RFC2177), at John Rudd's suggestion.
+
+Changes in version 2.2.2
 ------------------------
 Fixed a bug in Massage method (generally only used by other IMAPClient methods)
 that broke folder names with parens. 
 
-Updated bug reporting procedures. Also added a section in the documentation for
-REPORTING THINGS THAT ARE NOT BUGS. Bug tracking is now done via rt.cpan.org,
-which I stumbled upon quite by accident and which I am really pleased with. A lot
-of credit goes to _somebody_ for putting this out on CPAN. Unfortunately as of 
-this writing I don't who.
+Updated bug reporting procedures. Also added a section in the documentation 
+for REPORTING THINGS THAT ARE NOT BUGS. Bug tracking is now done via 
+rt.cpan.org, which I stumbled upon quite by accident and with which I am 
+really pleased. A lot of credit goes to _somebody_ for putting this 
+out on CPAN. Unfortunately as of this writing I don't whom.
 
 Fixed a bug in the documentation regarding the logoff method, which is never
 implicitly invoked anymore; I gave up on that because the DESTROY method would
-sometimes be called after the Socket handle was already destroyed.
-
+sometimes be called after the Socket handle was already destroyed. (This is
+especially likely at program exit, when everything still in scope goes out of
+scope at the same time.) You should always log off explicitly if you want to 
+be a well behaviod IMAP client.
 
 Changes in version 2.2.1
 ------------------------
@@ -1074,4 +1118,4 @@ Changes in version 0.09
 -----------------------
 Thu Aug 26 14:10:03 1999 - original version; created by h2xs 1.19
 
-# $Id: Changes,v 20001010.13 2002/09/03 14:01:03 dkernen Exp $
+# $Id: Changes,v 20001010.14 2002/09/26 17:55:57 dkernen Exp $

@@ -181,7 +181,9 @@ print 	"Imap host $opt_S:$opt_P uses a '$sep2' as a separator and ",
 	"children in the INBOX. It supports ",
 	($mixedUse2?"mixed use ":"single use "), "folders.\n" if $opt_v;
 
-my($totalMsgs, $totalBytes);
+for ($testFolder1,$testFolder2) {$imap->delete($_); $imap2->delete($_);}
+
+my($totalMsgs, $totalBytes) = (0,0);
 
 # Now we will migrate the folder. Here we are doing one message at a time
 # so that we can do more granular status reporting and error checking.
@@ -237,8 +239,8 @@ for my $f ($imap->folders) {
 		my $ret = 0 ; my $h2 = [];
 
 		# Make sure we didn't already migrate the message in a previous pass:
-		if ( 	$h and $h2 = $imap2->search( 
-					HEADER 	=> 'Message-id'	=> $h ,
+		if ( 	$tsize and $h and $h2 = $imap2->search( 
+					HEADER 	=> 'Message-id'	=> $imap2->Quote($h),
 					NOT 	=>  SMALLER 	=> $tsize, 
 					NOT	=>  LARGER	=> $tsize
 			)
@@ -256,7 +258,7 @@ for my $f ($imap->folders) {
 			print  	
 				"Migrating $f/$msg to $targF. ",
 				"Message #$count of $expectedTotal has ",
-				$imap->size($msg) , " bytes.",
+				$tsize , " bytes.",
 				"\n" if $opt_v;
 
 			# Migrate the message:
