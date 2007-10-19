@@ -1,45 +1,93 @@
 Revision History for Perl extension Mail::IMAPClient.  
+
+version 2.99_01:
+
+	After 4 years of silence, Mark Overmeer took maintenance.  David
+	Kernen could not be reached.  Please let him contact the new
+	maintainer.
+
+	A considerable clean-up took place, fixing bug and adapting the
+	distribution to current best practices.
+
+	- use "prompt" in Makefile.PL, to please CPAN-testers
+
+	- removed old Parse::RecDescent grammars
+
+	- include Artistic and Copying (GPL) into COPYRIGHT file
+
+	- remove INSTALL_perl5.80
+
+	- removed all the seperate Makefile.PLs and test directories
+
+	- removed the hard-copy of all involved RFCs: there are better
+	  sources for those.
+
+	- converted tests to use "Test::More"
+
+	- Authmechanism eq 'LOGIN' understood.
+
+	- test for CRAM-MD5 removed, because conflicts with test params
+	  from Makefile.PL
+
+	- test for fast-io removed, it is Perl core functionality
+
+	- require IO::Socket::INET 1.26 to avoid Port number work-around.
+
+	- Parse::RecDescent is required, and the grammars are pre-parsed
+	  in the distribution.  This makes the whole installation process
+	  a lot easier.
+
+	- Update Todo, and many other texts.
+
+	- added pod tester in t/pod.t
+
+	- cleaned-up the rt.cpan.org bug-list from spam.  The next
+	  release will contain fixes for the real reports.
+
 Changes in version 2.2.9
 ------------------------
-Fixed problem in migrate that caused problems in versions of perl earlier than 
-5.6.  Thanks go to Steven Roberts for reporting the problem and identifying its 
-cause.
+Fixed problem in migrate that caused problems in versions of perl earlier
+than 5.6.  Thanks go to Steven Roberts for reporting the problem and
+identifying its cause.
 
-Fixed problem in the make process that caused tests for BodyStructure subclass 
-to fail if the grammer had been compiled under a different version of 
-Parse::RecDescent. This problem was detected by the dedicated people at 
-testers@cpan.org.
+Fixed problem in the make process that caused tests for BodyStructure
+subclass to fail if the grammer had been compiled under a different
+version of Parse::RecDescent. This problem was detected by the dedicated
+people at testers@cpan.org.
 
 Fixed a compatibility problem using Parse::RecDescent version 1.94.
-This caused BodyStructure and Thread to fail for 5.8.x users. A number
-of people reported this bug to CPAN but it took me a while to realize what
-was going on. Really it took me a while to realize my Parse::RecDescent was
-out of date. ;-) Now this module is delivered with two versions of each of
-the affected grammars and Makefile.PL determines which version to use. 
-Upgrading to Parse::RecDescent 1.94 will require you to re-run Makefile.PL
-and reinstall Mail::IMAPClient.
+This caused BodyStructure and Thread to fail for 5.8.x users. A number of
+people reported this bug to CPAN but it took me a while to realize what
+was going on. Really it took me a while to realize my Parse::RecDescent
+was out of date. ;-) Now this module is delivered with two versions of
+each of the affected grammars and Makefile.PL determines which version
+to use.  Upgrading to Parse::RecDescent 1.94 will require you to re-run
+Makefile.PL and reinstall Mail::IMAPClient.
 
 Changes in version 2.2.8
 ------------------------
-Change the login method so that it always send password as a literal to get around
-problem 2544 reported by Phil Tracy which caused passwords containing asterisks to 
-fail on some systems (but not any of mine...). Good catch, Phil.
+Change the login method so that it always send password as a literal
+to get around problem 2544 reported by Phil Tracy which caused
+passwords containing asterisks to fail on some systems (but not any of
+mine...). Good catch, Phil.
 
-Added a new example that demonstrates the use of imtest (a utility that comes with
-Cyrus IMAP) and Mail::IMAPClient together. The example uses imtest to do secure 
-authentication and then "passes" the connection over to Mail::IMAPClient (but
-imtest is still brokering the encryption/decryption). This example comes from 
-an idea of Tara L. Andrews', whose brainstorm it was to use imtest to broker secure 
-connections.  (But I still want to get encryption working with Mail::IMAPClient some 
-day!)
+Added a new example that demonstrates the use of imtest (a utility
+that comes with Cyrus IMAP) and Mail::IMAPClient together. The
+example uses imtest to do secure authentication and then "passes" the
+connection over to Mail::IMAPClient (but imtest is still brokering
+the encryption/decryption). This example comes from an idea of
+Tara L. Andrews', whose brainstorm it was to use imtest to broker
+secure connections.  (But I still want to get encryption working with
+Mail::IMAPClient some day!)
 
-Fixed an error in which a "+" was used as a conncatenation error instead of a ".".
-Thanks to Andrew Bramble for reporting this, even though he mistakenly identified 
-it as a "typo". It is not a typo; a plus sign is the correct concatenation operator,
-as any decent Java book will tell you ;-)
+Fixed an error in which a "+" was used as a conncatenation error instead
+of a ".".  Thanks to Andrew Bramble for reporting this, even though he
+mistakenly identified it as a "typo". It is not a typo; a plus sign is the
+correct concatenation operator, as any decent Java book will tell you ;-)
 
-Fixed an error in the login method when the password contains a special character
-(such as an asterisk.) Thanks to Phil Tracey for reporting this bug.
+Fixed an error in the login method when the password contains a special
+character (such as an asterisk.) Thanks to Phil Tracey for reporting
+this bug.
 
 Fixed some bugs in _send_line (the "O" side of the I/O engine) that were
 reported by Danny Smith.
