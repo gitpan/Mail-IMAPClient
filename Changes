@@ -1,5 +1,103 @@
 Revision History for Perl extension Mail::IMAPClient.  
 
+version 2.99_02: Fri Oct 26 11:47:35 CEST 2007
+
+	The whole Mail::IMAPClient was rewritten, hopefully without
+	breaking the interface.  Nearly no line is untouched.
+
+	The following things happened:
+	 - use warnings, use strict everywhere
+	 - removed many lines which were commented out, over the years
+	 - $self->_debug if $self->Debug checked debug flag twice
+	 - $self->LogError calls where quite inconsequent wrt $@ and carp
+	 - consequent layout, changed sporadic tabs in blanks
+	 - consequent calling convensions
+	 - \0x0d\0x0a is always \r\n
+	 - zillions of minor syntactical improvements
+	 - a few major algorithmic rewrites to simplify the code, still
+	   many oppotunities for improvements.
+	 - expanded "smart" accessor methods, search abbreviations,
+	   and autoloaded methods into separate subs.  In total much
+	   shorter, and certainly better understandable!
+	 - fixed many potential bugs.
+	 - labeled some weird things with #????
+	Over 900 lines and 25kB smaller in size (25%)
+	Needs to be tested!!!! Volunteers?
+
+	Fixes:
+
+	- Exchange 2007 only works with new parameter: IgnoreSizeErrors
+	  rt.cpan.org#28933 [Dregan], #5297 [Kevin P. Fleming]
+
+	- Passed socket did not get selected.
+ 	  debian bug #401144, rt.cpan.org# [Alexander Zanger],
+	  #8480 [Karl Gaissmaier], #8481 [Karl Gaissmaier],
+	  #7298 [Herbert Engelmann]
+          http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=401144
+
+	- Seperator not correctly extracted from list command.
+	  rt.cpan.org#9236 [Eugene Koontz], #4662 [Rasjid]
+
+	- migrate() Massage'd foldername twice
+	  rt.cpan.org#20703 [Peter J. Holzer]
+
+	- migrate() could loop because error in regexp.
+	  rt.cpan.org#20703 [Peter J. Holzer]
+
+	- migrate() append_string result not tested.
+	  rt.cpan.org#8577 [guest]
+
+	- Failing fetch() returned undef, not empty list.
+          rt.cpan.org#18361 [Robert Terzi]
+
+	- Fix "use of uninitialised" warning when expunge is called
+	  rt.cpan.org#15002 [Matt Jackson]
+
+	- Fix count subfolders in is_parent, regexp did not take care
+	  of regex special characters in foldername and seperator.
+          rt.cpan.org#12883 [Mike Porter]
+
+	- In fetch_hash(), the capturing of UID was too complicated
+          (and simply wrong)
+	  rt.cpan.org#9341 [Gilles Lamiral]
+
+	- overload in MessageSet treated the 3rd arg (reverse) as
+	  message-set.
+
+	- do not send the password on a different line as the username
+	  in LOGIN.  Suggested by many people, amongst them
+	  rt.cpan.org#4449 [Lars Uffmann]
+
+	- select() with $timeout==0 (no timeout) returns immediately.
+	  Should be 'undef' as 4th select parameter.
+	  rt.cpan.org#5962 [Colin Robertson] and [Jules Agee]
+
+	- examine() remembers Massage()d folder name, not the unescaped
+	  version. rt.cpan.org#7859 [guest]
+
+	Improvements:
+
+	- PREAUTH support by rt.cpan.org#17693 [Danny Siu]
+
+	- Option "SupportedFlags", useful when the source supports
+	  different flags than the peer in migrate().
+	  Requested by rt.cpan.org#12961 [Don Christensen]
+
+	- Fast_io did not clear $@ on unimportant errors.
+	  rt.cpan.org#9835 [guest] and #11220 [Brian Helterline]
+
+	- Digest::HMAC_MD5 and MIME::Base64 are now prerequisits.
+	  rt.cpan.org#6391 [David Greaves]
+
+	- PLAIN (SASL) authentication added, option Proxy
+	  rt.cpan.org#5706 [Carl Provencher]
+
+	- removed Bodystructure.grammar and IMAPClient.cleanup from dist.
+
+	- reworked Bodystructure and MessageSet as well.
+
+	- EnableServerResponseInLiteral now autodetect (hence ignored)
+
 version 2.99_01:
 
 	After 4 years of silence, Mark Overmeer took maintenance.  David
@@ -309,94 +407,109 @@ module will allow you to use NTML authentication with Mail::IMAPClient connectio
 Also changed the authenticate method so that it will work with Authen::NTML without
 the update mentioned in NTLM::Authen's README.
 
-Added a second example on using the new migrate method, migrate_mail2.pl. This example
-demonstrates more advanced techniques then the first, such as using the separator method
-to massage folder names and stuff like that.  
+Added a second example on using the new migrate method,
+migrate_mail2.pl. This example demonstrates more advanced techniques
+then the first, such as using the separator method to massage folder
+names and stuff like that.
 
-Added support for the IMAP THREAD extension. Added Mail::IMAPClient::Thread.pm to support
-this. (This pm file is generated during make from Thread/Thread.grammar.) This new 
-function should be considered experimental. Note also that this extension has nothing
-to do with threaded perl or anything like that. This is still on the TODO list.
+Added support for the IMAP THREAD extension. Added
+Mail::IMAPClient::Thread.pm to support this. (This pm file is generated
+during make from Thread/Thread.grammar.) This new function should be
+considered experimental. Note also that this extension has nothing to do
+with threaded perl or anything like that. This is still on the TODO list.
 
-Updated the search, sort, and thread methods to set $@ to "" before attempting their
-respective operations so that text in $@ won't be left over from some other error and
-therefore always indicative of an error in search, sort, or thread, respectively.
+Updated the search, sort, and thread methods to set $@ to "" before
+attempting their respective operations so that text in $@ won't be left
+over from some other error and therefore always indicative of an error
+in search, sort, or thread, respectively.
 
-Made many many tweaks to the documentation, including adding more examples (albeit
-simple ones) and fixing some errors.
+Made many many tweaks to the documentation, including adding more examples
+(albeit simple ones) and fixing some errors.
 
 Changes in version 2.2.0
 ------------------------
-Fixed some tests so that they are less likely to give false negatives. For example, test
-41 would fail if the test account happened to have an empty inbox.
+Fixed some tests so that they are less likely to give false negatives. For
+example, test 41 would fail if the test account happened to have an
+empty inbox.
 
-Made improvements to Mail::IMAPClient::BodyStructure and renamed Mail::IMAPClient::Parse
-to Mail::IMAPClient::BodyStructure::Parse. (This should be transparent to apps since the
-...Parse helper module is used by BodyStructure.pm only.) I also resumed my earlier practice
-of using ...Parse.pm from within BodyStructure.pm to avoid the overhead of compiling the
-grammar every time you use BodyStructure.pm. (Parse.pm is just the output from saving
-the compiled Parse::RecDescent grammar.) In a related change, I've moved the grammar into
-its own file (Parse.grammar) and taught Makefile.PL how to write a Makefile that converts
-the .grammar file into a .pm file. This work includes a number of fixes to how a body structure
-gets parsed and the parts list returned by the parts method, among other things. I was able 
-to successfully parse every bodystructure I could get my hands on, and that's a lot.
+Made improvements to Mail::IMAPClient::BodyStructure and renamed
+Mail::IMAPClient::Parse to Mail::IMAPClient::BodyStructure::Parse. (This
+should be transparent to apps since the ...Parse helper module is
+used by BodyStructure.pm only.) I also resumed my earlier practice of
+using ...Parse.pm from within BodyStructure.pm to avoid the overhead of
+compiling the grammar every time you use BodyStructure.pm. (Parse.pm is
+just the output from saving the compiled Parse::RecDescent grammar.) In a
+related change, I've moved the grammar into its own file (Parse.grammar)
+and taught Makefile.PL how to write a Makefile that converts the .grammar
+file into a .pm file. This work includes a number of fixes to how a body
+structure gets parsed and the parts list returned by the parts method,
+among other things. I was able to successfully parse every bodystructure
+I could get my hands on, and that's a lot.
 
-Also added a bunch of new methods to Mail::IMAPClient::BodyStructure and its child classes.
-The child classes don't even have files of their own yet; they still live with
-their parent class! Notable amoung these changes is support for the FETCH ENVELOPE IMAP 
-command (which was easy to build in once the BODYSTRUCTURE stuff was working) and some
-helper modules to get at the envelope info (as well as envelope information for 
-MESSAGE/RFC822 attachments from the BODYSTRUCTURE output).  Have a look at the 
-documentation for Mail::IMAPClient::BodyStructure for more information.
+Also added a bunch of new methods to Mail::IMAPClient::BodyStructure
+and its child classes.  The child classes don't even have files of their
+own yet; they still live with their parent class! Notable amoung these
+changes is support for the FETCH ENVELOPE IMAP command (which was easy
+to build in once the BODYSTRUCTURE stuff was working) and some helper
+modules to get at the envelope info (as well as envelope information
+for MESSAGE/RFC822 attachments from the BODYSTRUCTURE output).  Have a
+look at the documentation for Mail::IMAPClient::BodyStructure for more
+information.
 
-Fixed a bug in the folders method regarding quotes and folders with spaces in the names. The
-bug must have been around for a while but rarely manifested itself because of the way 
-methods that take folder name arguments always try to get the quoting right anyway but
-it was still there. Noticing it was the hard part (none of you guys reported it to me!).
+Fixed a bug in the folders method regarding quotes and folders with
+spaces in the names. The bug must have been around for a while but
+rarely manifested itself because of the way methods that take folder
+name arguments always try to get the quoting right anyway but it was
+still there. Noticing it was the hard part (none of you guys reported
+it to me!).
 
-Fixed a bug reported by Jeremy Hinton regarding how the search method handles dates. It was
-screwing it all up but it should be much better now.
+Fixed a bug reported by Jeremy Hinton regarding how the search method
+handles dates. It was screwing it all up but it should be much better now.
 
-Added the get_envelope method which is like the get_bodystructure method except for in ways
-in which it's different. 
+Added the get_envelope method which is like the get_bodystructure method
+except for in ways in which it's different.
 
-Added the messages method (a suggestion from Danny Carroll), which is functionally 
-equivalent to $imap->search("ALL") but easier to type.
+Added the messages method (a suggestion from Danny Carroll), which is
+functionally equivalent to $imap->search("ALL") but easier to type.
 
-Added new arguments to the bodypart_string method so that you can get just a part of a part
-(or a part of a subpart for that matter...) I did this so I could verify BodyStructure's
-parts method by fetching the first few bytes of a part (just to prove that the part has a
-valid part number).
+Added new arguments to the bodypart_string method so that you can get
+just a part of a part (or a part of a subpart for that matter...) I did
+this so I could verify BodyStructure's parts method by fetching the first
+few bytes of a part (just to prove that the part has a valid part number).
 
-Added new tests to test the migrate function and to do more thorough testing of the 
-BodyStructure stuff. Also added a test to make sure that searches that come up empty handed
-return an undef instead of an empty array (reference), regardless of context. Which reminds 
-me...
+Added new tests to test the migrate function and to do more thorough
+testing of the BodyStructure stuff. Also added a test to make sure that
+searches that come up empty handed return an undef instead of an empty
+array (reference), regardless of context. Which reminds me...
 
-Fixed a bug in which searches that don't find any hits would return a reference to an empty 
-array instead of undef when called in a scalar context. This bug sounds awfully familiar, 
-which is why I added the test mentioned above...
+Fixed a bug in which searches that don't find any hits would return a
+reference to an empty array instead of undef when called in a scalar
+context. This bug sounds awfully familiar, which is why I added the test
+mentioned above...
 
 
 Changes in version 2.1.5
 ------------------------
-Fixed the migrate method so now it not only works, but also works as originally
-planned (i.e. without requiring source messages to be read entirely into memory).
-If the message is smaller than the value in the Buffer parameter (default is 4096) then
-a normal $imap2->append($folder,$imap1->message_string) is done. However, if the message
-is over the buffer size then it is retrieved and written a bufferful at a time until the
-whole message has been read and sent. (The receiving server still expects the entire 
-message at once, but it will have to wait because the message is being read from the 
-source in smaller chunks and then written to the destination a chunk at a time.) 
-This needs extensive testing before I'd be willing to trust it (or at least extensive 
-logging so you know when something has gone terribly wrong) and I consider this method 
-to be in BETA in this release. (Numerous people wrote complaining that migrate didn't 
-work, and some even included patches to make it work, but the real bug in the last 
-release wasn't that migrate was broken but that I had inadvertently included the pod 
-for the method which I knew perfectly well was not ready to be released. My apologies 
-to anyone who was affected by this.) The migrate method does seem to work okay on 
-iPlanet (i.e. Netscape) Messenger Server 4.x. Please let me know if you have any 
-issues on this or any other platform.
+Fixed the migrate method so now it not only works, but also works
+as originally planned (i.e. without requiring source messages to
+be read entirely into memory).  If the message is smaller than
+the value in the Buffer parameter (default is 4096) then a normal
+$imap2->append($folder,$imap1->message_string) is done. However, if
+the message is over the buffer size then it is retrieved and written a
+bufferful at a time until the whole message has been read and sent. (The
+receiving server still expects the entire message at once, but it
+will have to wait because the message is being read from the source in
+smaller chunks and then written to the destination a chunk at a time.)
+This needs extensive testing before I'd be willing to trust it (or at
+least extensive logging so you know when something has gone terribly
+wrong) and I consider this method to be in BETA in this release. (Numerous
+people wrote complaining that migrate didn't work, and some even included
+patches to make it work, but the real bug in the last release wasn't
+that migrate was broken but that I had inadvertently included the pod for
+the method which I knew perfectly well was not ready to be released. My
+apologies to anyone who was affected by this.) The migrate method does
+seem to work okay on iPlanet (i.e. Netscape) Messenger Server 4.x. Please
+let me know if you have any issues on this or any other platform.
 
 Added a new example, migrate_mbox.pl, which will demonstrate the migrate method.
 

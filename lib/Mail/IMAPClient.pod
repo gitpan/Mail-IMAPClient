@@ -45,126 +45,148 @@ object's status, see the section labeled L<"Status Methods">, below.
 
 =head2 Advanced Authentication Mechanisms
 
-RFC2060 defines two commands for authenticating to an IMAP server: LOGIN for
-plain text authentication and AUTHENTICATE for more secure authentication
-mechanisms. Currently Mail::IMAPClient supports CRAM-MD5 and plain text 
-authentication. There are also a number of methods and parameters that you 
-can use to build your own authentication mechanism. Since this topic is a source
-of many questions, I will provide a quick overview here. All of the methods and
-parameters discussed here are described in more detail elsewhere in this document;
-this section is meant to help you get started.
+RFC2060 defines two commands for authenticating to an IMAP server:
+LOGIN for plain text authentication and AUTHENTICATE for more secure
+authentication mechanisms. Currently Mail::IMAPClient supports
+CRAM-MD5, LOGIN, and PLAIN (SASL) authentication.
 
-First of all, if you just want to do plain text authentication and your server is
-okay with that idea then you don't even need to read this section. 
+There are also a number of methods and parameters that you can use to
+build your own authentication mechanism. Since this topic is a source of
+many questions, I will provide a quick overview here. All of the methods
+and parameters discussed here are described in more detail elsewhere in
+this document; this section is meant to help you get started.
 
-Second of all, the intent of this section is to help you implement the authentication
-mechanism of your choice, but you will have to understand how that mechanism works.
-There are I<lots> of authentication mechanisms and most of them are not available to
-me to test with for one reason or another. Even if this section does not answer
-all of your authentication questions it I<does> contain all the answers that I have,
-which I admit are scant.
+First of all, if you just want to do plain text authentication and
+your server is okay with that idea then you don't even need to read
+this section.
 
-Third of all, if you manage to get any advanced authentication mechanisms to work then
-please consider donating them to this module. I don't quite have a framework visualized
-for how different authentication mechanisms could "plug in" to this module but I would
-like to eventually see this module distributed with a number of helper modules to 
-implement various authentication schemes.
+Second of all, the intent of this section is to help you implement the
+authentication mechanism of your choice, but you will have to understand
+how that mechanism works.  There are I<lots> of authentication mechanisms
+and most of them are not available to me to test with for one reason or
+another. Even if this section does not answer all of your authentication
+questions it I<does> contain all the answers that I have, which I admit
+are scant.
 
-The B<Mail::IMAPClient>'s support for add-on authentication mechanisms is pretty straight
-forward and is built upon several assumptions. Basically you create a callback to be used to
-provide the response to the server's challenge. The I<Authcallback> parameter contains a 
-reference to the callback, which  can be an anonymous subroutine or a named subroutine. 
-Then, you identify your authentication mechanism, either via the I<Authmechanism> parameter 
-or as an argument to L<authenticate>. 
+Third of all, if you manage to get any advanced authentication mechanisms
+to work then please consider donating them to this module. I don't quite
+have a framework visualized for how different authentication mechanisms
+could "plug in" to this module but I would like to eventually see this
+module distributed with a number of helper modules to implement various
+authentication schemes.
 
-You may also need to provide a subroutine to encrypt (or whatever) data before it is sent
-to the server. The I<Prewritemethod> parameter must contain a reference to this subroutine.
-And, you will need to decrypt data from the server; a reference to the subroutine that 
-does this must be stored in the I<Readmethod> parameter.
+The B<Mail::IMAPClient>'s support for add-on authentication mechanisms is
+pretty straight forward and is built upon several assumptions. Basically
+you create a callback to be used to provide the response to the server's
+challenge. The I<Authcallback> parameter contains a reference to the
+callback, which  can be an anonymous subroutine or a named subroutine.
+Then, you identify your authentication mechanism, either via the
+I<Authmechanism> parameter or as an argument to L<authenticate>.
 
-This framework is based on the assumptions that a) the mechanism you are using requires
-a challenge-response exchange, and b) the mechanism does not fundamentally alter the 
-exchange between client and server but merely wraps the exchange in a layer of 
-encryption. It particularly assumes that the line-oriented nature of the IMAP conversation
-is preserved; authentication mechanisms that break up messages into blocks of a 
-predetermined size may still be possible but will certainly be more difficult to implement.
+You may also need to provide a subroutine to encrypt (or whatever) data
+before it is sent to the server. The I<Prewritemethod> parameter must
+contain a reference to this subroutine.  And, you will need to decrypt
+data from the server; a reference to the subroutine that does this must
+be stored in the I<Readmethod> parameter.
 
-Alternatively, if you have access to B<imtest>, a utility included in the Cyrus IMAP
-distribution, you can use that utility to broker your communications with the IMAP server.
-This is quite easy to implement. An example, L<examples/imtestExample.pl>, can be found in 
-the C<examples> subdirectory of the source distribution. 
+This framework is based on the assumptions that a) the mechanism you are
+using requires a challenge-response exchange, and b) the mechanism does
+not fundamentally alter the exchange between client and server but merely
+wraps the exchange in a layer of encryption. It particularly assumes
+that the line-oriented nature of the IMAP conversation is preserved;
+authentication mechanisms that break up messages into blocks of a
+predetermined size may still be possible but will certainly be more
+difficult to implement.
 
-The following list summarizes the methods and parameters that you may find useful in 
-implementing advanced autentication:
+Alternatively, if you have access to B<imtest>, a utility included in
+the Cyrus IMAP distribution, you can use that utility to broker your
+communications with the IMAP server.  This is quite easy to implement. An
+example, L<examples/imtestExample.pl>, can be found in the C<examples>
+subdirectory of the source distribution.
+
+The following list summarizes the methods and parameters that you may
+find useful in implementing advanced autentication:
 
 =over 4
 
 =item authenticate method
 
-This method implements the AUTHENTICATE IMAP client command as documented in RFC2060.
-If you have set the I<Authmechanism> parameter then the L<login> method will call
-L<authenticate> instead of doing a clear text login, which is its normal behavior.
-If you don't want B<login> to call B<authenticate> on your behalf then you can call
-it yourself. Instead of setting an I<Authmechanism> you can just pass the authmechanism
-as the first argument to AUTHENTICATE. 
+This method implements the AUTHENTICATE IMAP client command as documented
+in RFC2060.  If you have set the I<Authmechanism> parameter then the
+L<login> method will call L<authenticate> instead of doing a clear text
+login, which is its normal behavior.  If you don't want B<login> to call
+B<authenticate> on your behalf then you can call it yourself. Instead
+of setting an I<Authmechanism> you can just pass the authmechanism as
+the first argument to AUTHENTICATE.
 
 =item Socket Parameter
 
-The I<Socket> parameter holds a reference to the socket connection. Normally this
-is set for you by the L<connect> method, but if you are implementing an advanced 
-authentication technique you may choose to set up your own socket connection and then
-set this parameter manually, bypassing the B<connect> method completely.
+The I<Socket> parameter holds a reference to the socket
+connection. Normally this is set for you by the L<connect> method, but
+if you are implementing an advanced authentication technique you may
+choose to set up your own socket connection and then set this parameter
+manually, bypassing the B<connect> method completely.
 
-=item State, Server, Password, and User Parameters
+=item State, Server, Proxy, Password, and User Parameters
 
-If you need to make your own connection to the server and perform your authentication
-manually, then you can set these parameters to keep your B<Mail::IMAPClient> object
-in sync with its actual status. Of these, only the I<State> parameter is always necessary.
-The others need to be set only if you think your program will need them later.
+If you need to make your own connection to the server and perform your
+authentication manually, then you can set these parameters to keep your
+B<Mail::IMAPClient> object in sync with its actual status. Of these,
+only the I<State> parameter is always necessary.  The others need to be
+set only if you think your program will need them later.
+
+I<Proxy> is required for PLAIN (SASL) authentication.
 
 =item Authmechanism 
 
-Set this to the value that AUTHENTICATE should send to the server as the authentication
-mechanism. If you are brokering your own authentication then this parameter may be less
-useful. It is also not needed by the L<authenticate> method. It exists solely so that you
-can set it when you call L<new> to instantiate your object. The B<new> method will call
-L<connect>, who will call L<login>. If B<login> sees that you've set an I<Authmechanism>
-then it will call B<authenticate>, using your I<Authmechanism> and I<Authcallback> 
-parameters as arguments.
+Set this to the value that AUTHENTICATE should send to the server as the
+authentication mechanism. If you are brokering your own authentication
+then this parameter may be less useful. It is also not needed by the
+L<authenticate> method. It exists solely so that you can set it when
+you call L<new> to instantiate your object. The B<new> method will
+call L<connect>, who will call L<login>. If B<login> sees that you've
+set an I<Authmechanism> then it will call B<authenticate>, using your
+I<Authmechanism> and I<Authcallback> parameters as arguments.
 
 =item Authcallback 
 
-The I<Authcallback> parameter, if set, should contain a pointer to a subroutine. The
-L<login> method will use this as the callback argument to the B<authenticate> method
-if the I<Authmechanism> and I<Authcallback> parameters are both set. If you set
-I<Authmechanism> but not I<Authcallback> then the default callback for your mechanism
-will be used. Unfortunately only the CRAM-MD5 authentication mechanism has a default
-callback; in every other case not supplying the callback results in an error.
+The I<Authcallback> parameter, if set, should contain a pointer
+to a subroutine. The L<login> method will use this as the callback
+argument to the B<authenticate> method if the I<Authmechanism> and
+I<Authcallback> parameters are both set. If you set I<Authmechanism>
+but not I<Authcallback> then the default callback for your mechanism
+will be used. Unfortunately only the CRAM-MD5 authentication mechanism
+has a default callback; in every other case not supplying the callback
+results in an error.
 
-Most advanced authentication mechanisms require a challenge-response exchange. After the
-L<authenticate> method sends "<tag> AUTHENTICATE <Authmechanism>\r\n"  to the IMAP 
-server, the server replies with a challenge. The B<authenticate> method then invokes 
-the code whose reference is stored in the I<Authcallback> parameter as follows:
+Most advanced authentication mechanisms require a challenge-response
+exchange. After the L<authenticate> method sends "<tag> AUTHENTICATE
+<Authmechanism>\r\n"  to the IMAP server, the server replies with
+a challenge. The B<authenticate> method then invokes the code whose
+reference is stored in the I<Authcallback> parameter as follows:
 
 	$Authcallback->($challenge,$imap)
 
-where C<$Authcallback> is the code reference stored in the I<Authcallback> parameter,
-C<$challenge> is the challenge received from the IMAP server, and C<$imap> is a pointer
-to the B<Mail::IMAPClient> object. The return value from the I<Authcallback> routine 
-should be the response to the challenge, and that return value will be sent by the 
-L<authenticate> method to the server.
+where C<$Authcallback> is the code reference stored in the I<Authcallback>
+parameter, C<$challenge> is the challenge received from the IMAP server,
+and C<$imap> is a pointer to the B<Mail::IMAPClient> object. The return
+value from the I<Authcallback> routine should be the response to the
+challenge, and that return value will be sent by the L<authenticate>
+method to the server.
 
 =item Readmethod 
 
-The I<Readmethod> parameter points to a routine that will read data from the socket
-connection. This read method will replace the B<sysread> that would otherwise be
-performed by B<Mail::IMAPClient>. The replacement method is called with five 
-arguments. The first is a pointer to the B<Mail::IMAPClient> object; the rest
-are the four arguments required by the B<sysread> function. Note the third argument
-(which corresponds to the second argument to B<sysread>) is a buffer to read into;
-this will be a pointer to a scalar. So for example if your I<Readmethod> were just 
-going to replace B<sysread> without any intervening processing (which would be silly
-but this is just an example after all) then you would set your I<Readmethod> like this:
+The I<Readmethod> parameter points to a routine that will read data from
+the socket connection. This read method will replace the B<sysread> that
+would otherwise be performed by B<Mail::IMAPClient>. The replacement
+method is called with five arguments. The first is a pointer to the
+B<Mail::IMAPClient> object; the rest are the four arguments required by
+the B<sysread> function. Note the third argument (which corresponds to
+the second argument to B<sysread>) is a buffer to read into; this will
+be a pointer to a scalar. So for example if your I<Readmethod> were
+just going to replace B<sysread> without any intervening processing
+(which would be silly but this is just an example after all) then you
+would set your I<Readmethod> like this:
 
 	$imap->Readmethod( 
 		sub { 
@@ -174,18 +196,39 @@ but this is just an example after all) then you would set your I<Readmethod> lik
 		}
 	);
 
-Note particularly the double dollar signs in C<$$buffer> in the B<sysread> call; this
-is not a typo!
+Note particularly the double dollar signs in C<$$buffer> in the B<sysread>
+call; this is not a typo!
 
 =item Prewritemethod
 
-The I<Prewritemethod>, if defined, should contain a pointer to a subroutine.
-It is called immediately prior to writing to the
-socket connection. It is called by B<Mail::IMAPClient> with two arguments:
-a reference to the B<Mail::IMAPClient> object and the ASCII text string to be written. 
-It should return another string that will be the actual string sent to the IMAP server. 
-The idea here is that your I<Prewritemethod> will do whatever encryption is necessary 
-and then return the result to the caller so it in turn can be sent to the server.
+The I<Prewritemethod>, if defined, should contain a pointer to a
+subroutine.  It is called immediately prior to writing to the socket
+connection. It is called by B<Mail::IMAPClient> with two arguments:
+a reference to the B<Mail::IMAPClient> object and the ASCII text
+string to be written.  It should return another string that will be
+the actual string sent to the IMAP server.  The idea here is that your
+I<Prewritemethod> will do whatever encryption is necessary and then
+return the result to the caller so it in turn can be sent to the server.
+
+=item Ignoresizeerrors
+
+Certain (caching) servers, like Exchange 2007, often report the wrong
+message size.  Instead of chopping the message into a size that it
+fits the specified size, the reported size will be simply ignored
+when this parameter is set to C<1>.
+
+=item Supportedflags
+
+Especially when C<migrate()> is used, the receiving peer may need to
+be configured explicitly with the list of supported flags; that may
+be different from the source IMAP server.
+
+The names are to be specified as an ARRAY.  Black-slashes and casing
+will be ignored.
+
+You may also specify a CODE reference, which will be called for each of
+the flags seperately.  In this case, the flags are not (yet) normalized.
+The returned lists of the CODE calls are shape the resulting flag list.
 
 =back
 
@@ -1787,6 +1830,8 @@ consumption. If you have older scripts that used L<message_to_file> and
 L<append_file> to move large messages between IMAP mailboxes then you
 may want to try this method as a possible replacement.
 
+See also C<Supportedflags>.
+
 =head2 move
 
 Example:
@@ -3012,28 +3057,7 @@ to a true value.
 
 =head2 EnableServerResponseInLiteral
 
-Example:
-
-	$EnableServerResponseInLiteral = $imap->EnableServerResponseInLiteral();
-	# or:
-	$imap->EnableServerResponseInLiteral($new_value);
-
-The I<EnableServerResponseInLiteral> parameter tells
-B<Mail::IMAPClient> to expect server responses to be embedded in
-literal strings. Usually literal strings contain only message data, not
-server responses. I have seen at least one IMAP server implementation
-though that includes the final <tag> OK response in the literal data.
-If your server does this then your script will hang whenever you try to
-read literal data, such as message text, or even output from the
-L<folders> method if some of your folders have special characters such
-as double quotes or sometimes spaces in the name.
-
-I am pretty sure this behavior is not RFC2060 compliant so I am
-dropping it by default. In fact, I encountered the problem a long time
-ago when still new to IMAP and may have imagined the whole thing.
-However, if your scripts hang running certain methods you may want to
-at least try enabling this parameter by passing the eponymous method a
-true value. 
+Removed in 2.99_01 (now autodetect)
 
 =head2 Fast_io
 
@@ -3196,45 +3220,42 @@ Example:
 	}
 
 
-If set to a true value, then the L<search> method will return a 
+If set to a true value, then the L<search> method will return a
 L<Mail::IMAPClient::MessageSet> object if called in a scalar context,
-instead of the array reference that B<fetch> normally returns when
-called in a scalar context. If set to zero or if undefined, then B<search>
+instead of the array reference that B<fetch> normally returns when called
+in a scalar context. If set to zero or if undefined, then B<search>
 will continue to return an array reference when called in scalar context.
 
-This parameter has no affect on the B<search> method when B<search> is called
-in a list context.
+This parameter has no affect on the B<search> method when B<search>
+is called in a list context.
 
-=head2 Readmethod
+=head2 Readmethod IMAP, BUFFER, LENGTH, OFFSET
 
-This parameter, if supplied, should contain a reference to a subroutine that will
-replace sysreads. The subroutine will be passed the following arguments:
-	
-=over 4
+This parameter, if supplied, should contain a reference to a subroutine
+that will replace sysreads. The subroutine will be passed the following
+arguments: first the used Mail::IMAPClient object. As second,
+a reference to a scalar variable into which data is readl the BUFFER. The
+data place in here should be "finished data", so if you are decrypting
+or removing signatures then be sure to do that before you place data
+into this buffer.
 
-1. imap_object_ref - a reference to the current imap object
+As third, the number of bytes requested to be read; the LENGTH of the
+request.  Finally, the OFFSET into the BUFFER where the data should be
+read. If not supplied it should default to zero.
 
-2. scalar_ref - a reference to a scalar variable into which data is read. The data
-place in here should be "finished data", so if you are decrypting or removing signatures
-then be sure to do that before you place data into this buffer.
+Note that this method completely replaces reads from the connection
+to the server, so if you define one of these then your subroutine will
+have to actually do the read. It is for things like this that we have
+the L<Socket> parameter and eponymous accessor method.
 
-3. read_length - the number of bytes requested to be read
+Your I<Readmethod> will probably need to know more than this to do
+whatever it does.  It is recommended that you tuck all other pertinent
+information into a hash, and store a reference to this hash somewhere
+where your method can get to it, possibly in the I<Mail::IMAPClient>
+object itself.
 
-4. offset - the offset into C<scalar_ref> into which data should be read. If not supplied it
-should default to zero.
-
-=back
-
-Note that this method completely replaces reads from the connection to the server, so if 
-you define one of these then your subroutine will have to actually do the read. It is for
-things like this that we have the L<Socket> parameter and eponymous accessor method.
-
-Your I<Readmethod> will probably need to know more than this to do whatever it does. 
-It is recommended that you tuck all other pertinent information into a hash, and store 
-a reference to this hash somewhere where your method can get to it, possibly in the 
-I<Mail::IMAPClient> object itself.
-
-If you need a I<Readmethod> then you probably need a L<Prewritemethod> as well.
+If you need a I<Readmethod> then you probably need a L<Prewritemethod>
+as well.
 
 =head2 Server
 
@@ -3255,11 +3276,12 @@ method.
 
 =head2 Showcredentials
 
-Normally debugging output will mask the login credentials when the plain text
-login mechanism is used. Setting I<Showcredentials> to a true value will suppress
-this, so that you can see the string being passed back and forth during plain text
-login. Only set this to true when you are debugging problems with the IMAP LOGIN 
-command, and then turn it off right away when you're finished working on that problem.
+Normally debugging output will mask the login credentials when the plain
+text login mechanism is used. Setting I<Showcredentials> to a true value
+will suppress this, so that you can see the string being passed back
+and forth during plain text login. Only set this to true when you are
+debugging problems with the IMAP LOGIN command, and then turn it off
+right away when you're finished working on that problem.
 
 Example:
 
@@ -3279,7 +3301,8 @@ Example:
 The I<Socket> method can be used to obtain the socket handle of the
 current connection (say, to do I/O on the connection that is not
 otherwise supported by B<Mail::IMAPClient>) or to replace the current
-socket with a new handle (perhaps an SSL handle, for example). 
+socket with a new handle (for instance an SSL handle, see
+IO::Socket::SSL). 
 
 If you supply a socket handle yourself, either by doing something like:
 

@@ -1,291 +1,196 @@
-package Mail::IMAPClient::BodyStructure;
-use base 'Exporter';
+use warnings;
+use strict;
 
-use Mail::IMAPClient;
+package Mail::IMAPClient::BodyStructure;
+our $VERSION   = '0.0.4';
+
 use Mail::IMAPClient::BodyStructure::Parse;
 
-our $VERSION   = '0.0.3';
-our @EXPORT_OK = '$parser';
+# my has file scope, not limited to package!
+my $parser = Mail::IMAPClient::BodyStructure::Parse->new
+   or die "Cannot parse rules: $@\n"
+        . "Try remaking Mail::IMAPClient::BodyStructure::Parse.\n";
 
-our $parser = Mail::IMAPClient::BodyStructure::Parse->new()
-  or die "Cannot parse rules: $@\n"
-       . "Try remaking Mail::IMAPClient::BodyStructure::Parse.\n";
+sub new
+{   my $class = shift;
+    my $bodystructure = shift;
 
-sub new {
-	my $class = shift;
-	my $bodystructure = shift;
-	my $self  = $parser->start($bodystructure) or return undef;
-	$self->{_prefix}	= "";
+    my $self  = $parser->start($bodystructure)
+       or return undef;
 
-	if ( exists $self->{bodystructure} ) {
-		$self->{_id}	= 'HEAD' ;
-	} else {
-		$self->{_id}	= 1;
-	}
+    $self->{_prefix} = "";
+    $self->{_id}     = exists $self->{bodystructure} ? 'HEAD' : 1;
+    $self->{_top}    = 1;
 
-	$self->{_top}		= 1;
-
-	bless $self, ref($class)||$class;
+    bless $self, ref($class)||$class;
 }
 
-sub _get_thingy {
-	my $thingy = shift;
-	my $object = shift||(ref($thingy)?$thingy:undef);
-	unless ( defined($object) and ref($object) ) {
-		$@ = "No argument passed to $thingy method." 	;
-		$^W and print STDERR "$@\n" ;
-		return undef;
-	}
-	unless ( 	"$object" =~ /HASH/ 
-		and 	exists($object->{$thingy}) 
-	) {
-		$@ = 	ref($object) 					.
-			" $object does not have " 			. 
-			( $thingy =~ /^[aeiou]/i ? "an " : "a " ) 	.
-			"${thingy}. " 					.
-			( ref($object) =~ /HASH/ ? "It has " . join(", ",keys(%$object)) : "") ; 
-		$^W and print STDERR "$@\n" ;
-		return undef;
-	}
-	return Unwrapped($object->{$thingy});
+sub _get_thingy
+{   my $thingy = shift;
+    my $object = shift || (ref $thingy ? $thingy : undef);
+
+    unless ($object && ref $object)
+    {   warn $@ = "No argument passed to $thingy method.";
+        return undef;
+    }
+
+    unless(UNIVERSAL::isa($object, 'HASH') && exists $object->{$thingy})
+    {   my $a = $thingy =~ /^[aeiou]/i ? 'an' : 'a';
+        my $has = ref $object eq 'HASH' ? join(", ",keys %$object) : '';
+        warn $@ = ref($object)." $object does not have $a $thingy. "
+                . ($has ? "It has $has" : '');
+        return undef;
+    }
+
+    my $value = $object->{$thingy};
+    $value    =~ s/\\ ( [\\\(\)"\x0d\x0a] )/$1/gx;
+    $value    =~ s/^"(.*)"$/$1/;
+    $value;
 }
 
-BEGIN {
- foreach my $datum (qw/	bodytype bodysubtype 	bodyparms 	bodydisp bodyid
-			bodydesc bodyenc 	bodysize 	bodylang 
-			envelopestruct  	textlines
-		   /
- ) {
-        no strict 'refs';
-        *$datum = sub { _get_thingy($datum, @_); };
- }
-
+BEGIN
+{   no strict 'refs';
+    foreach my $datum (
+       qw/ bodytype bodysubtype bodyparms bodydisp bodyid bodydesc bodyenc
+        bodysize bodylang envelopestruct textlines / )
+    {   *$datum = sub { _get_thingy($datum, @_) };
+    }
 }
 
-sub parts {
-	my $self = shift;
+sub parts
+{   my $self = shift;
+    return wantarray ? @{$self->{PartsList}} : $self->{PartsList}
+        if exists $self->{PartsList};
 
+    my @parts;
+    $self->{PartsList} = \@parts;
 
-	if ( exists $self->{PartsList} )  {
-		return wantarray ? @{$self->{PartsList}} : $self->{PartsList} ;
-	}
+    unless(exists $self->{bodystructure})
+    {   $self->{PartsIndex}{1} = $self;
+        @parts = ("HEAD", 1);
+        return wantarray ? @parts : \@parts;
+    }
 
-	my @parts = ();
-	$self->{PartsList} = \@parts;
+    foreach my $p ($self->bodystructure)
+    {   my $id = $p->id;
+        push @parts, $id;
+        $self->{PartsIndex}{$id} = $p ;
+        my $type = uc $p->bodytype || '';
 
-	unless ( exists($self->{bodystructure}) ) {
-		$self->{PartsIndex}{1} = $self ;
-		@parts = ("HEAD",1);
-		return wantarray ? @parts : \@parts;
-	}
-	#@parts = ( 1 );
-	#} else {
+        push @parts, "$id.HEAD"
+            if $type eq 'MESSAGE';
+    }
 
-	foreach my $p ($self->bodystructure()) {
-		push @parts, $p->id();
-		$self->{PartsIndex}{$p->id()} = $p ;
-		if ( uc($p->bodytype()||"") eq "MESSAGE" ) {
-			#print "Part $parts[-1] is a ",$p->bodytype,"\n";
-			push @parts,$parts[-1] . ".HEAD";
-		#} else {
-		#	print "Part $parts[-1] is a ",$p->bodytype,"\n";
-		}
-	}
-
-	#}
-
-	return wantarray ? @parts : \@parts;
+    wantarray ? @parts : \@parts;
 }
 
-sub oldbodystructure {
-	my $self = shift;
-	if ( exists $self->{_bodyparts} ) { 
-		return wantarray ? @{$self->{_bodyparts}} : $self->{_bodyparts} ;
-	}
-	my @bodyparts = ( $self );
-	$self->{_id} ||= "HEAD";	# aka "0"
-	my $count = 0;
-	#print STDERR "Analyzing a ",$self->bodytype, " part which I think is part number ",
-	#	$self->{_id},"\n";
-	my $dump = Data::Dumper->new( [ $self ] , [ 'bodystructure' ] );
-	$dump->Indent(1);
-	
-	foreach my $struct (@{$self->{bodystructure}}) {
-		$struct->{_prefix} ||= $self->{_prefix} . +$count . "." unless $struct->{_top};	
-		$struct->{_id} ||= $self->{_prefix} . $count unless $struct->{_top};
-		#if (
-		#	uc($struct->bodytype) eq 'MULTIPART' or 	
-		#	uc($struct->bodytype) eq 'MESSAGE'
-		#) {
-		#} else 	{
-		#}
-		push @bodyparts, $struct, 
-			ref($struct->{bodystructure}) ? $struct->bodystructure : () ;
-	}
-	$self->{_bodyparts} = \@bodyparts ;
-	return wantarray ? @bodyparts : $self->bodyparts ;
+sub bodystructure
+{   my $self   = shift;
+    my $partno = 0;
+    my @parts;
+
+    if($self->{_top})
+    {   $self->{_id}     ||= "HEAD";
+        $self->{_prefix} ||= "HEAD";
+        $partno = 0;
+        foreach my $b ( @{$self->{bodystructure}} )
+        {   $b->{_id}     = ++$partno;
+            $b->{_prefix} = $partno;
+            push @parts, $b, $b->bodystructure;
+        }
+        return wantarray ? @parts : \@parts;
+    }
+
+    my $prefix = $self->{_prefix} || "";
+    $prefix    =~ s/\.?$/./;
+
+    foreach my $p ( @{$self->{bodystructure}} )
+    {   $partno++;
+        $p->{_prefix} = "$prefix$partno";
+        $p->{_id}   ||= "$prefix$partno";
+        push @parts, $p, $p->{bodystructure} ? $p->bodystructure : ();
+    }
+
+    wantarray ? @parts : \@parts;
 }
 
-sub bodystructure {
-	my $self = shift;
-	my @parts = ();
-	my $partno = 0;
+sub id
+{   my $self = shift;
+    return $self->{_id}
+        if exists $self->{_id};
 
-        my $prefix = $self->{_prefix} || "";
+    return "HEAD"
+        if $self->{_top};
 
-	#print STDERR 	"Analyzing a ",($self->bodytype||"unknown ") , 
-		#	" part which I think is part number ",
-		#	$self->{_id},"\n";
-
-	my $bs = $self;
-        $prefix = "$prefix." if ( $prefix and $prefix !~ /\.$/);
-
-	if ( $self->{_top} ) {
-		$self->{_id} ||= "HEAD";
-		$self->{_prefix} ||= "HEAD";
-		$partno = 0;
-		for (my $x = 0; $x < scalar(@{$self->{bodystructure}}) ; $x++) {
-			$self->{bodystructure}[$x]{_id} = ++$partno ;
-			$self->{bodystructure}[$x]{_prefix} = $partno ;
-			push @parts, $self->{bodystructure}[$x] , 
-				$self->{bodystructure}[$x]->bodystructure;
-		}
-				
-		
-	} else {
-	  $partno = 0;
-	  foreach my $p ( @{$self->{bodystructure}}  ) {
-		$partno++;
-		if (
-			! exists $p->{_prefix}  
-		) {
-			$p->{_prefix} = "$prefix$partno";
-		}
-		$p->{_prefix} = "$prefix$partno";
-		$p->{_id} ||= "$prefix$partno";
-		#my $bt = $p->bodytype;
-		#if ($bt eq 'MESSAGE') {
-			#$p->{_id} = $prefix . 
-			#$partno = 0;
-		#} 
-		push @parts, $p, $p->{bodystructure} ? $p->bodystructure : ();
-	  }
-	}
-
-	return wantarray ? @parts : \@parts;
-}
-
-sub id {
-	my $self = shift;
-	
-	return $self->{_id} if exists $self->{_id};
-	return "HEAD" if $self->{_top};
-	#if ($self->bodytype eq 'MESSAGE') {
-	#	return 
-	#}
-
-	if ($self->{bodytype} eq 'MULTIPART') {
-		my $p = $self->{_id}||$self->{_prefix} ;
-		$p =~ s/\.$//;
-		return $p;
-	} else {
-		return $self->{_id} ||= 1;
-	}
-}
-
-sub Unwrapped {
-	my $unescape = Mail::IMAPClient::Unescape(@_);
-	$unescape =~ s/^"(.*)"$/$1/ if defined($unescape);
-	return $unescape;
+    if ($self->{bodytype} eq 'MULTIPART')
+    {   my $p = $self->{_id} || $self->{_prefix};
+        $p =~ s/\.$//;
+        return $p;
+    }
+    else
+    {   return $self->{_id}  ||= 1;
+    }
 }
 
 package Mail::IMAPClient::BodyStructure::Part;
-@ISA = qw/Mail::IMAPClient::BodyStructure/;
-
+our @ISA = qw/Mail::IMAPClient::BodyStructure/;
 
 package Mail::IMAPClient::BodyStructure::Envelope;
-@ISA = qw/Mail::IMAPClient::BodyStructure/;
+our @ISA = qw/Mail::IMAPClient::BodyStructure/;
 
-sub new {
-	my $class = shift;
-	my $envelope = shift;
-	my $self 		= $Mail::IMAPClient::BodyStructure::parser->envelope($envelope);
-	return $self;
+sub new
+{   my ($class, $envelope) = @_;
+    $parser->envelope($envelope);
 }
 
+sub from_addresses    { shift->_addresses(from    => 1) }
+sub sender_addresses  { shift->_addresses(sender  => 1) }
+sub replyto_addresses { shift->_addresses(replyto => 1) }
+sub to_addresses      { shift->_addresses(to      => 0) }
+sub cc_addresses      { shift->_addresses(cc      => 0) }
+sub bcc_addresses     { shift->_addresses(bcc     => 0) }
 
-sub _do_accessor {
-  my $datum = shift;
-  if (scalar(@_) > 1) {
-    return $_[0]->{$datum} = $_[1] ;
-  } else {
-    return $_[0]->{$datum};
-  }
+sub _address($$$)
+{   my ($self, $name, $isSender) = @_;
+    ref $self->{$name} eq 'ARRAY'
+        or return ();
+
+    my @list;
+    foreach ( @{$self->{$name}} )
+    {   my $pn   = $_->personalname;
+        my $name = $pn && $pn ne 'NIL' ? "$pn " : '';
+        push @list, $pn. '<'.$_->mailboxname .'@'.  $_->hostname.'>';
+    }
+
+      wantarray ? @list
+    : $isSender ? $list[0]
+    :             \@list;
 }
 
-# the following for loop sets up accessor methods for 
-# the object's address attributes:
-
-sub _mk_address_method {
-	my $datum = shift;
-	my $method1 = $datum . "_addresses" ;
-        no strict 'refs';
-        *$method1 = sub { 
-		my $self = shift;
-		return undef unless ref($self->{$datum}) eq 'ARRAY';
-		my @list = map {
-			my $pn = $_->personalname ; 
-			$pn = "" if $pn eq 'NIL' ;
-			( $pn ? "$pn " : "" ) 	. 
-			"<"			.
-			$_->mailboxname		.
-			'@'			.
-			$_->hostname		.
-			">" 
-		} 	@{$self->{$datum}} 	;
-		if ( $senderFields{$datum} ) {
-			return wantarray ? @list : $list[0] ;
-		} else {
-			return wantarray ? @list : \@list ;
-		}
-	};
-}
-
-BEGIN {
-
- for my $datum ( 
-	qw( subject inreplyto from messageid bcc date replyto to sender cc )
- ) {
-        no strict 'refs';
-        *$datum = sub { _do_accessor($datum, @_); };
- }
- my %senderFields = map { ($_ => 1) } qw/from sender replyto/ ;
- for my $datum ( 
-	qw( from bcc replyto to sender cc )
- ) {
-	_mk_address_method($datum);
- }
+BEGIN
+{   no strict 'refs';
+    for my $datum ( qw(subject inreplyto from messageid bcc date
+                       replyto to sender cc))
+    {  *$datum = sub { @_ > 1 ? $_[0]->{$datum} = $_[1] : $_[0]->{$datum} }
+    }
 }
 
 
 package Mail::IMAPClient::BodyStructure::Address;
 @ISA = qw/Mail::IMAPClient::BodyStructure/;
 
-for my $datum ( 
-	qw( personalname mailboxname hostname sourcename )
- ) {
-	no strict 'refs';
-	*$datum = sub { return $_[0]->{$datum}; };
+for my $datum ( qw(personalname mailboxname hostname sourcename) )
+{   no strict 'refs';
+    *$datum = sub { shift->{$datum}; };
 }
 
 1;
+
 __END__
 
 =head1 NAME
 
-Mail::IMAPClient::BodyStructure - Perl extension to Mail::IMAPClient to facilitate 
-the parsing of server responses to the FETCH BODYSTRUCTURE and FETCH ENVELOPE
-IMAP client commands.
+Mail::IMAPClient::BodyStructure - parse fetched results
 
 =head1 SYNOPSIS
 
@@ -297,20 +202,14 @@ IMAP client commands.
 
   my @recent = $imap->search("recent");
 
-  foreach my $new (@recent) {
+  foreach my $id (@recent)
+  {   my $fetched = $imap->fetch($id, "bodystructure");
+      my $struct = Mail::IMAPClient::BodyStructure->new($fetched);
 
-	my $struct = Mail::IMAPClient::BodyStructure->new(
-			$imap->fetch($new,"bodystructure")
-	);
-
-	print	"Msg $new (Content-type: ",$struct->bodytype,"/",$struct->bodysubtype,
-        	") contains these parts:\n\t",join("\n\t",$struct->parts),"\n\n";
-
-
+      my $mime   = $struct->bodytype."/".$struct->bodysubtype;
+      my $parts  =join "\n\t", $struct->parts;
+      print "Msg $id (Content-type: $mime) contains these parts:\n\t$parts\n";
   }
-
-
-  
 
 =head1 DESCRIPTION
 
@@ -450,16 +349,16 @@ An envelope structure's B<Mail::IMAPClient::BodyStructure::Envelope>
 representation is a hash of thingies that looks like this:
 
   {
-     subject => 	"subject",
-     inreplyto =>	"reference_message_id",
-     from => 		[ addressStruct1 ],
-     messageid => 	"message_id",
-     bcc => 		[ addressStruct1, addressStruct2 ],
-     date => 		"Tue, 09 Jul 2002 14:15:53 -0400",
-     replyto => 	[ adressStruct1, addressStruct2 ],
-     to => 		[ adressStruct1, addressStruct2 ],
-     sender => 		[ adressStruct1 ],
-     cc => 		[ adressStruct1, addressStruct2 ],
+     subject =>     "subject",
+     inreplyto =>    "reference_message_id",
+     from =>         [ addressStruct1 ],
+     messageid =>     "message_id",
+     bcc =>         [ addressStruct1, addressStruct2 ],
+     date =>         "Tue, 09 Jul 2002 14:15:53 -0400",
+     replyto =>     [ adressStruct1, addressStruct2 ],
+     to =>         [ adressStruct1, addressStruct2 ],
+     sender =>         [ adressStruct1 ],
+     cc =>         [ adressStruct1, addressStruct2 ],
   }
 
 The B<...::Envelope> object also has methods for accessing data in the
@@ -477,7 +376,7 @@ Returns the message id of the message to which this message is a reply.
 
 =item subject
 
-Returns the subject of the message. 
+Returns the subject of the message.
 
 =item messageid
 
@@ -553,7 +452,7 @@ by the way.)
 
 =item cc_addresses
 
-Returns a list of cc'ed recipients' email addresses. If called in a scalar 
+Returns a list of cc'ed recipients' email addresses. If called in a scalar
 context it returns a reference to an array of email addresses.
 
 =item from_addresses
@@ -579,14 +478,14 @@ it returns a reference to an array of email addresses.
 
 =back
 
-Note that context affects the behavior of all of the above methods. 
+Note that context affects the behavior of all of the above methods.
 
-Those fields that will commonly contain multiple entries (i.e. they are 
-recipients) will return an array reference when called in scalar context. 
+Those fields that will commonly contain multiple entries (i.e. they are
+recipients) will return an array reference when called in scalar context.
 You can use this behavior to optimize performance.
 
-Those fields that will commonly contain just one address (the sender's) will 
-return the first (and usually only) address. You can use this behavior to 
+Those fields that will commonly contain just one address (the sender's) will
+return the first (and usually only) address. You can use this behavior to
 optimize your development time.
 
 =head1 Addresses and the Mail::IMAPClient::BodyStructure::Address
@@ -595,12 +494,11 @@ Several components of an envelope structure are address
 structures. They are each parsed into their own object,
 B<Mail::IMAPClient::BodyStructure::Address>, which looks like this:
 
-	  {
-            mailboxname 	=> 'somebody.special',
-            hostname 		=> 'somplace.weird.com',
-            personalname 	=> 'Somebody Special
-            sourceroute 	=> 'NIL'
-          } 
+   { mailboxname  => 'somebody.special'
+   , hostname     => 'somplace.weird.com'
+   , personalname => 'Somebody Special
+   , sourceroute  => 'NIL'
+   }
 
 RFC2060 specifies that each address component of a bodystructure is a
 list of address structures, so B<Mail::IMAPClient::BodyStructure> parses
@@ -623,7 +521,7 @@ right of the '@' sign.
 
 =item personalname
 
-Returns the "personalname" portion of the address, which is the part of 
+Returns the "personalname" portion of the address, which is the part of
 the address that's treated like a comment.
 
 =item sourceroute
@@ -632,7 +530,7 @@ Returns the "sourceroute" portion of the address, which is typically "NIL".
 
 =back
 
-Taken together, the parts of an address structure form an address that will 
+Taken together, the parts of an address structure form an address that will
 look something like this:
 
 C<personalname E<lt>mailboxname@hostnameE<gt>>
@@ -651,11 +549,11 @@ B<Mail::IMAPClient::BodyStructure::Envelope> need them anyway.)
 
 David J. Kernen
 
+Reworked by Mark Overmeer.
+
 =head1 SEE ALSO
 
-perl(1), Mail::IMAPClient, and RFC2060. See also Parse::RecDescent if you want
-to understand the internals of this module.
+perl(1), Mail::IMAPClient, and RFC2060. See also Parse::RecDescent if you
+want to understand the internals of this module.
 
 =cut
-
-1;

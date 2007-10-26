@@ -1,7 +1,5 @@
 #!/usr/bin/perl
 
-my $uid;
-
 use warnings;
 use strict;
 
@@ -13,6 +11,7 @@ my $debug   = $ARGV[0];
 my %parms;
 my $range   = 0;
 my $uidplus = 0;
+my $fast    = 1;
 
 BEGIN
 {   open TST, 'test.txt'
@@ -21,7 +20,7 @@ BEGIN
     while(my $l = <TST>)
     {   chomp $l;
         my($p,$v) = split /\=/, $l, 2;
-        s/(?:^\s+)|(?:\s+$)//g for $p, $v;
+        s/^\s+//, s/\s+$// for $p, $v;
         $parms{$p} = $v if $v;
     }
 
@@ -29,10 +28,10 @@ BEGIN
 
     foreach my $p ( qw/server user passed/ )
     {   $parms{$p}
-           or plan skip_all => "missing value for $_"
+           or plan skip_all => "missing value for $p"
     }
 
-    plan tests => 40;
+    plan tests => 49;
 }
 
 use_ok('Mail::IMAPClient');
@@ -42,20 +41,20 @@ my $imap = Mail::IMAPClient->new
  , Port    => $parms{port}
  , User    => $parms{user}
  , Password => $parms{passed}
- , Authmechanism  => $parms{$authmech}
+ , Authmechanism  => $parms{authmech}
  , Clear   => 0
- , Timeout => 30
  , Fast_IO => $fast
  , Uid     => $uidplus
  , Range   => $range
 
- , Debug   => $debug
+ , Debug    => $debug
  , Debug_fh => ($debug ? IO::File->new('imap1.debug', 'w') : undef)
-);
+ );
 
 ok(defined $imap, 'created client');
-die "Cannot log into $parms{server} as $parms{user}.\n"
-  . "Are server/user/password correct?\n" ;
+$imap
+   or die "Cannot log into $parms{server} as $parms{user}.\n"
+        . "Are server/user/password correct?\n" ;
 
 isa_ok($imap, 'Mail::IMAPClient');
 
@@ -75,9 +74,9 @@ __TEST_MSG
 my $sep = $imap->separator;
 ok(defined $sep, "separator is '$sep'");
 
-my $isparent = $imap->is_parent(INBOX) || 0;
+my $isparent = $imap->is_parent('INBOX');
 my ($target, $target2) = $isparent
-  ? ("INBOX${sep}IMAPClient_$$", "INBOX${sep}IMAPClient_2_$$");
+  ? ("INBOX${sep}IMAPClient_$$", "INBOX${sep}IMAPClient_2_$$")
   : ("IMAPClient_$$", "IMAPClient_2_$$");
 
 ok(1, "parent $isparent, target $target");
@@ -101,8 +100,8 @@ else
 {   if($imap->LastError =~ /NO Invalid.*name/)
          { ok(1, "$parms{server} doesn't support quotes in folder names") }
     else { ok(0, "failed creation with quotes") }
-    ok(1, "skipping 1/2 tests);
-    ok(1, "skipping 2/2 tests);
+    ok(1, "skipping 1/2 tests");
+    ok(1, "skipping 2/2 tests");
 }
 
 ok($imap->exists($target), "exists $target");
@@ -114,22 +113,22 @@ ok(defined $uid, "append test message to $target");
 
 ok($imap->select($target), "select $target");
 
-$target  = ref $uid ? $imap->search("ALL"))[0] : $uid;
-my $size = $imap->size($target);
+my $msg  = ref $uid ? ($imap->search("ALL"))[0] : $uid;
+my $size = $imap->size($msg);
 cmp_ok($size, '>', 0, "has size $size");
 
-my $string = $imap->message_string($target);
-ok($string, "returned string");
+my $string = $imap->message_string($msg);
+ok(defined $string, "returned string");
 
-cmp_ok($size, '==', length($string), "string has size");
+cmp_ok(length($string), '==', $size, "string has size");
 
 {  my ($fh, $fn) = tempfile UNLINK => 1;
-   ok($imap->message_to_file($fn, $target), "to file $fn");
+   ok($imap->message_to_file($fn, $msg), "to file $fn");
 
    cmp_ok(-s $fn, '==', $size, "correct size");
 }
 
-my $fields = $imap->search("HEADER","Message-id","NOT_A_MESSAGE_ID")};
+my $fields = $imap->search("HEADER", "Message-id", "NOT_A_MESSAGE_ID");
 ok(!defined $fields, 'message id does not exist');
 
 my @seen = $imap->seen;
@@ -168,9 +167,10 @@ my $h = $imap->parse_headers(1, "Subject");
 ok($h, "got subject");
 like($h->{Subject}[0], qr/^Testing from pid/);
 
-$imap->select($target);
+ok($imap->select($target), "select $target");
 my @hits = $imap->search(SUBJECT => 'Testing');
-cmp_ok(scalar @hits, '==', 1);
+cmp_ok(scalar @hits, '==', 1, 'hit subject Testing');
+ok(defined $hits[0]);
 
 ok($imap->delete_message(@hits), 'delete hits');
 my $flaghash = $imap->flags(\@hits);
@@ -184,23 +184,25 @@ my @nohits = $imap->search(qq(SUBJECT "Productioning"));
 cmp_ok(scalar @nohits, '==', 0, 'no hits expected');
 
 ok($imap->restore_message(@hits), 'restore messages');
-my $flaghash = $imap->flags(\@hits);
-my $flagflag = 0
+
+$flaghash = $imap->flags(\@hits);
 foreach my $v ( values %$flaghash )
-{   $flagflag += grep /\\Deleted/, @$v;
+{   for my $f (@$v)
+    {   $flagflag -= 1 unless grep /\\Deleted/, $f;
+    }
 }
-cmp_ok($flagflag, '==', scalar @hits);
+cmp_ok($flagflag, '==', 0);
 
 $imap->select($target2);
 ok(   $imap->delete_message(scalar($imap->search("ALL"))) 
    && $imap->close
-   && imap->delete($target2) , "delete $target2");
+   && $imap->delete($target2) , "delete $target2");
 
 $imap->select("INBOX");
-$@ = ""; # clear $@
+$@ = "";
 @hits = $imap->search
   (BEFORE => Mail::IMAPClient::Rfc2060_date(time), "UNDELETED");
-ok(!$@, 'search undeleted');
+ok(!$@, "search undeleted: $@");
 
 #
 # Test migrate method
@@ -215,7 +217,7 @@ my $im2 = Mail::IMAPClient->new
   , Clear   => 0,
   , Timeout => 30,
   , Debug   => $debug
-  , Debug_fh   => ($debug IO::File->new(">./imap2.debug") : undef)
+  , Debug_fh   => ($debug ? IO::File->new(">./imap2.debug") : undef)
   , Fast_IO => $fast
   , Uid     => $uidplus
   );
@@ -263,7 +265,7 @@ for ($im2->search("ALL"))
     $total_bytes2 += $s; print "Size of msg $_ is $s\n" if $debug
 }
 
-cmp_ok($@, '==', '');
+cmp_ok($@, 'eq', '');
 cmp_ok($total_bytes1, '==', $total_bytes2, 'size source==target');
 
 # cleanup

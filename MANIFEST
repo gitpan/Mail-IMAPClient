@@ -21,12 +21,10 @@ INSTALL
 sample.perldb
 test_template.txt
 prepare_dist
-lib/Mail/IMAPClient/BodyStructure.grammar
 lib/Mail/IMAPClient/BodyStructure/Parse.grammar
 lib/Mail/IMAPClient/BodyStructure/Parse.pm
 lib/Mail/IMAPClient/BodyStructure/Parse.pod
 lib/Mail/IMAPClient/BodyStructure.pm
-lib/Mail/IMAPClient.cleanup
 lib/Mail/IMAPClient/MessageSet.pm
 lib/Mail/IMAPClient.pm
 lib/Mail/IMAPClient.pod

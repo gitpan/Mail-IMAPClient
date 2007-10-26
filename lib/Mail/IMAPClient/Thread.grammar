@@ -16,4 +16,3 @@ thread:	"(" threadmember(s) ")"
 start: /^\* THREAD /i thread(s?) {
 	$return=$item{'thread(s?)'}||undef;
 }
-

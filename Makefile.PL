@@ -24,6 +24,8 @@ WriteMakefile
     , 'Carp'         => 0
     , 'IO::Socket::INET'  => 1.26
     , 'Parse::RecDescent' => 1.94
+    , 'Digest::HMAC_MD5'  => 0
+    , 'MIME::Base64' => 0
 
     , 'Test::More'   => 0
     , 'File::Temp'   => 0.18
@@ -85,23 +87,24 @@ __INTRO
 
     print TST "passed=$passed\n";
 
-    my $port = prompt "\nPlease provide the port to connect to on $server"
+    my $port = prompt "\nPlease provide the port to connect to on $server "
                     . "to run the test\n(default is 143)";
     chomp $port;
     $port ||= 143; 
     print TST "port=$port\n";
 
     my $authmech = prompt "\nProvide the authentication mechanism to use "
-                        . "on $server to\nrun the test (default is 'LOGIN', "
-                        . "which uses the plain text LOGIN command)";
+                        . "on $server to\nrun the test (default is LOGIN)";
+
     chomp $authmech;
     $authmech ||= 'LOGIN'; 
     print TST "authmechanism=$authmech\n";
     close TST;
 
     print <<'__THANKS';
+
 Gracias! The information you provided (including the password!) has
-been stored in test.txt and should be removed (either by hand or by
+been stored in test.txt and SHOULD BE REMOVED (either by hand or by
 'make clean') after testing.
 __THANKS
 
