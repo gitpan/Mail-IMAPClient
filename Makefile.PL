@@ -2,14 +2,6 @@ use ExtUtils::MakeMaker;
 use warnings;
 use strict;
 
-eval "require Parse::RecDescent";
-$@ and warn <<'__NO_BODY';
-  *** NOTE ***
-  Unable to find and load Parse::RecDescent.
-  Mail::IMAPClient will be installed without support for the
-  get_bodystructure() method.
-__NO_BODY
-
 WriteMakefile
  ( NAME         => 'Mail::IMAPClient',
  , ABSTRACT     => 'IMAP4 client library'

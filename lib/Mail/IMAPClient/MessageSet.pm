@@ -3,7 +3,7 @@ use strict;
 
 package Mail::IMAPClient::MessageSet;
 
-=head1 NAME
+=chapter NAME
 
 Mail::IMAPClient::MessageSet -- ranges of message sequence nummers
 
@@ -26,7 +26,7 @@ sub new
 sub str { overload::StrVal( ${$_[0]} ) }
 
 sub _unfold_range($)
-{   map { /(\d+)\:(\d+)/ ? ($1..$2) : $_ }
+{   map { /(\d+)\s*\:\s*(\d+)/ ? ($1..$2) : $_ }
         split /\,/, shift;
 }
 
@@ -59,9 +59,6 @@ sub range
     @msgs
         or return undef;
 
-
-use Carp;
-confess "@_" if $msgs[0] =~ /\D/;
     @msgs = sort {$a <=> $b} @msgs;
     my $low = my $high = shift @msgs;
 
@@ -79,7 +76,6 @@ confess "@_" if $msgs[0] =~ /\D/;
     push @ranges, $low == $high ? $low : "$low:$high" ;
     join ",", @ranges;
 }
-
 
 sub unfold
 {   my $self = shift;

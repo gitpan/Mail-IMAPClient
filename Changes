@@ -1,9 +1,41 @@
-Revision History for Perl extension Mail::IMAPClient.  
+
+== Revision History for Mail::IMAPClient
+All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
+before that are applied by David Kernen
+
+version 2.99_04: Sat Nov 10 20:55:18 CET 2007
+
+	Changes:
+
+	- Simplified initiation of IMAP object with own Socket with a new
+	  option: RawSocket [Flavio Poletti]
+
+	Fixes:
+
+	- fixed read_line [Flavio Poletti]
+
+	- fixed test-run in t/basic.t [Flavio Poletti]
+
+version 2.99_03: Thu Nov  1 12:36:44 CET 2007
+
+	Fixes:
+
+	- Remove note about optional Parse::RecDescent by Makefile.PL;
+	  it is not optional anymore
+
+	Improvements:
+
+	- When syswrite() returns 0, that might be caused by an error
+	  as well.  Take the timeout/maxtemperrors track.
+	  rt.cpan.org#4701 [C Meyer]
+
+	- add NTLM support for logging-in, cleanly intergrated. Requires
+	  the user to install Authen::NTLM.
 
 version 2.99_02: Fri Oct 26 11:47:35 CEST 2007
 
 	The whole Mail::IMAPClient was rewritten, hopefully without
-	breaking the interface.  Nearly no line is untouched.
+	breaking the interface.  Nearly no line was untouched.
 
 	The following things happened:
 	 - use warnings, use strict everywhere
@@ -21,7 +53,7 @@ version 2.99_02: Fri Oct 26 11:47:35 CEST 2007
 	   shorter, and certainly better understandable!
 	 - fixed many potential bugs.
 	 - labeled some weird things with #????
-	Over 900 lines and 25kB smaller in size (25%)
+	Over 1000 lines (30%!) and 25kB smaller in size
 	Needs to be tested!!!! Volunteers?
 
 	Fixes:

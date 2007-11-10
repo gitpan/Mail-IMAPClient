@@ -52,9 +52,8 @@ my $imap = Mail::IMAPClient->new
  );
 
 ok(defined $imap, 'created client');
-$imap
-   or die "Cannot log into $parms{server} as $parms{user}.\n"
-        . "Are server/user/password correct?\n" ;
+$imap or die "Cannot log into $parms{server} as $parms{user}.\n"
+           . "Are server/user/password correct?\n" ;
 
 isa_ok($imap, 'Mail::IMAPClient');
 
@@ -175,7 +174,7 @@ ok(defined $hits[0]);
 ok($imap->delete_message(@hits), 'delete hits');
 my $flaghash = $imap->flags(\@hits);
 my $flagflag = 0;
-foreach my $v ( values %$flaghash )
+foreach my $v (values %$flaghash)
 {   $flagflag += grep /\\Deleted/, @$v;
 }
 cmp_ok($flagflag, '==', scalar @hits);
@@ -186,10 +185,8 @@ cmp_ok(scalar @nohits, '==', 0, 'no hits expected');
 ok($imap->restore_message(@hits), 'restore messages');
 
 $flaghash = $imap->flags(\@hits);
-foreach my $v ( values %$flaghash )
-{   for my $f (@$v)
-    {   $flagflag -= 1 unless grep /\\Deleted/, $f;
-    }
+foreach my $v (values %$flaghash)
+{   $flagflag-- unless grep /\\Deleted/, @$v;
 }
 cmp_ok($flagflag, '==', 0);
 

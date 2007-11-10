@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '2.99_02';
+our $VERSION = '2.99_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -108,20 +108,6 @@ sub Fast_io(;$)
 # removed
 sub EnableServerResponseInLiteral {undef}
 
-sub Socket(;$)
-{   my ($self, $sock) = @_;
-    defined $sock
-        or return $self->{Socket};
-
-    $self->{Socket} = $sock;
-    $self->{_select} = IO::Select->new($sock);
-
-    delete $self->{_fcntl};
-    $self->Fast_io($self->Fast_io);
- 
-    $sock;
-}
-
 sub Wrap { shift->Clear(@_) }
 
 # The following class method is for creating valid dates in appended msgs:
@@ -221,10 +207,17 @@ sub new
         $self->_debug("Using Mail::IMAPClient version $VERSION on perl $]");
     }
 
-    if($self->{Socket})    { $self->Socket($self->{Socket}) }
-    elsif($self->{Server}) { return $self->connect }
+    $self->Socket($self->{Socket})
+        if $self->{Socket};
 
-    $self;
+    if($self->{Rawsocket})
+    {
+        my $sock = delete $self->{Rawsocket};
+        # Ignore Rawsocket if Socket has already been set -- TODO carp/croak?
+        $self->RawSocket($sock) unless $self->{Socket};
+    }
+
+    !$self->{Socket} && $self->{Server} ?  $self->connect : $self;
 }
 
 sub connect(@)
@@ -252,6 +245,28 @@ sub connect(@)
 
     $self->_debug("Connected to $server");
     $self->Socket($sock);
+}
+
+sub RawSocket(;$)
+{   my ($self, $sock) = @_;
+    defined $sock
+        or return $self->{Socket};
+
+    $self->{Socket} = $sock;
+    $self->{_select} = IO::Select->new($sock);
+
+    delete $self->{_fcntl};
+    $self->Fast_io($self->Fast_io);
+ 
+    $sock;
+}
+
+sub Socket($)
+{   my ($self, $sock) = @_;
+    defined $sock
+        or return $self->{Socket};
+
+    $self->RawSocket($sock);
     $self->State(Connected);
 
     my $code;
@@ -261,18 +276,18 @@ sub connect(@)
         {   $self->_record($self->Count, $o);
             next unless $o->[TYPE] eq "OUTPUT";
 
-            $code = $o->[DATA] =~ /^\*\s+(OK|BAD|NO|PREAUTH)/i ? $1 : undef;
+            $code = $o->[DATA] =~ /^\*\s+(OK|BAD|NO|PREAUTH)/i ? uc($1) : undef;
             last LINE;
         }
     }
     $code or return undef;
 
-    if($code =~ /BYE|NO /)
+    if($code eq 'BYE' || $code eq 'NO')
     {   $self->State(Unconnected);
         return undef;
     }
 
-    if($code =~ /PREAUTH/ )
+    if($code eq 'PREAUTH')
     {   $self->State(Authenticated);
         return $self;
     }
@@ -301,7 +316,7 @@ sub separator
 {   my ($self, $target) = @_;
     unless(defined $target)
     {   # separator is namespace's 1st thing's 1st thing's 2nd thing:
-        my $sep = $self->namespace->[0][0][1];
+        my $sep = eval { $self->namespace->[0][0][1] };
         return $sep if $sep;
         $target = '';
     }
@@ -811,7 +826,7 @@ sub migrate
                         $temperrs = 0;
                     }
 
-                    if($! == EAGAIN)
+                    if($! == EAGAIN || $ret==0)
                     {   if(defined $maxagain && $temperrs++ > $maxagain)
                         {   $self->LastError("Persistent '$!' errors");
                             return undef;
@@ -1327,7 +1342,7 @@ sub _read_line
 
             my $litstring = $iBuffer;
 
-            while($expected_size > length $iBuffer)
+            while($expected_size > length $litstring)
             {   if($timeout)
                 {    # wait for data from the the IMAP socket.
                      my $rvec = 0;
@@ -1345,8 +1360,8 @@ sub _read_line
                 fcntl($socket, F_SETFL, $self->{_fcntl})
                     if $fast_io && defined $self->{_fcntl};
 
-                my $ret = $self->_sysread($socket
-                , \$litstring, $expected_size - $litstring, length $litstring);
+                my $ret = $self->_sysread($socket, \$litstring
+                  , $expected_size - length $litstring, length $litstring);
 
                 $self->_debug("Received ret=$ret and buffer = " .
                    "\n$litstring<END>\nwhile processing LITERAL");
@@ -2182,8 +2197,9 @@ sub namespace {
         return undef;
     }
 
+    my $got = $self->_imap_command("NAMESPACE") or return ();
     my @namespaces = map { /^\* NAMESPACE (.*)/ ? $1 : () }
-        $self->_imap_command("NAMESPACE")->Results;
+       $got->Results;
 
     my $namespace = shift @namespaces;
     $namespace    =~ s/\r?\n$//;
@@ -2511,6 +2527,15 @@ sub authenticate
                . chr(0) . $client->Password);
           };
     }
+    elsif($scheme eq 'NTLM')
+    {   $response ||= sub
+         { my ($code, $client) = @_;
+           require Authen::NTLM;
+           Authen::NTLM::ntlm_user($self->User);
+           Authen::NTLM::ntlm_password($self->Password);
+           Authen::NTLM::ntlm();
+         };
+    }
 
     unless($self->_send_line($response->($code, $self)))
     {   $self->LastError("Error sending append msg text to IMAP: $!");
@@ -2543,6 +2568,9 @@ sub authenticate
 
     $code eq 'OK'
         or return undef;
+
+    Authen::NTLM::ntlm_reset()
+        if $scheme eq 'NTLM';
 
     $self->State(Authenticated);
     $self;

@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Mail-IMAPClient
-version:             2.99_02
+version:             2.99_04
 abstract:            IMAP4 client library
 license:             ~
 generated_by:        ExtUtils::MakeMaker version 6.32
