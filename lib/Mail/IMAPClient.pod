@@ -680,8 +680,8 @@ Example:
 
 	my $new_msg_uid = $imap->append_file(
 		$folder,
-		$filename 
-		[ , $input_record_separator ]	# optional (not arrayref)
+		$filename,
+		[$input_record_separator, flags, date] # optional
 	) 	or die "Could not append_file: $@\n";
 
 The B<append_file> method adds a message to the specified folder. It
@@ -716,10 +716,9 @@ depending on whether you supplied that optional third argument).
 
 Example:
 
-	# brackets indicate optional arguments (not array refs):
-
-	my $uid = $imap->append_string( $folder, $text [ , $flags [ , $date ] ]) 	
-		or die "Could not append_string: $@\n";
+   # brackets indicate optional arguments (not array refs):
+   my $uid = $imap->append_string( $folder, $text [,$flags [,$date ] ]) 	
+       or die "Could not append_string: $@\n";
 
 The B<append_string> method adds a message to the specified folder. It
 requires two arguments, the name of the folder to append the message
@@ -2377,7 +2376,7 @@ will B<Mail::IMAPClient>.
 
 If you'd like, you can use the L<Rfc2060_date> method to convert from
 epoch time (as returned by L<time|perlfunc/time>) into an RFC2060 date
-specification. 
+specification.
 
 =cut
 

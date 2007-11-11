@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '2.99_04';
+our $VERSION = '2.99_05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -120,8 +120,8 @@ sub Rfc822_date
     my $date  = $class =~ /^\d+$/ ? $class : shift;  # method or function?
     my @date  = gmtime $date;
 
-    sprintf "%s, %2.2d %s %4.4s %2.2d:%2.2d:%2.2d -%4.4d"
-      , $dow[$date[6]], $date[3], $mnt[$date[4]], $date[5]+=1900
+    sprintf "%s, %02d %s %04d %02d:%02d:%02d -%04d"
+      , $dow[$date[6]], $date[3], $mnt[$date[4]], $date[5]+1900
       , $date[2], $date[1], $date[0], $date[8];
 }
 
@@ -129,13 +129,22 @@ sub Rfc822_date
 # in IMAP search strings:
 
 sub Rfc2060_date
-{   my $class = shift; # 11-Jan-2000
-    my $date  = $class =~ /^\d+$/ ? $class : shift; # method or function
-    my @date  = gmtime $date;
+{   my $class = shift; # 11-Jan-2000 
+    my $stamp = $class =~ /^\d+$/ ? $class : shift; # method or function
+    my @date  = gmtime $stamp;
 
-    sprintf "%2.2d-%s-%4.4s", $date[3], $mnt[$date[4]], $date[5]+=1900;
+    sprintf "%02d-%s-%04d", $date[3], $mnt[$date[4]], $date[5]+1900;
 }
 
+sub Rfc2060_datetime
+{   my ($class, $stamp) = @_; # 11-Jan-2000 04:04:04
+    my @date  = gmtime $stamp;
+
+    sprintf "%02d-%s-%04d %02d:%02d:%02d", $date[3], $mnt[$date[4]]
+      , $date[5]+1900, $date[2], $date[1], $date[0];
+}
+
+# Change CRLF into \n
 # Change CRLF into \n
 
 sub Strip_cr
@@ -695,12 +704,12 @@ sub migrate
 
             $self->_debug("Copied message $mid in folder $folder to "
                 . $peer->User . '@' . $peer->Server
-                . ". New Message UID is $new_mid")
+                . ". New message UID is $new_mid")
                 if $self->Debug;
 
             $peer->_debug("Copied message $mid in folder $folder from "
                 .  $self->User .  '@' . $self->Server
-                . ". New Message UID is $new_mid")
+                . ". New message UID is $new_mid")
                 if $peer->Debug;
 
             next MSG;
@@ -1512,8 +1521,8 @@ sub logout
 sub folders
 {   my ($self, $what) = @_;
 
-    ref $self->{Folders} && !$what
-        or return wantarray ? @{$self->{Folders}} : $self->{Folders};
+    return wantarray ? @{$self->{Folders}} : $self->{Folders}
+        if ref $self->{Folders} && !$what;
 
     my @folders;
     my @list = $self->list(undef,($what ? $what.$self->separator($what)."*" : undef ) );
@@ -2063,7 +2072,7 @@ sub search
     }
 
     @hits
-        or $self->_debug("Search successfu but found no matching messages");
+        or $self->_debug("Search successfull but found no matching messages");
 
       wantarray     ? @hits
     : !@hits        ? undef
@@ -2076,8 +2085,11 @@ my $thread_parser;
 sub thread
 {   my $self      = shift;
     my $algorythm = shift ||
-     ($self->has_capability("THREAD=REFERENCES")?"REFERENCES":"ORDEREDSUBJECT");
-    my $charset   = shift || "UTF-8";
+     ( $self->has_capability("THREAD=REFERENCES")
+     ? 'REFERENCES'
+     : 'ORDEREDSUBJECT'
+     );
+    my $charset   = shift || 'UTF-8';
     my @a         = @_ ? @_ : 'ALL';
 
     $a[-1] = $self->Massage($a[-1], 1)
@@ -2295,7 +2307,7 @@ sub append_string($$$;$$)
     my $folder = $self->Massage(shift);
     my ($text, $flags, $date) = @_;
 
-    if(defined($flags))
+    if(defined $flags)
     {   $flags =~ s/^\s+//g;
         $flags =~ s/\s+$//g;
         $flags = "($flags)" if $flags !~ /^\(.*\)$/;
@@ -2347,19 +2359,21 @@ sub append_string($$$;$$)
         }
     }
 
+    my $data = join ''
+      , map {$_->[TYPE] eq "OUTPUT" ? $_->[DATA] : ()}
+           @$output;
 
-    my $data = join "",map {$_->[TYPE] eq "OUTPUT" ? $_->[DATA] : ()} @$output;
-    $data =~ m#\s+(\d+)\]# ? $1 : $self;
+    $data =~ m#\s+(\d+)\]# ? $1 : $self;   #????
 }
 
 sub append_file
-{   my $self    = shift;
-    my $folder  = $self->Massage(shift);
-    my $file    = shift;
-    my $control = shift;
-
+{   my ($self, $folder, $file, $control, $flags, $use_filetime) = @_;
     my $count   = $self->Count($self->Count+1);  #???? too early?
+    my $mfolder = $self->Massage($folder);
 
+    $flags ||= '';
+    my $fflags = $flags =~ m/^\(.*\)$/ ? $flags : "($flags)";
+    
     unless(-f $file)
     {   $self->LastError("File $file not found.");
         return undef;
@@ -2371,6 +2385,12 @@ sub append_file
         return undef;
     }
 
+    my $date = '';
+    if($use_filetime)
+    {   my $f = $self->Rfc2060_datetime(($fh->stat)[9]);
+        $date = qq{"$f" };
+    }
+
     my $bare_nl_count = grep m/^\n$|[^\r]\n$/, <$fh>;
 
     seek($fh,0,0);
@@ -2380,7 +2400,7 @@ sub append_file
         if $self->Count >= $clear and $clear > 0;
 
     my $length = $bare_nl_count + -s $file;
-    my $string = "$count APPEND $folder {$length}\r\n";
+    my $string = "$count APPEND $mfolder $fflags $date\{$length}\r\n";
 
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 

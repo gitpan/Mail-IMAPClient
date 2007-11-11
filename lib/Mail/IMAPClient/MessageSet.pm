@@ -3,7 +3,7 @@ use strict;
 
 package Mail::IMAPClient::MessageSet;
 
-=chapter NAME
+=head1 NAME
 
 Mail::IMAPClient::MessageSet -- ranges of message sequence nummers
 
@@ -82,7 +82,7 @@ sub unfold
     wantarray ? ( _unfold_range $$self ) : [ _unfold_range $$self ];
 }
 
-=head2 SYNOPSIS
+=head1 SYNOPSIS
 
  my @msgs = $imap->search("SUBJECT","Virus"); # returns 1,3,4,5,6,9,10
  my $msgset = Mail::IMAPClient::MessageSet->new(@msgs);
@@ -107,7 +107,7 @@ sub unfold
  print join("\n", @$msgset)."\n";     # same simpler
  local $" = "\n"; print "@$msgset\n"; # even more simple
 
-=head2 DESCRIPTION
+=head1 DESCRIPTION
 
 The B<Mail::IMAPClient::MessageSet> module is designed to make life easier
 for programmers who need to manipulate potentially large sets of IMAP

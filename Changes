@@ -3,6 +3,23 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 2.99_05:
+
+	Fixes:
+
+	- pod error in MessageSet.pm
+
+	- folders() without argument failed. [Gerald Richter]
+
+	Improvements:
+
+	- better use of format syntax in date formatting.
+
+	- Rfc2060_datetime also contains the time.
+
+	- append_file() now has options to pass flags and time of file
+	  in one go. [Thomas Jarosch]
+
 version 2.99_04: Sat Nov 10 20:55:18 CET 2007
 
 	Changes:
