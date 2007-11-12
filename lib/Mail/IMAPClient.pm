@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '2.99_05';
+our $VERSION = '2.99_06';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1574,7 +1574,7 @@ sub get_bodystructure
 
     my @out = $self->fetch($msg,"BODYSTRUCTURE");
     my $bs = "";
-    my $output = grep /BODYSTRUCTURE \(/i, @out;    # Wee! ;-)
+    my $output = first { /BODYSTRUCTURE\s+\(/i } @out;    # Wee! ;-)
     if($output =~ /\r\n$/)
     {   $bs = eval { Mail::IMAPClient::BodyStructure->new($output) };
     }

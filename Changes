@@ -3,7 +3,19 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
-version 2.99_05:
+version 2.99_06: Mon Nov 12 23:21:58 CET 2007
+
+	Fixes:
+
+	- body structure can have any number of optional parameters.
+	  Patch by [Gerald Richter].
+
+	- get_bodystructure did not take the output correctly [Gerald Richter]
+
+	- parser of body-structure did not handle optional body parameters
+	  Patch by [Gerald Richter]
+
+version 2.99_05: Mon Nov 12 00:17:42 CET 2007
 
 	Fixes:
 
