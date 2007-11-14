@@ -1007,7 +1007,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::hostname
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -1311,29 +1311,15 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::basicfields
 
 		$_tok = ($_noactions) ? 0 : do { 
 
-	$return = { 
-		bodysubtype 	=> 	    $item{bodysubtype} ,
-
-		bodyparms 	=> 	    $item{bodyparms} ,
-
-		bodyid 		=> (ref     $item{'bodyid(?)'}	?
-					    $item{'bodyid(?)'}[0]	:
-					    $item{'bodyid(?)'} ),
-
-		'bodydesc' 	=> (ref     $item{'bodydesc(?)'}	?
-					    $item{'bodydesc(?)'}[0]	:
-					    $item{'bodydesc(?)'} ),
-
-		'bodyenc' 	=> (ref     $item{'bodyenc(?)'}	?
-					    $item{'bodyenc(?)'}[0]	:
-					    $item{'bodyenc(?)'} ),
-
-		'bodysize' 	=> (ref     $item{'bodysize(?)'}	?
-					    $item{'bodysize(?)'}[0]	:
-					    $item{'bodysize(?)'} ),
+	
+	   $return =
+	     { bodysubtype => $item{bodysubtype}
+	     , bodyparms   => $item{bodyparms}
+             };
+           $return->{$_} = ref $item{"$_(?}"} ? $item{"$_(?}"}[0] :$item{"$_(?}"}
+	       for qw/bodyid bodydesc bodyenc bodysize/;
+	   $return;
 	};
-	$return;
-};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -1552,7 +1538,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::personalname
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -2204,7 +2190,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyMD5
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -2414,10 +2400,9 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::envelope
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do {
-		$return = $item{envelopestruct} ;
-		$return||defined($return) ;
-		};
+		$_tok = ($_noactions) ? 0 : do {   $return = $item{envelopestruct};
+	    $return || defined $return;
+	};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -4463,7 +4448,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::messagerfc822mess
 	while (!$_matched && !$commit)
 	{
 		
-		Parse::RecDescent::_trace(q{Trying production: [rfc822message <commit> bodyparms bodyid bodydesc bodyenc bodysize envelopestruct bodystructure textlines bodyMD5 bodydisp bodylang]},
+		Parse::RecDescent::_trace(q{Trying production: [rfc822message <commit> bodyparms bodyid bodydesc bodyenc bodysize envelopestruct bodystructure textlines bodyMD5 bodydisp bodylang bodyextra]},
 					  Parse::RecDescent::_tracefirst($_[1]),
 					  q{messagerfc822message},
 					  $tracelevel)
@@ -4856,6 +4841,34 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::messagerfc822mess
 		
 
 
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyextra]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{messagerfc822message},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		$expectation->is(q{bodyextra})->at($text);
+		
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyextra, 0, 1, $_noactions,$expectation,undef))) 
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyextra]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{messagerfc822message},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyextra]<< (}
+					. @$_tok . q{ times)},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{messagerfc822message},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{bodyextra(?)}} = $_tok;
+		push @item, $_tok;
+		
+
+
 		Parse::RecDescent::_trace(q{Trying action},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{messagerfc822message},
@@ -4867,18 +4880,18 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::messagerfc822mess
 	  $return = {}; 
 	  foreach my $what (qw/	bodyparms bodyid bodydesc bodyenc bodysize 
 				envelopestruct bodystructure textlines
-				bodyMD5(?) bodydisp(?) bodylang(?)
+				bodyMD5(?) bodydisp(?) bodylang(?) bodyextra(?)
 	  		     /
 	  ) {
 		my $k = $what; $k =~ s/\(\?\)$//;
                 $return->{$k} = ref $item{$what} =~ 'ARRAY'?
                                         $item{$what}[0] : $item{$what};
         }
-        while ( my($k,$v) = each %{$item{bodystructure}[0]} ) { $return->{$k} = $v }
-        while ( my($k,$v) = each %{$item{basicfields}}   ) { $return->{$k} = $v }
-	$return->{bodytype} 	= "MESSAGE" ; 
-	$return->{bodysubtype}= "RFC822" ;
-	$return||defined($return);
+        while(my($k,$v) = each %{$item{bodystructure}[0]}) { $return->{$k} = $v}
+        while(my($k,$v) = each %{$item{basicfields}})      { $return->{$k} = $v}
+	$return->{bodytype}    = "MESSAGE" ; 
+	$return->{bodysubtype} = "RFC822" ;
+	$return;
 	};
 		unless (defined $_tok)
 		{
@@ -4895,7 +4908,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::messagerfc822mess
 		
 
 
-		Parse::RecDescent::_trace(q{>>Matched production: [rfc822message <commit> bodyparms bodyid bodydesc bodyenc bodysize envelopestruct bodystructure textlines bodyMD5 bodydisp bodylang]<<},
+		Parse::RecDescent::_trace(q{>>Matched production: [rfc822message <commit> bodyparms bodyid bodydesc bodyenc bodysize envelopestruct bodystructure textlines bodyMD5 bodydisp bodylang bodyextra]<<},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{messagerfc822message},
 					  $tracelevel)
@@ -5210,6 +5223,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyenc
 			  $item{STRING} 	||
 			  { map { (%$_) } @{$item{'kvpair(s)'}} };
 		$return||defined($return);
+
 	};
 		unless (defined $_tok)
 		{
@@ -5454,7 +5468,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodydesc
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING} ; $return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -5663,10 +5677,10 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::start
 		
 
 		$_tok = ($_noactions) ? 0 : do {
-			#print STDERR "item = ",Data::Dumper->Dump([\%item],['$item']);
-			$return = $item{'part(1)'}[0];
-			$return||defined($return);
-		};
+	    #print STDERR "item = ",Data::Dumper->Dump([\%item],['$item']);
+	    $return = $item{'part(1)'}[0];
+	    $return || defined $return;
+	};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -5931,7 +5945,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::textmessage
 	while (!$_matched && !$commit)
 	{
 		
-		Parse::RecDescent::_trace(q{Trying production: [TEXT <commit> basicfields textlines bodyMD5 bodydisp bodylang]},
+		Parse::RecDescent::_trace(q{Trying production: [TEXT <commit> basicfields textlines bodyMD5 bodydisp bodylang bodyextra]},
 					  Parse::RecDescent::_tracefirst($_[1]),
 					  q{textmessage},
 					  $tracelevel)
@@ -6142,6 +6156,34 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::textmessage
 		
 
 
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyextra]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{textmessage},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		$expectation->is(q{bodyextra})->at($text);
+		
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyextra, 0, 1, $_noactions,$expectation,undef))) 
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyextra]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{textmessage},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyextra]<< (}
+					. @$_tok . q{ times)},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{textmessage},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{bodyextra(?)}} = $_tok;
+		push @item, $_tok;
+		
+
+
 		Parse::RecDescent::_trace(q{Trying action},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{textmessage},
@@ -6150,13 +6192,14 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::textmessage
 		
 
 		$_tok = ($_noactions) ? 0 : do { 
-	  $return = $item{basicfields}||{};
+	  $return = $item{basicfields} || {};
 	  $return->{bodytype} = 'TEXT';
-	  foreach my $what (qw/textlines(?) bodyMD5(?) bodydisp(?) bodylang(?)/) {
-		my $k = $what; $k =~ s/\(\?\)$//;
-		ref($item{$what}) and $return->{$k} = $item{$what}[0];
+          foreach my $what (qw/textlines(?) bodyMD5(?) bodydisp(?) bodylang(?)/)
+	  {   my $k = $what; $k =~ s/\(\?\)$//;
+	      $return->{$k} = $item{$what}[0] if ref $item{$what};
 	  }
-	  $return||defined($return);
+
+	  $return;
         };
 		unless (defined $_tok)
 		{
@@ -6173,7 +6216,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::textmessage
 		
 
 
-		Parse::RecDescent::_trace(q{>>Matched production: [TEXT <commit> basicfields textlines bodyMD5 bodydisp bodylang]<<},
+		Parse::RecDescent::_trace(q{>>Matched production: [TEXT <commit> basicfields textlines bodyMD5 bodydisp bodylang bodyextra]<<},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{textmessage},
 					  $tracelevel)
@@ -6469,6 +6512,338 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyid
 }
 
 # ARGS ARE: ($parser, $text; $repeating, $_noactions, \@args)
+sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyextra
+{
+	my $thisparser = $_[0];
+	use vars q{$tracelevel};
+	local $tracelevel = ($tracelevel||0)+1;
+	$ERRORS = 0;
+	my $thisrule = $thisparser->{"rules"}{"bodyextra"};
+	
+	Parse::RecDescent::_trace(q{Trying rule: [bodyextra]},
+				  Parse::RecDescent::_tracefirst($_[1]),
+				  q{bodyextra},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+
+	my $def_at = @{$thisparser->{deferred}};
+	my $err_at = @{$thisparser->{errors}};
+
+	my $score;
+	my $score_return;
+	my $_tok;
+	my $return = undef;
+	my $_matched=0;
+	my $commit=0;
+	my @item = ();
+	my %item = ();
+	my $repeating =  defined($_[2]) && $_[2];
+	my $_noactions = defined($_[3]) && $_[3];
+ 	my @arg =        defined $_[4] ? @{ &{$_[4]} } : ();
+	my %arg =        ($#arg & 01) ? @arg : (@arg, undef);
+	my $text;
+	my $lastsep="";
+	my $expectation = new Parse::RecDescent::Expectation($thisrule->expected());
+	$expectation->at($_[1]);
+	
+	my $thisline;
+	tie $thisline, q{Parse::RecDescent::LineCounter}, \$text, $thisparser;
+
+	
+
+	while (!$_matched && !$commit)
+	{
+		
+		Parse::RecDescent::_trace(q{Trying production: [NIL]},
+					  Parse::RecDescent::_tracefirst($_[1]),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		my $thisprod = $thisrule->{"prods"}[0];
+		$text = $_[1];
+		my $_savetext;
+		@item = (q{bodyextra});
+		%item = (__RULE__ => q{bodyextra});
+		my $repcount = 0;
+
+
+		Parse::RecDescent::_trace(q{Trying subrule: [NIL]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{bodyextra},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		if (1) { no strict qw{refs};
+		$expectation->is(q{})->at($text);
+		unless (defined ($_tok = Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::NIL($thisparser,$text,$repeating,$_noactions,sub { \@arg })))
+		{
+			
+			Parse::RecDescent::_trace(q{<<Didn't match subrule: [NIL]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{bodyextra},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			$expectation->failed();
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched subrule: [NIL]<< (return value: [}
+					. $_tok . q{]},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{NIL}} = $_tok;
+		push @item, $_tok;
+		
+		}
+
+
+		Parse::RecDescent::_trace(q{>>Matched production: [NIL]<<},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$_matched = 1;
+		last;
+	}
+
+		splice
+				@{$thisparser->{deferred}}, $def_at unless $_matched;
+				  
+	while (!$_matched && !$commit)
+	{
+		
+		Parse::RecDescent::_trace(q{Trying production: [STRING]},
+					  Parse::RecDescent::_tracefirst($_[1]),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		my $thisprod = $thisrule->{"prods"}[1];
+		$text = $_[1];
+		my $_savetext;
+		@item = (q{bodyextra});
+		%item = (__RULE__ => q{bodyextra});
+		my $repcount = 0;
+
+
+		Parse::RecDescent::_trace(q{Trying subrule: [STRING]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{bodyextra},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		if (1) { no strict qw{refs};
+		$expectation->is(q{})->at($text);
+		unless (defined ($_tok = Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::STRING($thisparser,$text,$repeating,$_noactions,sub { \@arg })))
+		{
+			
+			Parse::RecDescent::_trace(q{<<Didn't match subrule: [STRING]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{bodyextra},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			$expectation->failed();
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched subrule: [STRING]<< (return value: [}
+					. $_tok . q{]},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{STRING}} = $_tok;
+		push @item, $_tok;
+		
+		}
+
+
+		Parse::RecDescent::_trace(q{>>Matched production: [STRING]<<},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$_matched = 1;
+		last;
+	}
+
+		splice
+				@{$thisparser->{deferred}}, $def_at unless $_matched;
+				  
+	while (!$_matched && !$commit)
+	{
+		
+		Parse::RecDescent::_trace(q{Trying production: ['(' STRING ')']},
+					  Parse::RecDescent::_tracefirst($_[1]),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		my $thisprod = $thisrule->{"prods"}[2];
+		$text = $_[1];
+		my $_savetext;
+		@item = (q{bodyextra});
+		%item = (__RULE__ => q{bodyextra});
+		my $repcount = 0;
+
+
+		Parse::RecDescent::_trace(q{Trying terminal: ['(']},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$lastsep = "";
+		$expectation->is(q{})->at($text);
+		
+
+		unless ($text =~ s/\A($skip)/$lastsep=$1 and ""/e and   do { $_tok = "("; 1 } and
+		     substr($text,0,length($_tok)) eq $_tok and
+		     do { substr($text,0,length($_tok)) = ""; 1; }
+		)
+		{
+			
+			$expectation->failed();
+			Parse::RecDescent::_trace(q{<<Didn't match terminal>>},
+						  Parse::RecDescent::_tracefirst($text))
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched terminal<< (return value: [}
+						. $_tok . q{])},
+						  Parse::RecDescent::_tracefirst($text))
+							if defined $::RD_TRACE;
+		push @item, $item{__STRING1__}=$_tok;
+		
+
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [STRING]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{bodyextra},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		$expectation->is(q{STRING})->at($text);
+		
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::STRING, 1, 100000000, $_noactions,$expectation,undef))) 
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [STRING]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{bodyextra},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [STRING]<< (}
+					. @$_tok . q{ times)},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{STRING(s)}} = $_tok;
+		push @item, $_tok;
+		
+
+
+		Parse::RecDescent::_trace(q{Trying terminal: [')']},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$lastsep = "";
+		$expectation->is(q{')'})->at($text);
+		
+
+		unless ($text =~ s/\A($skip)/$lastsep=$1 and ""/e and   do { $_tok = ")"; 1 } and
+		     substr($text,0,length($_tok)) eq $_tok and
+		     do { substr($text,0,length($_tok)) = ""; 1; }
+		)
+		{
+			
+			$expectation->failed();
+			Parse::RecDescent::_trace(q{<<Didn't match terminal>>},
+						  Parse::RecDescent::_tracefirst($text))
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched terminal<< (return value: [}
+						. $_tok . q{])},
+						  Parse::RecDescent::_tracefirst($text))
+							if defined $::RD_TRACE;
+		push @item, $item{__STRING2__}=$_tok;
+		
+
+		Parse::RecDescent::_trace(q{Trying action},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		
+
+		$_tok = ($_noactions) ? 0 : do { 0 };
+		unless (defined $_tok)
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
+					if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched action<< (return value: [}
+					  . $_tok . q{])},
+					  Parse::RecDescent::_tracefirst($text))
+						if defined $::RD_TRACE;
+		push @item, $_tok;
+		$item{__ACTION1__}=$_tok;
+		
+
+
+		Parse::RecDescent::_trace(q{>>Matched production: ['(' STRING ')']<<},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$_matched = 1;
+		last;
+	}
+
+		splice
+				@{$thisparser->{deferred}}, $def_at unless $_matched;
+				  
+        unless ( $_matched || defined($return) || defined($score) )
+	{
+				splice @{$thisparser->{deferred}}, $def_at;
+			  
+
+		$_[1] = $text;	# NOT SURE THIS IS NEEDED
+		Parse::RecDescent::_trace(q{<<Didn't match rule>>},
+					 Parse::RecDescent::_tracefirst($_[1]),
+					 q{bodyextra},
+					 $tracelevel)
+					if defined $::RD_TRACE;
+		return undef;
+	}
+	if (!defined($return) && defined($score))
+	{
+		Parse::RecDescent::_trace(q{>>Accepted scored production<<}, "",
+					  q{bodyextra},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$return = $score_return;
+	}
+	splice @{$thisparser->{errors}}, $err_at;
+	$return = $item[$#item] unless defined $return;
+	if (defined $::RD_TRACE)
+	{
+		Parse::RecDescent::_trace(q{>>Matched rule<< (return value: [} .
+					  $return . q{])}, "",
+					  q{bodyextra},
+					  $tracelevel);
+		Parse::RecDescent::_trace(q{(consumed: [} .
+					  Parse::RecDescent::_tracemax(substr($_[1],0,-length($text))) . q{])}, 
+					  Parse::RecDescent::_tracefirst($text),
+					  , q{bodyextra},
+					  $tracelevel)
+	}
+	$_[1] = $text;
+	return $return;
+}
+
+# ARGS ARE: ($parser, $text; $repeating, $_noactions, \@args)
 sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 {
 	my $thisparser = $_[0];
@@ -6511,7 +6886,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 	while (!$_matched && !$commit)
 	{
 		
-		Parse::RecDescent::_trace(q{Trying production: [bodytype basicfields bodyparms bodydisp bodylang]},
+		Parse::RecDescent::_trace(q{Trying production: [bodytype basicfields bodyparms bodydisp bodylang bodyextra]},
 					  Parse::RecDescent::_tracefirst($_[1]),
 					  q{othertypemessage},
 					  $tracelevel)
@@ -6668,6 +7043,34 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 		
 
 
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyextra]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{othertypemessage},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		$expectation->is(q{bodyextra})->at($text);
+		
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyextra, 0, 1, $_noactions,$expectation,undef))) 
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyextra]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{othertypemessage},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyextra]<< (}
+					. @$_tok . q{ times)},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{othertypemessage},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{bodyextra(?)}} = $_tok;
+		push @item, $_tok;
+		
+
+
 		Parse::RecDescent::_trace(q{Trying action},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{othertypemessage},
@@ -6676,12 +7079,13 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 		
 
 		$_tok = ($_noactions) ? 0 : do { $return = {}; 
-	  foreach my $what (qw/bodytype bodyparms(?) bodydisp(?) bodylang(?)/) {
-		my $k = $what; $k =~ s/\(\?\)$//;
-		$return->{$k} = ref($item{$what})? $item{$what}[0] : $item{$what} ;
+	  foreach my $what ( qw/bodytype bodyparms(?) bodydisp(?)/
+	                   , qw/bodylang(?) bodyextra(?)/ )
+	  {   my $k = $what; $k =~ s/\(\?\)$//;
+	      $return->{$k} = ref($item{$what})? $item{$what}[0] : $item{$what} ;
 	  }
-	  while ( my($k,$v) = each %{$item{basicfields}} ) { $return->{$k} = $v }
-	  $return||defined($return);
+	  while( my($k,$v) = each %{$item{basicfields}} ) { $return->{$k} = $v }
+	  $return;
 	};
 		unless (defined $_tok)
 		{
@@ -6698,7 +7102,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 		
 
 
-		Parse::RecDescent::_trace(q{>>Matched production: [bodytype basicfields bodyparms bodydisp bodylang]<<},
+		Parse::RecDescent::_trace(q{>>Matched production: [bodytype basicfields bodyparms bodydisp bodylang bodyextra]<<},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{othertypemessage},
 					  $tracelevel)
@@ -7144,7 +7548,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodysize
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{NUMBER} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{NUMBER}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -8596,10 +9000,9 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodystructure
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do {
-			$return = $item{'part(s)'} ;
-			$return||defined($return);
-		};
+		$_tok = ($_noactions) ? 0 : do {   $return = $item{'part(s)'} ;
+	    $return||defined($return);
+	};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -9445,7 +9848,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 	while (!$_matched && !$commit)
 	{
 		
-		Parse::RecDescent::_trace(q{Trying production: [subpart <commit> basicfields bodyparms bodydisp bodylang <defer:{  $subpartCount = 0 }>]},
+		Parse::RecDescent::_trace(q{Trying production: [subpart <commit> basicfields bodyparms bodydisp bodylang bodyextra <defer:{  $subpartCount = 0 }>]},
 					  Parse::RecDescent::_tracefirst($_[1]),
 					  q{part},
 					  $tracelevel)
@@ -9626,6 +10029,34 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 		
 
 
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyextra]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{part},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		$expectation->is(q{bodyextra})->at($text);
+		
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyextra, 0, 1, $_noactions,$expectation,undef))) 
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyextra]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{part},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyextra]<< (}
+					. @$_tok . q{ times)},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{part},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{bodyextra(?)}} = $_tok;
+		push @item, $_tok;
+		
+
+
 		
 
 		Parse::RecDescent::_trace(q{Trying directive: [<defer:{  $subpartCount = 0 }>]},
@@ -9659,16 +10090,14 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do {
-		$return = bless($item{basicfields}, 
-			"Mail::IMAPClient::BodyStructure");
-		$return->{bodytype} = "MULTIPART";
-		$return->{bodystructure} = $item{'subpart(s)'};
-		foreach my $b (qw/bodyparms(?) bodydisp(?) bodylang(?)/) { 
-			my $k = $b; $k =~ s/\(\?\)$//;
-			$return->{$k} = ref($item{$b}) ? $item{$b}[0] : $item{$b};
-		}
-		$return||defined($return) ;
+		$_tok = ($_noactions) ? 0 : do {   $return = bless $item{basicfields},"Mail::IMAPClient::BodyStructure";
+	    $return->{bodytype} = "MULTIPART";
+	    $return->{bodystructure} = $item{'subpart(s)'};
+	    foreach my $b (qw/bodyparms(?) bodydisp(?) bodylang(?) bodyextra(?)/)
+	    {   my $k = $b; $k =~ s/\(\?\)$//;
+	        $return->{$k} = ref($item{$b}) ? $item{$b}[0] : $item{$b};
+	    }
+	    $return;
 	};
 		unless (defined $_tok)
 		{
@@ -9685,7 +10114,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 		
 
 
-		Parse::RecDescent::_trace(q{>>Matched production: [subpart <commit> basicfields bodyparms bodydisp bodylang <defer:{  $subpartCount = 0 }>]<<},
+		Parse::RecDescent::_trace(q{>>Matched production: [subpart <commit> basicfields bodyparms bodydisp bodylang bodyextra <defer:{  $subpartCount = 0 }>]<<},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{part},
 					  $tracelevel)
@@ -9750,9 +10179,8 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do {
-		$return = bless $item{textmessage}, "Mail::IMAPClient::BodyStructure";
-		$return||defined($return);
+		$_tok = ($_noactions) ? 0 : do {  $return = bless $item{textmessage}, "Mail::IMAPClient::BodyStructure";
+	   $return||defined($return);
 	};
 		unless (defined $_tok)
 		{
@@ -9834,9 +10262,8 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do {
-		$return = bless $item{messagerfc822message}, "Mail::IMAPClient::BodyStructure";
-		$return||defined($return);
+		$_tok = ($_noactions) ? 0 : do {  $return = bless $item{messagerfc822message}, "Mail::IMAPClient::BodyStructure";
+	   $return||defined($return);
 	};
 		unless (defined $_tok)
 		{
@@ -9918,9 +10345,8 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::part
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do {
-		$return = bless $item{othertypemessage}, "Mail::IMAPClient::BodyStructure";
-		$return||defined($return);
+		$_tok = ($_noactions) ? 0 : do {  $return = bless $item{othertypemessage}, "Mail::IMAPClient::BodyStructure";
+	   $return||defined($return);
 	};
 		unless (defined $_tok)
 		{
@@ -11117,13 +11543,12 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::addressstruct
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = {
+		$_tok = ($_noactions) ? 0 : do { bless {
 			personalname => $item{personalname} ,	
 			sourceroute  => $item{sourceroute} ,	
 			mailboxname  => $item{mailboxname} ,	
 			hostname     => $item{hostname} ,	
-		  } ;
-		  bless($return, "Mail::IMAPClient::BodyStructure::Address");
+		  }, 'Mail::IMAPClient::BodyStructure::Address';
 		};
 		unless (defined $_tok)
 		{
@@ -11343,7 +11768,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::sourceroute
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -11559,9 +11984,8 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::subpart
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { 
-		$return = $item{part} ; 
-		$return||defined($return);
+		$_tok = ($_noactions) ? 0 : do {   $return = $item{part} ; 
+	    $return||defined($return);
 	};
 		unless (defined $_tok)
 		{
@@ -12321,7 +12745,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodylang
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{'STRING(s)'} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{'STRING(s)'}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -12807,12 +13231,11 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::envelopestruct
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = {}; 
-	  foreach my $what (qw/date subject from sender replyto to cc bcc inreplyto messageid/) {
-		$return->{$what} = $item{$what};
-	  }
-	  bless $return, "Mail::IMAPClient::BodyStructure::Envelope";
-	  $return||defined($return);
+		$_tok = ($_noactions) ? 0 : do { $return = bless {}, "Mail::IMAPClient::BodyStructure::Envelope"; 
+	  $return->{$_} = $item{$_}
+	     for qw/date subject from sender replyto to cc/
+               , qw/bcc inreplyto messageid/ ;
+	  $return;
 	};
 		unless (defined $_tok)
 		{
@@ -13305,7 +13728,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::mailboxname
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING} ;$return||defined($return);};
+		$_tok = ($_noactions) ? 0 : do { $return = $item{NIL} || $item{STRING}; $return||defined($return);};
 		unless (defined $_tok)
 		{
 			Parse::RecDescent::_trace(q{<<Didn't match action>> (return value: [undef])})
@@ -13493,7 +13916,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 134
+                                                                                             'line' => 146
                                                                                            }, 'Parse::RecDescent::Subrule' )
                                                                                   ],
                                                                        'line' => undef
@@ -13513,21 +13936,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 134
+                                                                                             'line' => 146
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 135,
+                                                                                             'line' => 147,
                                                                                              'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 134
+                                                                       'line' => 146
                                                                      }, 'Parse::RecDescent::Production' )
                                                             ],
                                                  'name' => 'date',
                                                  'vars' => '',
-                                                 'line' => 134
+                                                 'line' => 146
                                                }, 'Parse::RecDescent::Rule' ),
                               'bodysubtype' => bless( {
                                                         'impcount' => 0,
@@ -13657,7 +14080,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 112
+                                                                                                 'line' => 123
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
                                                                            'line' => undef
@@ -13677,21 +14100,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 112
+                                                                                                 'line' => 123
                                                                                                }, 'Parse::RecDescent::Subrule' ),
                                                                                         bless( {
                                                                                                  'hashname' => '__ACTION1__',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 113,
-                                                                                                 'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
+                                                                                                 'line' => 124,
+                                                                                                 'code' => '{ $return = $item{NIL} || $item{STRING}; $return||defined($return);}'
                                                                                                }, 'Parse::RecDescent::Action' )
                                                                                       ],
-                                                                           'line' => 112
+                                                                           'line' => 123
                                                                          }, 'Parse::RecDescent::Production' )
                                                                 ],
                                                      'name' => 'hostname',
                                                      'vars' => '',
-                                                     'line' => 112
+                                                     'line' => 123
                                                    }, 'Parse::RecDescent::Rule' ),
                               'basicfields' => bless( {
                                                         'impcount' => 0,
@@ -13721,7 +14144,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 164
+                                                                                                    'line' => 175
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyparms',
@@ -13729,7 +14152,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 164
+                                                                                                    'line' => 175
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyid',
@@ -13740,7 +14163,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 164
+                                                                                                    'line' => 175
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodydesc',
@@ -13751,7 +14174,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 165
+                                                                                                    'line' => 176
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyenc',
@@ -13762,7 +14185,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 165
+                                                                                                    'line' => 176
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodysize',
@@ -13773,37 +14196,23 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 166
+                                                                                                    'line' => 177
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__ACTION1__',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 166,
+                                                                                                    'line' => 177,
                                                                                                     'code' => '{ 
 
-	$return = { 
-		bodysubtype 	=> 	    $item{bodysubtype} ,
-
-		bodyparms 	=> 	    $item{bodyparms} ,
-
-		bodyid 		=> (ref     $item{\'bodyid(?)\'}	?
-					    $item{\'bodyid(?)\'}[0]	:
-					    $item{\'bodyid(?)\'} ),
-
-		\'bodydesc\' 	=> (ref     $item{\'bodydesc(?)\'}	?
-					    $item{\'bodydesc(?)\'}[0]	:
-					    $item{\'bodydesc(?)\'} ),
-
-		\'bodyenc\' 	=> (ref     $item{\'bodyenc(?)\'}	?
-					    $item{\'bodyenc(?)\'}[0]	:
-					    $item{\'bodyenc(?)\'} ),
-
-		\'bodysize\' 	=> (ref     $item{\'bodysize(?)\'}	?
-					    $item{\'bodysize(?)\'}[0]	:
-					    $item{\'bodysize(?)\'} ),
-	};
-	$return;
-}'
+	
+	   $return =
+	     { bodysubtype => $item{bodysubtype}
+	     , bodyparms   => $item{bodyparms}
+             };
+           $return->{$_} = ref $item{"$_(?}"} ? $item{"$_(?}"}[0] :$item{"$_(?}"}
+	       for qw/bodyid bodydesc bodyenc bodysize/;
+	   $return;
+	}'
                                                                                                   }, 'Parse::RecDescent::Action' )
                                                                                          ],
                                                                               'line' => undef
@@ -13811,7 +14220,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                    ],
                                                         'name' => 'basicfields',
                                                         'vars' => '',
-                                                        'line' => 164
+                                                        'line' => 175
                                                       }, 'Parse::RecDescent::Rule' ),
                               'personalname' => bless( {
                                                          'impcount' => 0,
@@ -13837,7 +14246,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                      'implicit' => undef,
                                                                                                      'argcode' => undef,
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 106
+                                                                                                     'line' => 114
                                                                                                    }, 'Parse::RecDescent::Subrule' )
                                                                                           ],
                                                                                'line' => undef
@@ -13857,21 +14266,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                      'implicit' => undef,
                                                                                                      'argcode' => undef,
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 106
+                                                                                                     'line' => 114
                                                                                                    }, 'Parse::RecDescent::Subrule' ),
                                                                                             bless( {
                                                                                                      'hashname' => '__ACTION1__',
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 107,
-                                                                                                     'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
+                                                                                                     'line' => 115,
+                                                                                                     'code' => '{ $return = $item{NIL} || $item{STRING}; $return||defined($return);}'
                                                                                                    }, 'Parse::RecDescent::Action' )
                                                                                           ],
-                                                                               'line' => 106
+                                                                               'line' => 114
                                                                              }, 'Parse::RecDescent::Production' )
                                                                     ],
                                                          'name' => 'personalname',
                                                          'vars' => '',
-                                                         'line' => 106
+                                                         'line' => 114
                                                        }, 'Parse::RecDescent::Rule' ),
                               'key' => bless( {
                                                 'impcount' => 0,
@@ -13936,7 +14345,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                            'implicit' => undef,
                                                                                            'argcode' => undef,
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 137
+                                                                                           'line' => 149
                                                                                          }, 'Parse::RecDescent::Subrule' )
                                                                                 ],
                                                                      'line' => undef
@@ -13955,7 +14364,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                            'hashname' => '__STRING1__',
                                                                                            'description' => '\'(\'',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 137
+                                                                                           'line' => 149
                                                                                          }, 'Parse::RecDescent::InterpLit' ),
                                                                                   bless( {
                                                                                            'subrule' => 'addressstruct',
@@ -13966,28 +14375,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                            'matchrule' => 0,
                                                                                            'repspec' => 's',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 137
+                                                                                           'line' => 149
                                                                                          }, 'Parse::RecDescent::Repetition' ),
                                                                                   bless( {
                                                                                            'pattern' => ')',
                                                                                            'hashname' => '__STRING2__',
                                                                                            'description' => '\')\'',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 137
+                                                                                           'line' => 149
                                                                                          }, 'Parse::RecDescent::InterpLit' ),
                                                                                   bless( {
                                                                                            'hashname' => '__ACTION1__',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 138,
+                                                                                           'line' => 150,
                                                                                            'code' => '{ $return = $item{NIL} || $item{\'addressstruct(s)\'} }'
                                                                                          }, 'Parse::RecDescent::Action' )
                                                                                 ],
-                                                                     'line' => 137
+                                                                     'line' => 149
                                                                    }, 'Parse::RecDescent::Production' )
                                                           ],
                                                'name' => 'cc',
                                                'vars' => '',
-                                               'line' => 137
+                                               'line' => 149
                                              }, 'Parse::RecDescent::Rule' ),
                               'bodyMD5' => bless( {
                                                     'impcount' => 0,
@@ -14013,7 +14422,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 102
+                                                                                                'line' => 105
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
                                                                           'line' => undef
@@ -14033,21 +14442,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 102
+                                                                                                'line' => 105
                                                                                               }, 'Parse::RecDescent::Subrule' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__ACTION1__',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 103,
-                                                                                                'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
+                                                                                                'line' => 106,
+                                                                                                'code' => '{ $return = $item{NIL} || $item{STRING}; $return||defined($return);}'
                                                                                               }, 'Parse::RecDescent::Action' )
                                                                                      ],
-                                                                          'line' => 102
+                                                                          'line' => 105
                                                                         }, 'Parse::RecDescent::Production' )
                                                                ],
                                                     'name' => 'bodyMD5',
                                                     'vars' => '',
-                                                    'line' => 102
+                                                    'line' => 105
                                                   }, 'Parse::RecDescent::Rule' ),
                               'envelope' => bless( {
                                                      'impcount' => 0,
@@ -14072,7 +14481,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'description' => '/.*\\\\(.*ENVELOPE/',
                                                                                                  'lookahead' => 0,
                                                                                                  'rdelim' => '/',
-                                                                                                 'line' => 285,
+                                                                                                 'line' => 279,
                                                                                                  'mod' => '',
                                                                                                  'ldelim' => '/'
                                                                                                }, 'Parse::RecDescent::Token' ),
@@ -14082,7 +14491,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 285
+                                                                                                 'line' => 279
                                                                                                }, 'Parse::RecDescent::Subrule' ),
                                                                                         bless( {
                                                                                                  'pattern' => '.*\\)',
@@ -14090,18 +14499,17 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'description' => '/.*\\\\)/',
                                                                                                  'lookahead' => 0,
                                                                                                  'rdelim' => '/',
-                                                                                                 'line' => 285,
+                                                                                                 'line' => 279,
                                                                                                  'mod' => '',
                                                                                                  'ldelim' => '/'
                                                                                                }, 'Parse::RecDescent::Token' ),
                                                                                         bless( {
                                                                                                  'hashname' => '__ACTION1__',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 285,
-                                                                                                 'code' => '{
-		$return = $item{envelopestruct} ;
-		$return||defined($return) ;
-		}'
+                                                                                                 'line' => 280,
+                                                                                                 'code' => '{   $return = $item{envelopestruct};
+	    $return || defined $return;
+	}'
                                                                                                }, 'Parse::RecDescent::Action' )
                                                                                       ],
                                                                            'line' => undef
@@ -14109,7 +14517,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                 ],
                                                      'name' => 'envelope',
                                                      'vars' => '',
-                                                     'line' => 285
+                                                     'line' => 279
                                                    }, 'Parse::RecDescent::Rule' ),
                               'MESSAGE' => bless( {
                                                     'impcount' => 0,
@@ -14231,7 +14639,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 123
+                                                                                                'line' => 135
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
                                                                           'line' => undef
@@ -14251,24 +14659,24 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 123
+                                                                                                'line' => 135
                                                                                               }, 'Parse::RecDescent::Subrule' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__ACTION1__',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 124,
+                                                                                                'line' => 136,
                                                                                                 'code' => '{ 
 			$return = $item{NIL} || $item{STRING} ;
 			$return||defined($return);
 		}'
                                                                                               }, 'Parse::RecDescent::Action' )
                                                                                      ],
-                                                                          'line' => 123
+                                                                          'line' => 135
                                                                         }, 'Parse::RecDescent::Production' )
                                                                ],
                                                     'name' => 'subject',
                                                     'vars' => '',
-                                                    'line' => 123
+                                                    'line' => 135
                                                   }, 'Parse::RecDescent::Rule' ),
                               'value' => bless( {
                                                   'impcount' => 0,
@@ -14425,7 +14833,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 128
+                                                                                                  'line' => 140
                                                                                                 }, 'Parse::RecDescent::Subrule' )
                                                                                        ],
                                                                             'line' => undef
@@ -14445,21 +14853,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 128
+                                                                                                  'line' => 140
                                                                                                 }, 'Parse::RecDescent::Subrule' ),
                                                                                          bless( {
                                                                                                   'hashname' => '__ACTION1__',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 129,
+                                                                                                  'line' => 141,
                                                                                                   'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
                                                                                                 }, 'Parse::RecDescent::Action' )
                                                                                        ],
-                                                                            'line' => 128
+                                                                            'line' => 140
                                                                           }, 'Parse::RecDescent::Production' )
                                                                  ],
                                                       'name' => 'inreplyto',
                                                       'vars' => '',
-                                                      'line' => 128
+                                                      'line' => 140
                                                     }, 'Parse::RecDescent::Rule' ),
                               'messageid' => bless( {
                                                       'impcount' => 0,
@@ -14485,7 +14893,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 131
+                                                                                                  'line' => 143
                                                                                                 }, 'Parse::RecDescent::Subrule' )
                                                                                        ],
                                                                             'line' => undef
@@ -14505,21 +14913,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 131
+                                                                                                  'line' => 143
                                                                                                 }, 'Parse::RecDescent::Subrule' ),
                                                                                          bless( {
                                                                                                   'hashname' => '__ACTION1__',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 132,
+                                                                                                  'line' => 144,
                                                                                                   'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
                                                                                                 }, 'Parse::RecDescent::Action' )
                                                                                        ],
-                                                                            'line' => 131
+                                                                            'line' => 143
                                                                           }, 'Parse::RecDescent::Production' )
                                                                  ],
                                                       'name' => 'messageid',
                                                       'vars' => '',
-                                                      'line' => 131
+                                                      'line' => 143
                                                     }, 'Parse::RecDescent::Rule' ),
                               'sender' => bless( {
                                                    'impcount' => 0,
@@ -14545,7 +14953,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                'implicit' => undef,
                                                                                                'argcode' => undef,
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 149
+                                                                                               'line' => 161
                                                                                              }, 'Parse::RecDescent::Subrule' )
                                                                                     ],
                                                                          'line' => undef
@@ -14564,7 +14972,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                'hashname' => '__STRING1__',
                                                                                                'description' => '\'(\'',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 149
+                                                                                               'line' => 161
                                                                                              }, 'Parse::RecDescent::InterpLit' ),
                                                                                       bless( {
                                                                                                'subrule' => 'addressstruct',
@@ -14575,28 +14983,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                'matchrule' => 0,
                                                                                                'repspec' => 's',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 149
+                                                                                               'line' => 161
                                                                                              }, 'Parse::RecDescent::Repetition' ),
                                                                                       bless( {
                                                                                                'pattern' => ')',
                                                                                                'hashname' => '__STRING2__',
                                                                                                'description' => '\')\'',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 149
+                                                                                               'line' => 161
                                                                                              }, 'Parse::RecDescent::InterpLit' ),
                                                                                       bless( {
                                                                                                'hashname' => '__ACTION1__',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 150,
+                                                                                               'line' => 162,
                                                                                                'code' => '{ $return = $item{NIL} || $item{\'addressstruct(s)\'} }'
                                                                                              }, 'Parse::RecDescent::Action' )
                                                                                     ],
-                                                                         'line' => 149
+                                                                         'line' => 161
                                                                        }, 'Parse::RecDescent::Production' )
                                                               ],
                                                    'name' => 'sender',
                                                    'vars' => '',
-                                                   'line' => 149
+                                                   'line' => 161
                                                  }, 'Parse::RecDescent::Rule' ),
                               'QUOTED_STRING' => bless( {
                                                           'impcount' => 0,
@@ -14676,7 +15084,8 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                               'textlines',
                                                                               'bodyMD5',
                                                                               'bodydisp',
-                                                                              'bodylang'
+                                                                              'bodylang',
+                                                                              'bodyextra'
                                                                             ],
                                                                  'changed' => 0,
                                                                  'opcount' => 0,
@@ -14696,13 +15105,13 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214
+                                                                                                             'line' => 215
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'hashname' => '__DIRECTIVE1__',
                                                                                                              'name' => '<commit>',
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214,
+                                                                                                             'line' => 215,
                                                                                                              'code' => '$commit = 1'
                                                                                                            }, 'Parse::RecDescent::Directive' ),
                                                                                                     bless( {
@@ -14711,7 +15120,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214
+                                                                                                             'line' => 215
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodyid',
@@ -14719,7 +15128,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214
+                                                                                                             'line' => 215
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodydesc',
@@ -14727,7 +15136,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214
+                                                                                                             'line' => 215
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodyenc',
@@ -14735,7 +15144,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214
+                                                                                                             'line' => 215
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodysize',
@@ -14743,7 +15152,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 214
+                                                                                                             'line' => 215
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'envelopestruct',
@@ -14751,7 +15160,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 215
+                                                                                                             'line' => 216
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodystructure',
@@ -14759,7 +15168,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 215
+                                                                                                             'line' => 216
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'textlines',
@@ -14767,7 +15176,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'implicit' => undef,
                                                                                                              'argcode' => undef,
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 215
+                                                                                                             'line' => 216
                                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodyMD5',
@@ -14778,7 +15187,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'matchrule' => 0,
                                                                                                              'repspec' => '?',
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 216
+                                                                                                             'line' => 217
                                                                                                            }, 'Parse::RecDescent::Repetition' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodydisp',
@@ -14789,7 +15198,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'matchrule' => 0,
                                                                                                              'repspec' => '?',
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 216
+                                                                                                             'line' => 217
                                                                                                            }, 'Parse::RecDescent::Repetition' ),
                                                                                                     bless( {
                                                                                                              'subrule' => 'bodylang',
@@ -14800,28 +15209,39 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                              'matchrule' => 0,
                                                                                                              'repspec' => '?',
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 216
+                                                                                                             'line' => 217
+                                                                                                           }, 'Parse::RecDescent::Repetition' ),
+                                                                                                    bless( {
+                                                                                                             'subrule' => 'bodyextra',
+                                                                                                             'expected' => undef,
+                                                                                                             'min' => 0,
+                                                                                                             'argcode' => undef,
+                                                                                                             'max' => 1,
+                                                                                                             'matchrule' => 0,
+                                                                                                             'repspec' => '?',
+                                                                                                             'lookahead' => 0,
+                                                                                                             'line' => 217
                                                                                                            }, 'Parse::RecDescent::Repetition' ),
                                                                                                     bless( {
                                                                                                              'hashname' => '__ACTION1__',
                                                                                                              'lookahead' => 0,
-                                                                                                             'line' => 217,
+                                                                                                             'line' => 218,
                                                                                                              'code' => '{ 
 	  $return = {}; 
 	  foreach my $what (qw/	bodyparms bodyid bodydesc bodyenc bodysize 
 				envelopestruct bodystructure textlines
-				bodyMD5(?) bodydisp(?) bodylang(?)
+				bodyMD5(?) bodydisp(?) bodylang(?) bodyextra(?)
 	  		     /
 	  ) {
 		my $k = $what; $k =~ s/\\(\\?\\)$//;
                 $return->{$k} = ref $item{$what} =~ \'ARRAY\'?
                                         $item{$what}[0] : $item{$what};
         }
-        while ( my($k,$v) = each %{$item{bodystructure}[0]} ) { $return->{$k} = $v }
-        while ( my($k,$v) = each %{$item{basicfields}}   ) { $return->{$k} = $v }
-	$return->{bodytype} 	= "MESSAGE" ; 
-	$return->{bodysubtype}= "RFC822" ;
-	$return||defined($return);
+        while(my($k,$v) = each %{$item{bodystructure}[0]}) { $return->{$k} = $v}
+        while(my($k,$v) = each %{$item{basicfields}})      { $return->{$k} = $v}
+	$return->{bodytype}    = "MESSAGE" ; 
+	$return->{bodysubtype} = "RFC822" ;
+	$return;
 	}'
                                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                                   ],
@@ -14830,7 +15250,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                             ],
                                                                  'name' => 'messagerfc822message',
                                                                  'vars' => '',
-                                                                 'line' => 213
+                                                                 'line' => 214
                                                                }, 'Parse::RecDescent::Rule' ),
                               'bodyenc' => bless( {
                                                     'impcount' => 0,
@@ -14857,7 +15277,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 92
+                                                                                                'line' => 94
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
                                                                           'line' => undef
@@ -14877,10 +15297,10 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 92
+                                                                                                'line' => 94
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
-                                                                          'line' => 92
+                                                                          'line' => 94
                                                                         }, 'Parse::RecDescent::Production' ),
                                                                  bless( {
                                                                           'number' => '2',
@@ -14896,7 +15316,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'hashname' => '__STRING1__',
                                                                                                 'description' => '\'(\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 92
+                                                                                                'line' => 94
                                                                                               }, 'Parse::RecDescent::Literal' ),
                                                                                        bless( {
                                                                                                 'subrule' => 'kvpair',
@@ -14907,33 +15327,34 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'matchrule' => 0,
                                                                                                 'repspec' => 's',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 92
+                                                                                                'line' => 94
                                                                                               }, 'Parse::RecDescent::Repetition' ),
                                                                                        bless( {
                                                                                                 'pattern' => ')',
                                                                                                 'hashname' => '__STRING2__',
                                                                                                 'description' => '\')\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 92
+                                                                                                'line' => 94
                                                                                               }, 'Parse::RecDescent::Literal' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__ACTION1__',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 93,
+                                                                                                'line' => 95,
                                                                                                 'code' => '{
 		$return = $item{NIL} 		|| 
 			  $item{STRING} 	||
 			  { map { (%$_) } @{$item{\'kvpair(s)\'}} };
 		$return||defined($return);
+
 	}'
                                                                                               }, 'Parse::RecDescent::Action' )
                                                                                      ],
-                                                                          'line' => 92
+                                                                          'line' => 94
                                                                         }, 'Parse::RecDescent::Production' )
                                                                ],
                                                     'name' => 'bodyenc',
                                                     'vars' => '',
-                                                    'line' => 92
+                                                    'line' => 94
                                                   }, 'Parse::RecDescent::Rule' ),
                               'bodydesc' => bless( {
                                                      'impcount' => 0,
@@ -14959,7 +15380,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'description' => '/[()]/',
                                                                                                  'lookahead' => -1,
                                                                                                  'rdelim' => '/',
-                                                                                                 'line' => 90,
+                                                                                                 'line' => 91,
                                                                                                  'mod' => '',
                                                                                                  'ldelim' => '/'
                                                                                                }, 'Parse::RecDescent::Token' ),
@@ -14969,7 +15390,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 90
+                                                                                                 'line' => 91
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
                                                                            'line' => undef
@@ -14989,21 +15410,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 90
+                                                                                                 'line' => 91
                                                                                                }, 'Parse::RecDescent::Subrule' ),
                                                                                         bless( {
                                                                                                  'hashname' => '__ACTION1__',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 91,
-                                                                                                 'code' => '{ $return = $item{NIL} || $item{STRING} ; $return||defined($return);}'
+                                                                                                 'line' => 92,
+                                                                                                 'code' => '{ $return = $item{NIL} || $item{STRING}; $return||defined($return);}'
                                                                                                }, 'Parse::RecDescent::Action' )
                                                                                       ],
-                                                                           'line' => 90
+                                                                           'line' => 91
                                                                          }, 'Parse::RecDescent::Production' )
                                                                 ],
                                                      'name' => 'bodydesc',
                                                      'vars' => '',
-                                                     'line' => 90
+                                                     'line' => 91
                                                    }, 'Parse::RecDescent::Rule' ),
                               'start' => bless( {
                                                   'impcount' => 0,
@@ -15028,7 +15449,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                               'description' => '/.*\\\\(.*BODYSTRUCTURE \\\\(/i',
                                                                                               'lookahead' => 0,
                                                                                               'rdelim' => '/',
-                                                                                              'line' => 278,
+                                                                                              'line' => 272,
                                                                                               'mod' => 'i',
                                                                                               'ldelim' => '/'
                                                                                             }, 'Parse::RecDescent::Token' ),
@@ -15041,7 +15462,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                               'matchrule' => 0,
                                                                                               'repspec' => '1',
                                                                                               'lookahead' => 0,
-                                                                                              'line' => 278
+                                                                                              'line' => 272
                                                                                             }, 'Parse::RecDescent::Repetition' ),
                                                                                      bless( {
                                                                                               'pattern' => '\\).*\\)\\r?\\n?',
@@ -15049,19 +15470,19 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                               'description' => '/\\\\).*\\\\)\\\\r?\\\\n?/',
                                                                                               'lookahead' => 0,
                                                                                               'rdelim' => '/',
-                                                                                              'line' => 278,
+                                                                                              'line' => 272,
                                                                                               'mod' => '',
                                                                                               'ldelim' => '/'
                                                                                             }, 'Parse::RecDescent::Token' ),
                                                                                      bless( {
                                                                                               'hashname' => '__ACTION1__',
                                                                                               'lookahead' => 0,
-                                                                                              'line' => 279,
+                                                                                              'line' => 273,
                                                                                               'code' => '{
-			#print STDERR "item = ",Data::Dumper->Dump([\\%item],[\'$item\']);
-			$return = $item{\'part(1)\'}[0];
-			$return||defined($return);
-		}'
+	    #print STDERR "item = ",Data::Dumper->Dump([\\%item],[\'$item\']);
+	    $return = $item{\'part(1)\'}[0];
+	    $return || defined $return;
+	}'
                                                                                             }, 'Parse::RecDescent::Action' )
                                                                                    ],
                                                                         'line' => undef
@@ -15069,7 +15490,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                              ],
                                                   'name' => 'start',
                                                   'vars' => '',
-                                                  'line' => 278
+                                                  'line' => 272
                                                 }, 'Parse::RecDescent::Rule' ),
                               'RFC822' => bless( {
                                                    'impcount' => 0,
@@ -15118,7 +15539,8 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                      'textlines',
                                                                      'bodyMD5',
                                                                      'bodydisp',
-                                                                     'bodylang'
+                                                                     'bodylang',
+                                                                     'bodyextra'
                                                                    ],
                                                         'changed' => 0,
                                                         'opcount' => 0,
@@ -15138,13 +15560,13 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192
+                                                                                                    'line' => 189
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__DIRECTIVE1__',
                                                                                                     'name' => '<commit>',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192,
+                                                                                                    'line' => 189,
                                                                                                     'code' => '$commit = 1'
                                                                                                   }, 'Parse::RecDescent::Directive' ),
                                                                                            bless( {
@@ -15153,7 +15575,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192
+                                                                                                    'line' => 189
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'textlines',
@@ -15164,7 +15586,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192
+                                                                                                    'line' => 189
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyMD5',
@@ -15175,7 +15597,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192
+                                                                                                    'line' => 189
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodydisp',
@@ -15186,7 +15608,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192
+                                                                                                    'line' => 190
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodylang',
@@ -15197,20 +15619,32 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 192
+                                                                                                    'line' => 190
+                                                                                                  }, 'Parse::RecDescent::Repetition' ),
+                                                                                           bless( {
+                                                                                                    'subrule' => 'bodyextra',
+                                                                                                    'expected' => undef,
+                                                                                                    'min' => 0,
+                                                                                                    'argcode' => undef,
+                                                                                                    'max' => 1,
+                                                                                                    'matchrule' => 0,
+                                                                                                    'repspec' => '?',
+                                                                                                    'lookahead' => 0,
+                                                                                                    'line' => 190
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__ACTION1__',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 193,
+                                                                                                    'line' => 191,
                                                                                                     'code' => '{ 
-	  $return = $item{basicfields}||{};
+	  $return = $item{basicfields} || {};
 	  $return->{bodytype} = \'TEXT\';
-	  foreach my $what (qw/textlines(?) bodyMD5(?) bodydisp(?) bodylang(?)/) {
-		my $k = $what; $k =~ s/\\(\\?\\)$//;
-		ref($item{$what}) and $return->{$k} = $item{$what}[0];
+          foreach my $what (qw/textlines(?) bodyMD5(?) bodydisp(?) bodylang(?)/)
+	  {   my $k = $what; $k =~ s/\\(\\?\\)$//;
+	      $return->{$k} = $item{$what}[0] if ref $item{$what};
 	  }
-	  $return||defined($return);
+
+	  $return;
         }'
                                                                                                   }, 'Parse::RecDescent::Action' )
                                                                                          ],
@@ -15219,7 +15653,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                    ],
                                                         'name' => 'textmessage',
                                                         'vars' => '',
-                                                        'line' => 192
+                                                        'line' => 189
                                                       }, 'Parse::RecDescent::Rule' ),
                               'bodyid' => bless( {
                                                    'impcount' => 0,
@@ -15291,6 +15725,103 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                    'vars' => '',
                                                    'line' => 88
                                                  }, 'Parse::RecDescent::Rule' ),
+                              'bodyextra' => bless( {
+                                                      'impcount' => 0,
+                                                      'calls' => [
+                                                                   'NIL',
+                                                                   'STRING'
+                                                                 ],
+                                                      'changed' => 0,
+                                                      'opcount' => 0,
+                                                      'prods' => [
+                                                                   bless( {
+                                                                            'number' => '0',
+                                                                            'strcount' => 0,
+                                                                            'dircount' => 0,
+                                                                            'uncommit' => undef,
+                                                                            'error' => undef,
+                                                                            'patcount' => 0,
+                                                                            'actcount' => 0,
+                                                                            'items' => [
+                                                                                         bless( {
+                                                                                                  'subrule' => 'NIL',
+                                                                                                  'matchrule' => 0,
+                                                                                                  'implicit' => undef,
+                                                                                                  'argcode' => undef,
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 111
+                                                                                                }, 'Parse::RecDescent::Subrule' )
+                                                                                       ],
+                                                                            'line' => undef
+                                                                          }, 'Parse::RecDescent::Production' ),
+                                                                   bless( {
+                                                                            'number' => '1',
+                                                                            'strcount' => 0,
+                                                                            'dircount' => 0,
+                                                                            'uncommit' => undef,
+                                                                            'error' => undef,
+                                                                            'patcount' => 0,
+                                                                            'actcount' => 0,
+                                                                            'items' => [
+                                                                                         bless( {
+                                                                                                  'subrule' => 'STRING',
+                                                                                                  'matchrule' => 0,
+                                                                                                  'implicit' => undef,
+                                                                                                  'argcode' => undef,
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 111
+                                                                                                }, 'Parse::RecDescent::Subrule' )
+                                                                                       ],
+                                                                            'line' => 111
+                                                                          }, 'Parse::RecDescent::Production' ),
+                                                                   bless( {
+                                                                            'number' => '2',
+                                                                            'strcount' => 2,
+                                                                            'dircount' => 0,
+                                                                            'uncommit' => undef,
+                                                                            'error' => undef,
+                                                                            'patcount' => 0,
+                                                                            'actcount' => 1,
+                                                                            'items' => [
+                                                                                         bless( {
+                                                                                                  'pattern' => '(',
+                                                                                                  'hashname' => '__STRING1__',
+                                                                                                  'description' => '\'(\'',
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 111
+                                                                                                }, 'Parse::RecDescent::InterpLit' ),
+                                                                                         bless( {
+                                                                                                  'subrule' => 'STRING',
+                                                                                                  'expected' => undef,
+                                                                                                  'min' => 1,
+                                                                                                  'argcode' => undef,
+                                                                                                  'max' => 100000000,
+                                                                                                  'matchrule' => 0,
+                                                                                                  'repspec' => 's',
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 111
+                                                                                                }, 'Parse::RecDescent::Repetition' ),
+                                                                                         bless( {
+                                                                                                  'pattern' => ')',
+                                                                                                  'hashname' => '__STRING2__',
+                                                                                                  'description' => '\')\'',
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 111
+                                                                                                }, 'Parse::RecDescent::InterpLit' ),
+                                                                                         bless( {
+                                                                                                  'hashname' => '__ACTION1__',
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 112,
+                                                                                                  'code' => '{ 0 }'
+                                                                                                }, 'Parse::RecDescent::Action' )
+                                                                                       ],
+                                                                            'line' => 111
+                                                                          }, 'Parse::RecDescent::Production' )
+                                                                 ],
+                                                      'name' => 'bodyextra',
+                                                      'vars' => '',
+                                                      'line' => 111
+                                                    }, 'Parse::RecDescent::Rule' ),
                               'othertypemessage' => bless( {
                                                              'impcount' => 0,
                                                              'calls' => [
@@ -15298,7 +15829,8 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                           'basicfields',
                                                                           'bodyparms',
                                                                           'bodydisp',
-                                                                          'bodylang'
+                                                                          'bodylang',
+                                                                          'bodyextra'
                                                                         ],
                                                              'changed' => 0,
                                                              'opcount' => 0,
@@ -15318,7 +15850,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'implicit' => undef,
                                                                                                          'argcode' => undef,
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 203
+                                                                                                         'line' => 202
                                                                                                        }, 'Parse::RecDescent::Subrule' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'basicfields',
@@ -15326,7 +15858,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'implicit' => undef,
                                                                                                          'argcode' => undef,
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 203
+                                                                                                         'line' => 202
                                                                                                        }, 'Parse::RecDescent::Subrule' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodyparms',
@@ -15337,7 +15869,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'matchrule' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 203
+                                                                                                         'line' => 202
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodydisp',
@@ -15348,10 +15880,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'matchrule' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 203
+                                                                                                         'line' => 202
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodylang',
+                                                                                                         'expected' => undef,
+                                                                                                         'min' => 0,
+                                                                                                         'argcode' => undef,
+                                                                                                         'max' => 1,
+                                                                                                         'matchrule' => 0,
+                                                                                                         'repspec' => '?',
+                                                                                                         'lookahead' => 0,
+                                                                                                         'line' => 203
+                                                                                                       }, 'Parse::RecDescent::Repetition' ),
+                                                                                                bless( {
+                                                                                                         'subrule' => 'bodyextra',
                                                                                                          'expected' => undef,
                                                                                                          'min' => 0,
                                                                                                          'argcode' => undef,
@@ -15366,12 +15909,13 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'lookahead' => 0,
                                                                                                          'line' => 204,
                                                                                                          'code' => '{ $return = {}; 
-	  foreach my $what (qw/bodytype bodyparms(?) bodydisp(?) bodylang(?)/) {
-		my $k = $what; $k =~ s/\\(\\?\\)$//;
-		$return->{$k} = ref($item{$what})? $item{$what}[0] : $item{$what} ;
+	  foreach my $what ( qw/bodytype bodyparms(?) bodydisp(?)/
+	                   , qw/bodylang(?) bodyextra(?)/ )
+	  {   my $k = $what; $k =~ s/\\(\\?\\)$//;
+	      $return->{$k} = ref($item{$what})? $item{$what}[0] : $item{$what} ;
 	  }
-	  while ( my($k,$v) = each %{$item{basicfields}} ) { $return->{$k} = $v }
-	  $return||defined($return);
+	  while( my($k,$v) = each %{$item{basicfields}} ) { $return->{$k} = $v }
+	  $return;
 	}'
                                                                                                        }, 'Parse::RecDescent::Action' )
                                                                                               ],
@@ -15380,7 +15924,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                         ],
                                                              'name' => 'othertypemessage',
                                                              'vars' => '',
-                                                             'line' => 203
+                                                             'line' => 202
                                                            }, 'Parse::RecDescent::Rule' ),
                               'kvpair' => bless( {
                                                    'impcount' => 0,
@@ -15461,7 +16005,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'description' => '/[()]/',
                                                                                                  'lookahead' => -1,
                                                                                                  'rdelim' => '/',
-                                                                                                 'line' => 99,
+                                                                                                 'line' => 102,
                                                                                                  'mod' => '',
                                                                                                  'ldelim' => '/'
                                                                                                }, 'Parse::RecDescent::Token' ),
@@ -15471,7 +16015,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 99
+                                                                                                 'line' => 102
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
                                                                            'line' => undef
@@ -15491,21 +16035,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 99
+                                                                                                 'line' => 102
                                                                                                }, 'Parse::RecDescent::Subrule' ),
                                                                                         bless( {
                                                                                                  'hashname' => '__ACTION1__',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 100,
-                                                                                                 'code' => '{ $return = $item{NIL} || $item{NUMBER} ;$return||defined($return);}'
+                                                                                                 'line' => 103,
+                                                                                                 'code' => '{ $return = $item{NIL} || $item{NUMBER}; $return||defined($return);}'
                                                                                                }, 'Parse::RecDescent::Action' )
                                                                                       ],
-                                                                           'line' => 99
+                                                                           'line' => 102
                                                                          }, 'Parse::RecDescent::Production' )
                                                                 ],
                                                      'name' => 'bodysize',
                                                      'vars' => '',
-                                                     'line' => 99
+                                                     'line' => 102
                                                    }, 'Parse::RecDescent::Rule' ),
                               'STRING' => bless( {
                                                    'impcount' => 0,
@@ -15672,7 +16216,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                            'implicit' => undef,
                                                                                            'argcode' => undef,
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 152
+                                                                                           'line' => 164
                                                                                          }, 'Parse::RecDescent::Subrule' )
                                                                                 ],
                                                                      'line' => undef
@@ -15691,7 +16235,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                            'hashname' => '__STRING1__',
                                                                                            'description' => '\'(\'',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 152
+                                                                                           'line' => 164
                                                                                          }, 'Parse::RecDescent::InterpLit' ),
                                                                                   bless( {
                                                                                            'subrule' => 'addressstruct',
@@ -15702,28 +16246,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                            'matchrule' => 0,
                                                                                            'repspec' => 's',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 152
+                                                                                           'line' => 164
                                                                                          }, 'Parse::RecDescent::Repetition' ),
                                                                                   bless( {
                                                                                            'pattern' => ')',
                                                                                            'hashname' => '__STRING2__',
                                                                                            'description' => '\')\'',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 152
+                                                                                           'line' => 164
                                                                                          }, 'Parse::RecDescent::InterpLit' ),
                                                                                   bless( {
                                                                                            'hashname' => '__ACTION1__',
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 153,
+                                                                                           'line' => 165,
                                                                                            'code' => '{ $return = $item{NIL} || $item{\'addressstruct(s)\'} }'
                                                                                          }, 'Parse::RecDescent::Action' )
                                                                                 ],
-                                                                     'line' => 152
+                                                                     'line' => 164
                                                                    }, 'Parse::RecDescent::Production' )
                                                           ],
                                                'name' => 'to',
                                                'vars' => '',
-                                               'line' => 152
+                                               'line' => 164
                                              }, 'Parse::RecDescent::Rule' ),
                               'NIL' => bless( {
                                                 'impcount' => 0,
@@ -15788,7 +16332,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 143
+                                                                                             'line' => 155
                                                                                            }, 'Parse::RecDescent::Subrule' )
                                                                                   ],
                                                                        'line' => undef
@@ -15807,7 +16351,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'hashname' => '__STRING1__',
                                                                                              'description' => '\'(\'',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 143
+                                                                                             'line' => 155
                                                                                            }, 'Parse::RecDescent::InterpLit' ),
                                                                                     bless( {
                                                                                              'subrule' => 'addressstruct',
@@ -15818,28 +16362,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'matchrule' => 0,
                                                                                              'repspec' => 's',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 143
+                                                                                             'line' => 155
                                                                                            }, 'Parse::RecDescent::Repetition' ),
                                                                                     bless( {
                                                                                              'pattern' => ')',
                                                                                              'hashname' => '__STRING2__',
                                                                                              'description' => '\')\'',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 143
+                                                                                             'line' => 155
                                                                                            }, 'Parse::RecDescent::InterpLit' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 144,
+                                                                                             'line' => 156,
                                                                                              'code' => '{ $return = $item{NIL} || $item{\'addressstruct(s)\'} }'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 143
+                                                                       'line' => 155
                                                                      }, 'Parse::RecDescent::Production' )
                                                             ],
                                                  'name' => 'from',
                                                  'vars' => '',
-                                                 'line' => 143
+                                                 'line' => 155
                                                }, 'Parse::RecDescent::Rule' ),
                               'bodystructure' => bless( {
                                                           'impcount' => 0,
@@ -15863,7 +16407,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'hashname' => '__STRING1__',
                                                                                                       'description' => '\'(\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 272
+                                                                                                      'line' => 267
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'part',
@@ -15874,23 +16418,22 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => 's',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 272
+                                                                                                      'line' => 267
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'pattern' => ')',
                                                                                                       'hashname' => '__STRING2__',
                                                                                                       'description' => '\')\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 272
+                                                                                                      'line' => 267
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'hashname' => '__ACTION1__',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 273,
-                                                                                                      'code' => '{
-			$return = $item{\'part(s)\'} ;
-			$return||defined($return);
-		}'
+                                                                                                      'line' => 268,
+                                                                                                      'code' => '{   $return = $item{\'part(s)\'} ;
+	    $return||defined($return);
+	}'
                                                                                                     }, 'Parse::RecDescent::Action' )
                                                                                            ],
                                                                                 'line' => undef
@@ -15898,7 +16441,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                      ],
                                                           'name' => 'bodystructure',
                                                           'vars' => '',
-                                                          'line' => 272
+                                                          'line' => 267
                                                         }, 'Parse::RecDescent::Rule' ),
                               'PLAIN' => bless( {
                                                   'impcount' => 0,
@@ -16106,6 +16649,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                               'bodyparms',
                                                               'bodydisp',
                                                               'bodylang',
+                                                              'bodyextra',
                                                               'textmessage',
                                                               'messagerfc822message',
                                                               'othertypemessage'
@@ -16182,6 +16726,17 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'line' => 243
                                                                                            }, 'Parse::RecDescent::Repetition' ),
                                                                                     bless( {
+                                                                                             'subrule' => 'bodyextra',
+                                                                                             'expected' => undef,
+                                                                                             'min' => 0,
+                                                                                             'argcode' => undef,
+                                                                                             'max' => 1,
+                                                                                             'matchrule' => 0,
+                                                                                             'repspec' => '?',
+                                                                                             'lookahead' => 0,
+                                                                                             'line' => 243
+                                                                                           }, 'Parse::RecDescent::Repetition' ),
+                                                                                    bless( {
                                                                                              'hashname' => '__DIRECTIVE2__',
                                                                                              'name' => '<defer:{  $subpartCount = 0 }>',
                                                                                              'lookahead' => 0,
@@ -16192,16 +16747,14 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
                                                                                              'line' => 245,
-                                                                                             'code' => '{
-		$return = bless($item{basicfields}, 
-			"Mail::IMAPClient::BodyStructure");
-		$return->{bodytype} = "MULTIPART";
-		$return->{bodystructure} = $item{\'subpart(s)\'};
-		foreach my $b (qw/bodyparms(?) bodydisp(?) bodylang(?)/) { 
-			my $k = $b; $k =~ s/\\(\\?\\)$//;
-			$return->{$k} = ref($item{$b}) ? $item{$b}[0] : $item{$b};
-		}
-		$return||defined($return) ;
+                                                                                             'code' => '{   $return = bless $item{basicfields},"Mail::IMAPClient::BodyStructure";
+	    $return->{bodytype} = "MULTIPART";
+	    $return->{bodystructure} = $item{\'subpart(s)\'};
+	    foreach my $b (qw/bodyparms(?) bodydisp(?) bodylang(?) bodyextra(?)/)
+	    {   my $k = $b; $k =~ s/\\(\\?\\)$//;
+	        $return->{$k} = ref($item{$b}) ? $item{$b}[0] : $item{$b};
+	    }
+	    $return;
 	}'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
@@ -16222,19 +16775,18 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 256
+                                                                                             'line' => 254
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 257,
-                                                                                             'code' => '{
-		$return = bless $item{textmessage}, "Mail::IMAPClient::BodyStructure";
-		$return||defined($return);
+                                                                                             'line' => 255,
+                                                                                             'code' => '{  $return = bless $item{textmessage}, "Mail::IMAPClient::BodyStructure";
+	   $return||defined($return);
 	}'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 256
+                                                                       'line' => 254
                                                                      }, 'Parse::RecDescent::Production' ),
                                                               bless( {
                                                                        'number' => '2',
@@ -16251,19 +16803,18 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 261
+                                                                                             'line' => 258
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 262,
-                                                                                             'code' => '{
-		$return = bless $item{messagerfc822message}, "Mail::IMAPClient::BodyStructure";
-		$return||defined($return);
+                                                                                             'line' => 259,
+                                                                                             'code' => '{  $return = bless $item{messagerfc822message}, "Mail::IMAPClient::BodyStructure";
+	   $return||defined($return);
 	}'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 261
+                                                                       'line' => 258
                                                                      }, 'Parse::RecDescent::Production' ),
                                                               bless( {
                                                                        'number' => '3',
@@ -16280,19 +16831,18 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 266
+                                                                                             'line' => 262
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 267,
-                                                                                             'code' => '{
-		$return = bless $item{othertypemessage}, "Mail::IMAPClient::BodyStructure";
-		$return||defined($return);
+                                                                                             'line' => 263,
+                                                                                             'code' => '{  $return = bless $item{othertypemessage}, "Mail::IMAPClient::BodyStructure";
+	   $return||defined($return);
 	}'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 266
+                                                                       'line' => 262
                                                                      }, 'Parse::RecDescent::Production' )
                                                             ],
                                                  'name' => 'part',
@@ -16380,7 +16930,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                             'implicit' => undef,
                                                                                             'argcode' => undef,
                                                                                             'lookahead' => 0,
-                                                                                            'line' => 140
+                                                                                            'line' => 152
                                                                                           }, 'Parse::RecDescent::Subrule' )
                                                                                  ],
                                                                       'line' => undef
@@ -16399,7 +16949,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                             'hashname' => '__STRING1__',
                                                                                             'description' => '\'(\'',
                                                                                             'lookahead' => 0,
-                                                                                            'line' => 140
+                                                                                            'line' => 152
                                                                                           }, 'Parse::RecDescent::InterpLit' ),
                                                                                    bless( {
                                                                                             'subrule' => 'addressstruct',
@@ -16410,28 +16960,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                             'matchrule' => 0,
                                                                                             'repspec' => 's',
                                                                                             'lookahead' => 0,
-                                                                                            'line' => 140
+                                                                                            'line' => 152
                                                                                           }, 'Parse::RecDescent::Repetition' ),
                                                                                    bless( {
                                                                                             'pattern' => ')',
                                                                                             'hashname' => '__STRING2__',
                                                                                             'description' => '\')\'',
                                                                                             'lookahead' => 0,
-                                                                                            'line' => 140
+                                                                                            'line' => 152
                                                                                           }, 'Parse::RecDescent::InterpLit' ),
                                                                                    bless( {
                                                                                             'hashname' => '__ACTION1__',
                                                                                             'lookahead' => 0,
-                                                                                            'line' => 141,
+                                                                                            'line' => 153,
                                                                                             'code' => '{ $return = $item{NIL} || $item{\'addressstruct(s)\'} }'
                                                                                           }, 'Parse::RecDescent::Action' )
                                                                                  ],
-                                                                      'line' => 140
+                                                                      'line' => 152
                                                                     }, 'Parse::RecDescent::Production' )
                                                            ],
                                                 'name' => 'bcc',
                                                 'vars' => '',
-                                                'line' => 140
+                                                'line' => 152
                                               }, 'Parse::RecDescent::Rule' ),
                               'rfc822message' => bless( {
                                                           'impcount' => 0,
@@ -16570,7 +17120,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'hashname' => '__STRING1__',
                                                                                                       'description' => '\'(\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 114
+                                                                                                      'line' => 126
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'personalname',
@@ -16578,7 +17128,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 114
+                                                                                                      'line' => 126
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'sourceroute',
@@ -16586,7 +17136,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 114
+                                                                                                      'line' => 126
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'mailboxname',
@@ -16594,7 +17144,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 114
+                                                                                                      'line' => 126
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'hostname',
@@ -16602,26 +17152,25 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 114
+                                                                                                      'line' => 126
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'pattern' => ')',
                                                                                                       'hashname' => '__STRING2__',
                                                                                                       'description' => '\')\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 114
+                                                                                                      'line' => 126
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'hashname' => '__ACTION1__',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 115,
-                                                                                                      'code' => '{ $return = {
+                                                                                                      'line' => 127,
+                                                                                                      'code' => '{ bless {
 			personalname => $item{personalname} ,	
 			sourceroute  => $item{sourceroute} ,	
 			mailboxname  => $item{mailboxname} ,	
 			hostname     => $item{hostname} ,	
-		  } ;
-		  bless($return, "Mail::IMAPClient::BodyStructure::Address");
+		  }, \'Mail::IMAPClient::BodyStructure::Address\';
 		}'
                                                                                                     }, 'Parse::RecDescent::Action' )
                                                                                            ],
@@ -16630,7 +17179,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                      ],
                                                           'name' => 'addressstruct',
                                                           'vars' => '',
-                                                          'line' => 114
+                                                          'line' => 126
                                                         }, 'Parse::RecDescent::Rule' ),
                               'sourceroute' => bless( {
                                                         'impcount' => 0,
@@ -16656,7 +17205,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 108
+                                                                                                    'line' => 117
                                                                                                   }, 'Parse::RecDescent::Subrule' )
                                                                                          ],
                                                                               'line' => undef
@@ -16676,21 +17225,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 108
+                                                                                                    'line' => 117
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__ACTION1__',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 109,
-                                                                                                    'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
+                                                                                                    'line' => 118,
+                                                                                                    'code' => '{ $return = $item{NIL} || $item{STRING}; $return||defined($return);}'
                                                                                                   }, 'Parse::RecDescent::Action' )
                                                                                          ],
-                                                                              'line' => 108
+                                                                              'line' => 117
                                                                             }, 'Parse::RecDescent::Production' )
                                                                    ],
                                                         'name' => 'sourceroute',
                                                         'vars' => '',
-                                                        'line' => 108
+                                                        'line' => 117
                                                       }, 'Parse::RecDescent::Rule' ),
                               'subpart' => bless( {
                                                     'impcount' => 0,
@@ -16714,7 +17263,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'hashname' => '__STRING1__',
                                                                                                 'description' => '\'(\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 235
+                                                                                                'line' => 236
                                                                                               }, 'Parse::RecDescent::InterpLit' ),
                                                                                        bless( {
                                                                                                 'subrule' => 'part',
@@ -16722,22 +17271,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 235
+                                                                                                'line' => 236
                                                                                               }, 'Parse::RecDescent::Subrule' ),
                                                                                        bless( {
                                                                                                 'pattern' => ')',
                                                                                                 'hashname' => '__STRING2__',
                                                                                                 'description' => '\')\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 235
+                                                                                                'line' => 236
                                                                                               }, 'Parse::RecDescent::InterpLit' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__ACTION1__',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 236,
-                                                                                                'code' => '{ 
-		$return = $item{part} ; 
-		$return||defined($return);
+                                                                                                'line' => 237,
+                                                                                                'code' => '{   $return = $item{part} ; 
+	    $return||defined($return);
 	}'
                                                                                               }, 'Parse::RecDescent::Action' ),
                                                                                        bless( {
@@ -16753,7 +17301,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                ],
                                                     'name' => 'subpart',
                                                     'vars' => '',
-                                                    'line' => 235
+                                                    'line' => 236
                                                   }, 'Parse::RecDescent::Rule' ),
                               'textlines' => bless( {
                                                       'impcount' => 0,
@@ -16890,7 +17438,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 104
+                                                                                                 'line' => 108
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
                                                                            'line' => undef
@@ -16910,10 +17458,10 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 104
+                                                                                                 'line' => 108
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
-                                                                           'line' => 104
+                                                                           'line' => 108
                                                                          }, 'Parse::RecDescent::Production' ),
                                                                   bless( {
                                                                            'number' => '2',
@@ -16929,7 +17477,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'hashname' => '__STRING1__',
                                                                                                  'description' => '\'(\'',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 104
+                                                                                                 'line' => 108
                                                                                                }, 'Parse::RecDescent::InterpLit' ),
                                                                                         bless( {
                                                                                                  'subrule' => 'STRING',
@@ -16940,28 +17488,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                  'matchrule' => 0,
                                                                                                  'repspec' => 's',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 104
+                                                                                                 'line' => 108
                                                                                                }, 'Parse::RecDescent::Repetition' ),
                                                                                         bless( {
                                                                                                  'pattern' => ')',
                                                                                                  'hashname' => '__STRING2__',
                                                                                                  'description' => '\')\'',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 104
+                                                                                                 'line' => 108
                                                                                                }, 'Parse::RecDescent::InterpLit' ),
                                                                                         bless( {
                                                                                                  'hashname' => '__ACTION1__',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 105,
-                                                                                                 'code' => '{ $return = $item{NIL} || $item{\'STRING(s)\'} ;$return||defined($return);}'
+                                                                                                 'line' => 109,
+                                                                                                 'code' => '{ $return = $item{NIL} || $item{\'STRING(s)\'}; $return||defined($return);}'
                                                                                                }, 'Parse::RecDescent::Action' )
                                                                                       ],
-                                                                           'line' => 104
+                                                                           'line' => 108
                                                                          }, 'Parse::RecDescent::Production' )
                                                                 ],
                                                      'name' => 'bodylang',
                                                      'vars' => '',
-                                                     'line' => 104
+                                                     'line' => 108
                                                    }, 'Parse::RecDescent::Rule' ),
                               'envelopestruct' => bless( {
                                                            'impcount' => 0,
@@ -16994,7 +17542,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'hashname' => '__STRING1__',
                                                                                                        'description' => '\'(\'',
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::InterpLit' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'date',
@@ -17002,7 +17550,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'subject',
@@ -17010,7 +17558,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'from',
@@ -17018,7 +17566,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'sender',
@@ -17026,7 +17574,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'replyto',
@@ -17034,7 +17582,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'to',
@@ -17042,7 +17590,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'cc',
@@ -17050,7 +17598,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'bcc',
@@ -17058,7 +17606,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'inreplyto',
@@ -17066,7 +17614,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'messageid',
@@ -17074,25 +17622,24 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'pattern' => ')',
                                                                                                        'hashname' => '__STRING2__',
                                                                                                        'description' => '\')\'',
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 155
+                                                                                                       'line' => 167
                                                                                                      }, 'Parse::RecDescent::InterpLit' ),
                                                                                               bless( {
                                                                                                        'hashname' => '__ACTION1__',
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 156,
-                                                                                                       'code' => '{ $return = {}; 
-	  foreach my $what (qw/date subject from sender replyto to cc bcc inreplyto messageid/) {
-		$return->{$what} = $item{$what};
-	  }
-	  bless $return, "Mail::IMAPClient::BodyStructure::Envelope";
-	  $return||defined($return);
+                                                                                                       'line' => 168,
+                                                                                                       'code' => '{ $return = bless {}, "Mail::IMAPClient::BodyStructure::Envelope"; 
+	  $return->{$_} = $item{$_}
+	     for qw/date subject from sender replyto to cc/
+               , qw/bcc inreplyto messageid/ ;
+	  $return;
 	}'
                                                                                                      }, 'Parse::RecDescent::Action' )
                                                                                             ],
@@ -17101,7 +17648,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                       ],
                                                            'name' => 'envelopestruct',
                                                            'vars' => '',
-                                                           'line' => 155
+                                                           'line' => 167
                                                          }, 'Parse::RecDescent::Rule' ),
                               'replyto' => bless( {
                                                     'impcount' => 0,
@@ -17127,7 +17674,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 146
+                                                                                                'line' => 158
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
                                                                           'line' => undef
@@ -17146,7 +17693,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'hashname' => '__STRING1__',
                                                                                                 'description' => '\'(\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 146
+                                                                                                'line' => 158
                                                                                               }, 'Parse::RecDescent::InterpLit' ),
                                                                                        bless( {
                                                                                                 'subrule' => 'addressstruct',
@@ -17157,28 +17704,28 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                 'matchrule' => 0,
                                                                                                 'repspec' => 's',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 146
+                                                                                                'line' => 158
                                                                                               }, 'Parse::RecDescent::Repetition' ),
                                                                                        bless( {
                                                                                                 'pattern' => ')',
                                                                                                 'hashname' => '__STRING2__',
                                                                                                 'description' => '\')\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 146
+                                                                                                'line' => 158
                                                                                               }, 'Parse::RecDescent::InterpLit' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__ACTION1__',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 147,
+                                                                                                'line' => 159,
                                                                                                 'code' => '{ $return = $item{NIL} || $item{\'addressstruct(s)\'} }'
                                                                                               }, 'Parse::RecDescent::Action' )
                                                                                      ],
-                                                                          'line' => 146
+                                                                          'line' => 158
                                                                         }, 'Parse::RecDescent::Production' )
                                                                ],
                                                     'name' => 'replyto',
                                                     'vars' => '',
-                                                    'line' => 146
+                                                    'line' => 158
                                                   }, 'Parse::RecDescent::Rule' ),
                               'mailboxname' => bless( {
                                                         'impcount' => 0,
@@ -17204,7 +17751,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 110
+                                                                                                    'line' => 120
                                                                                                   }, 'Parse::RecDescent::Subrule' )
                                                                                          ],
                                                                               'line' => undef
@@ -17224,21 +17771,21 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 110
+                                                                                                    'line' => 120
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__ACTION1__',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 111,
-                                                                                                    'code' => '{ $return = $item{NIL} || $item{STRING} ;$return||defined($return);}'
+                                                                                                    'line' => 121,
+                                                                                                    'code' => '{ $return = $item{NIL} || $item{STRING}; $return||defined($return);}'
                                                                                                   }, 'Parse::RecDescent::Action' )
                                                                                          ],
-                                                                              'line' => 110
+                                                                              'line' => 120
                                                                             }, 'Parse::RecDescent::Production' )
                                                                    ],
                                                         'name' => 'mailboxname',
                                                         'vars' => '',
-                                                        'line' => 110
+                                                        'line' => 120
                                                       }, 'Parse::RecDescent::Rule' )
                             }
                }, 'Parse::RecDescent' );
