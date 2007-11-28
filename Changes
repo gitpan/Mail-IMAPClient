@@ -3,6 +3,13 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.00: Wed Nov 28 09:56:54 CET 2007
+
+	Fixes:
+
+	- "${peek}[]" should be "$peek\[]" for perl 5.6.1
+	   rt.cpan.org#30900 [Gerald Richter]
+
 version 2.99_07: Wed Nov 14 09:54:46 CET 2007
 
 	Fixes:

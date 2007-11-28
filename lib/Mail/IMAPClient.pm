@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '2.99_07';
+our $VERSION = '3.00';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -522,7 +522,7 @@ sub message_string
     defined $expected_size or return undef;  # unable to get size
 
     my $peek = $self->Peek ? '.PEEK' : '';
-    my $cmd  = $self->imap4rev1 ? "BODY${peek}[]" : "RFC822$peek";
+    my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
 
     $self->fetch($msg, $cmd)
         or return undef;
@@ -591,7 +591,7 @@ sub message_to_file
         if $self->Count >= $clear && $clear > 0;
 
     my $peek   = $self->Peek ? '.PEEK' : '';
-    my $cmd    = $self->imap4rev1 ? "RFC822$peek" : "BODY${peek}[]";
+    my $cmd    = $self->imap4rev1 ? "RFC822$peek" : "BODY$peek\[]";
     my $uid    = $self->Uid ? "UID " : "";
     my $trans  = $self->Count($self->Count+1);
     my $string = "$trans ${uid}FETCH $msgs $cmd";

@@ -118,9 +118,8 @@ Both parameters hold a reference to the socket connection.  Normally this
 is set for you by the L<connect> method, but if you are implementing
 an advanced authentication technique you may choose to set up your own
 socket connection and then set this parameter manually, bypassing the
-B<connect> method completely.  This is also
-useful if you want to use L<IO::Socket::INET> alternatives, like
-L<IO::Socket::SSL>.
+B<connect> method completely.  This is also useful if you want to use
+L<IO::Socket::INET> alternatives, like L<IO::Socket::SSL>.
 
 The I<RawSocket> parameter simply records the socket to use for future
 operations, without attempting any interaction on it. In this case, you
