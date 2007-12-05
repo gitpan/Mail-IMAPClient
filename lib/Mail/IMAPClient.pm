@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.01';
+our $VERSION = '3.02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1877,16 +1877,6 @@ sub supported_flags(@)
     grep { $sup->{ /^\\(\S+)/ ? lc $1 : ()} } @_;
 }
 
-# parse_headers modified to allow second param to also be a
-# reference to a list of numbers. If this is a case, the headers
-# are read from all the specified messages, and a reference to
-# an hash of mail numbers to references to hashes, are returned.
-# I found, with a mailbox of 300 messages, this was
-# *significantly* faster against our mailserver (< 1 second
-# vs. 20 seconds)
-#
-# 2000-03-22 Adrian Smith (adrian.smith@ucpag.com)
-
 sub parse_headers
 {   my ($self, $msgspec, @fields) = @_;
     my $fields = join ' ', @fields;
@@ -1907,10 +1897,10 @@ sub parse_headers
     foreach my $header (map {split /\r?\n/} @raw)
     {
         if($header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
-                        \( .*? BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix)
+                        \( (.*?) BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix)
         {   # start new message header
-            my $msgid = $1;
-            $msgid = $1 if $self->Uid && $header =~ m/\b UID \s+ (\d+)/x;
+            my ($msgid, $msgattrs) = ($1, $2);
+            $msgid = $1 if $self->Uid && $msgattrs =~ m/\b UID \s+ (\d+)/x;
             $h = $headers{$msgid} = {};
         }
         $header =~ /\S/ or next;

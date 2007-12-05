@@ -3350,7 +3350,7 @@ Example:
 
 =head2 Socket
 
-B<PLEASE NOT>
+B<PLEASE NOTE>
 The semantics of this method has changed as of version 2.99_04 of this module.
 If you need the old semantics, you now have to use L<RawSocket>.
 
