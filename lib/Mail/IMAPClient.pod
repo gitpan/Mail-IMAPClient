@@ -1594,7 +1594,13 @@ B<login> is sometimes called automatically by L<connect>, which in turn
 is sometimes called automatically by L<new>. You can predict this 
 behavior once you've read the section on the L<new> method.
 
-=cut
+Then Sun/iPlanet/Netscape IMAP servers to allow an administrative user to
+masquerade as another user.  The B<proxyauth> method uses the IMAP
+PROXYAUTH client command provided like this:
+
+      $imap->login("admin", "password");
+      $imap->proxyauth("someuser");
+
 
 =head2 logout
 

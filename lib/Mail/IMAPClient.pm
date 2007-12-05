@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.00';
+our $VERSION = '3.01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -311,6 +311,11 @@ sub login
         if $auth ne 'LOGIN';
 
     my $passwd = $self->Password;
+    if($passwd =~ m/\W/)  # need to quote
+    {   $passwd =~ s/(["\\])/\\$1/g;
+        $passwd = qq{"$passwd"};
+    }
+
     my $id     = $self->User;
     $id        = qq{"$id"} if $id !~ /^".*"$/;
 
@@ -319,6 +324,11 @@ sub login
 
     $self->State(Authenticated);
     $self;
+}
+
+sub proxyauth
+{   my ($self, $user) = @_;
+    $self->_imap_command("PROXYAUTH $user") ? $self->Results : undef;
 }
 
 sub separator
@@ -1099,11 +1109,16 @@ sub _imap_command
 }
 
 sub _imap_uid_command
-{   my $self = shift;
-    my $cmd  = shift;
+{   my ($self, $cmd) = (shift, shift);
     my $args = @_ ? join(" ", '', @_) : '';
     my $uid  = $self->Uid ? 'UID ' : '';
     $self->_imap_command("$uid$cmd$args");
+}
+
+sub _imap_plain_command
+{   my ($self, $cmd) = (shift, shift);
+    my $args = @_ ? join(" ", '', @_) : '';
+    $self->_imap_command("$cmd$args");
 }
 
 sub run
@@ -1413,29 +1428,8 @@ sub _read_line
 
             $self->Fast_io($fast_io) if $fast_io;
 
-            # Now let's make sure there are no IMAP server output lines
-            # (i.e. [tag|*] BAD|NO|OK Text) embedded in the literal string
-            my $trailer;
-            if($iBuffer =~ s/\r?\n((?:\*|\d+)\s(?:BAD|NO|OK)[^\n]*\r?\n\z)//i)
-            {   $trailer = $1;
-                $self->_debug("Got output in literal: $trailer");
-            }
-
-            $self->_debug("literal includes ')' of FETCH")
-                if length $iBuffer
-                && $current_line =~ m/\bFETCH\b/i
-                && $iBuffer =~ s/\)$//;
-
-            if(length $iBuffer)
-            {   $self->_debug("literal: too much >>$iBuffer<<");
-                $litstring .= $iBuffer;
-                $iBuffer    = '';
-            }
-
             push @$oBuffer, [$index++, "OUTPUT",  $current_line];
             push @$oBuffer, [$index++, "LITERAL", $litstring];
-            push @$oBuffer, [$index++, "OUTPUT",  $trailer]
-                if $trailer;
         }
     }
 
@@ -1658,7 +1652,7 @@ sub fetch
       : $what;
 
     $self->_imap_uid_command(FETCH => $take, @_)
-        or return ();
+        or return;
 
     wantarray ? $self->History : $self->Results;
 }
@@ -1739,7 +1733,7 @@ sub subscribe
 {   my ($self, @a) = @_;
     delete $self->{Folders};
     $a[-1] = $self->Massage($a[-1]) if @a;
-    $self->_imap_uid_command(SUBSCRIBE => @a)
+    $self->_imap_plain_command(SUBSCRIBE => @a)
         or return undef;
     wantarray ? $self->History : $self->Results;
 }
@@ -1748,7 +1742,7 @@ sub delete
 {   my ($self, @a) = @_;
     delete $self->{Folders};
     $a[-1] = $self->Massage($a[-1]) if @a;
-    $self->_imap_uid_command(DELETE => @a)
+    $self->_imap_plain_command(DELETE => @a)
         or return undef;
     wantarray ? $self->History : $self->Results;
 }
@@ -1757,7 +1751,7 @@ sub myrights
 {   my ($self, @a) = @_;
     delete $self->{Folders};
     $a[-1] = $self->Massage($a[-1]) if @a;
-    $self->_imap_uid_command(MYRIGHTS => @a)
+    $self->_imap_plain_command(MYRIGHTS => @a)
         or return undef;
     wantarray ? $self->History : $self->Results;
 }
@@ -1766,7 +1760,7 @@ sub create
 {   my ($self, @a) = @_;
     delete $self->{Folders};
     $a[0] = $self->Massage($a[0]) if @a;
-    $self->_imap_uid_command(CREATE => @a)
+    $self->_imap_plain_command(CREATE => @a)
         or return undef;
     wantarray ? $self->History : $self->Results;
 }
@@ -1774,7 +1768,7 @@ sub create
 sub close
 {   my $self = shift;
     delete $self->{Folders};
-    $self->_imap_uid_command('CLOSE')
+    $self->_imap_plain_command('CLOSE')
         or return undef;
     wantarray ? $self->History : $self->Results;
 }
@@ -1839,7 +1833,7 @@ sub flags
 
     # Send command
     $self->fetch($msg, "FLAGS")
-        or return undef;
+        or return;
 
     my $u_f = $self->Uid;
     my $flagset = {};
@@ -1912,10 +1906,12 @@ sub parse_headers
 
     foreach my $header (map {split /\r?\n/} @raw)
     {
-        if($header =~ s/^(?:\*|UID) \s+ (\d+) \s+ FETCH \s+
+        if($header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
                         \( .*? BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix)
         {   # start new message header
-            $h = $headers{$1} = {};
+            my $msgid = $1;
+            $msgid = $1 if $self->Uid && $header =~ m/\b UID \s+ (\d+)/x;
+            $h = $headers{$msgid} = {};
         }
         $header =~ /\S/ or next;
 
@@ -2209,7 +2205,7 @@ sub namespace {
         return undef;
     }
 
-    my $got = $self->_imap_command("NAMESPACE") or return ();
+    my $got = $self->_imap_command("NAMESPACE") or return;
     my @namespaces = map { /^\* NAMESPACE (.*)/ ? $1 : () }
        $got->Results;
 

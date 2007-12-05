@@ -2,8 +2,6 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient::BodyStructure;
-our $VERSION   = '0.0.4';
-
 use Mail::IMAPClient::BodyStructure::Parse;
 
 # my has file scope, not limited to package!
