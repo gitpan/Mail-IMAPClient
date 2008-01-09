@@ -175,7 +175,7 @@ BEGIN
 
 
 package Mail::IMAPClient::BodyStructure::Address;
-@ISA = qw/Mail::IMAPClient::BodyStructure/;
+our @ISA = qw/Mail::IMAPClient::BodyStructure/;
 
 for my $datum ( qw(personalname mailboxname hostname sourcename) )
 {   no strict 'refs';

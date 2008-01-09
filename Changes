@@ -3,6 +3,44 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.03: Wed Jan  9 22:11:36 CET 2008
+
+	Fixes:
+
+	- LIST (f.i. used by folders()) did not return anything when the
+	  passed argument had a trailing separator. [Gunther Heintze]
+
+	- Rfc2060_datetime() must include a zone.
+          rt.cpan.org#31971 [David Golden]
+
+	- folders() uses LIST, and then calls a STATUS on each of the
+	  names found.	This is superfluous, and will cause problems when
+	  the STATUS fails... for instance because of ACL limitations
+	  on the sub-folder.
+	  rt.cpan.org#31962 [Thomas Jarosch]
+
+	- fixed a zillion of problems in the BodyStructure parser.  The
+	  original author did not understand parsing, nor Perl.
+
+	- part numbering wrong when nested messages contained multiparts
+
+	Improvements:
+
+	- implementation of DIGEST-MD5 authentication [Thomas Jarosch]
+
+	- removed call for status() in Massage(), which hopefully speeds-up
+	  things without destroying anything.  It removed a possible deep
+	  recursion, which no-one reported (so should be ok to remove it)
+
+	- simplified folders() algorithm.
+
+	- merged folder commands, like subscribe into one.
+
+	- added unsubscribe()
+	  rt.cpan.org#31268 [G Miller]
+
+	- lazy-load Digest::HMAC_MD5
+
 version 3.02: Wed Dec  5 21:33:17 CET 2007
 
 	Fixes:

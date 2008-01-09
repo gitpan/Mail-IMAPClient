@@ -518,6 +518,21 @@ seconds since the epoch date. It returns an RFC2060 compliant date
 string for that date (as required in date-related arguments to SEARCH,
 such as "since", "before", etc.). 
 
+=head2 Rfc2060_datetime
+
+Example:
+
+	$date = $imap->Rfc2060_datetime($seconds);
+	# or:
+	$date = Mail::IMAPClient->Rfc2060_datetime($seconds);
+
+The B<Rfc2060_datetime> method accepts one or two arguments: a obligatory
+timestamp and an optional zone.  The zone shall be formatted as
+C<< [+-]\d{4} >>, and defaults to C<< +0000 >>.  The timestamp follows the
+definition of the output of the platforms specific C<time>, usually in
+seconds since Jan 1st 1970.  However, you have to correct the number
+yourself for the zone.
+
 =head2 Rfc822_date
 
 Example:
@@ -1399,7 +1414,7 @@ B<has_capability>.
 Example:
 	
 	my $idle = $imap->idle or warn "Couldn't idle: $@\n";
-	&goDoOtherThings;
+	goDoOtherThings();
 	$imap->done($idle) or warn "Error from done: $@\n";
 
 The B<idle> method places the IMAP connection in an IDLE state. Your
