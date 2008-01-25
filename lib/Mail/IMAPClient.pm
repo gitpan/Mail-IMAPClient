@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.03';
+our $VERSION = '3.04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1864,25 +1864,34 @@ sub parse_headers
     my @raw = $self->fetch($string)
         or return undef;
 
-    my %headers; # HASH from message ids to headers
-    my $h;       # HASH of fields for current msgid
-    my $field;   # previous field name
+    my %headers; # message ids to headers
+    my $h;       # fields for current msgid
+    my $field;   # previous field name, for unfolding
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
+    my $msgid;
 
     foreach my $header (map {split /\r?\n/} @raw)
-    {
+    {   # little problem: Windows2003 has UID as body, not in header
         if($header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
                         \( (.*?) BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix)
         {   # start new message header
-            my ($msgid, $msgattrs) = ($1, $2);
-            $msgid = $1 if $self->Uid && $msgattrs =~ m/\b UID \s+ (\d+)/x;
-            $h = $headers{$msgid} = {};
+            ($msgid, my $msgattrs) = ($1, $2);
+            $h = {};
+            if($self->Uid)  # undef when win2003
+            {   $msgid = $msgattrs =~ m/\b UID \s+ (\d+)/x ? $1 : undef }
+
+            $headers{$msgid} = $h if $msgid;
         }
-        $header =~ /\S/ or next;
+        $header =~ /\S/ or next; # skip empty lines.
 
         # ( for vi
         if($header =~ /^\)/)  # end of this message
         {   undef $h;  # inbetween headers
+            next;
+        }
+        elsif(!$msgid && $header =~ /^\s*UID\s+(\d+)\s*\)/)
+        {   $headers{$1} = $h;   # finally found msgid, win2003
+            undef $h;
             next;
         }
 

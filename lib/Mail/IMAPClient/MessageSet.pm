@@ -5,7 +5,7 @@ package Mail::IMAPClient::MessageSet;
 
 =head1 NAME
 
-Mail::IMAPClient::MessageSet -- ranges of message sequence nummers
+Mail::IMAPClient::MessageSet - ranges of message sequence nummers
 
 =cut
 

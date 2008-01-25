@@ -3,6 +3,17 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.04: Fri Jan 25 09:25:51 CET 2008
+
+	Fixes:
+
+	- read_header fix for UID on Windows Server 2003.
+          rt.cpan.org#32398 [Michiel Stelman]
+
+	Improvements:
+
+	- doc update on authentication, by [Thomas Jarosch]
+
 version 3.03: Wed Jan  9 22:11:36 CET 2008
 
 	Fixes:
