@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Mail-IMAPClient
-version:             3.04
+version:             3.05
 abstract:            IMAP4 client library
 license:             ~
 author:              ~

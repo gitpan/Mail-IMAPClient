@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.04';
+our $VERSION = '3.05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1566,11 +1566,12 @@ sub get_bodystructure
     }
     else
     {   $self->_debug("get_bodystructure: reassembling original response");
-        my $start = 0;
-        foreach my $o ($self->Results)
+        my $started = 0;
+        my $output  = '';
+        foreach my $o ($self->_transaction)
         {   next unless $self->_is_output_or_literal($o);
-            next unless $start or
-                $o->[DATA] =~ /BODYSTRUCTURE \(/i and ++$start; # Hi, vi! ;-)
+            $started++ if $o->[DATA] =~ /BODYSTRUCTURE \(/i; ; # Hi, vi! ;-)
+            $started or next;
 
             if(length $output && $self->_is_literal($o) )
             {   my $data = $o->[DATA];
@@ -1598,24 +1599,30 @@ sub get_envelope
         return undef;
     }
 
-    my @out = $self->fetch($msg,"ENVELOPE");
+    my @out = $self->fetch($msg, 'ENVELOPE');
     my $bs = "";
-    my $output = first { /ENVELOPE \(/i } @out;    # Wee! ;-)
+    my $output = first { /ENVELOPE \(/i } @out;    # vi ;-)
+
+    unless($output)
+    {   $self->LastError("Unable to use get_envelope: $@");
+        return undef;
+    }
+
     if($output =~ /\r\n$/ )
     {   eval { $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output) };
     }
     else
     {   $self->_debug("get_envelope: reassembling original response");
-        my $start = 0;
-        foreach my $o ($self->Results)
+        my $started = 0;
+        $output = '';
+        foreach my $o ($self->_transaction)
         {   next unless $self->_is_output_or_literal($o);
             $self->_debug("o->[DATA] is $o->[DATA]");
 
-            next unless $start or
-                $o->[DATA] =~ /ENVELOPE \(/i and ++$start;
-                # Hi, vi! ;-)
+            $started++ if $o->[DATA] =~ /ENVELOPE \(/i; # Hi, vi! ;-)
+            $started or next;
 
-            if ( length($output) and $self->_is_literal($o) ) {
+            if(length($output) && $self->_is_literal($o) ) {
                 my $data = $o->[DATA];
                 $data =~ s/"/\\"/g;
                 $data =~ s/\(/\\\(/g;
@@ -2494,10 +2501,12 @@ sub authenticate
     until($code)
     {   my $output = $self->_read_line or return undef;
         foreach my $o (@$output)
-        {   $self->_record($count,$o);
-            $code = $o->[DATA] =~ /^\+\s+(.*)$/ ? $1 : undef;
+        {   $self->_record($count, $o);
+            $code = $o->[DATA] =~ /^\+\s+(\S+)\s*$/ ? $1
+                  : $o->[DATA] =~ /^\+\s*$/        ? 'OK'
+                  : undef;
 
-            if ($o->[DATA] =~ /^\*\s+BYE/)
+            if($o->[DATA] =~ /^\*\s+BYE/)
             {   $self->State(Unconnected);
                 return undef;
             }
@@ -2563,12 +2572,12 @@ sub authenticate
         return undef;
     }
 
-    undef $code = $scheme eq 'PLAIN' ? 'OK' : undef;
+    undef $code;
     until($code)
     {   my $output = $self->_read_line or return undef;
         foreach my $o (@$output)
         {   $self->_record($count, $o);
-            $code = $o->[DATA] =~ /^\+\s+(.*)$/ ? $1 : undef;
+            $code = $o->[DATA] =~ /^\+\s+(.*?)\s*$/ ? $1 : undef;
 
             if($code)
             {   unless($self->_send_line($response->($code, $self)))

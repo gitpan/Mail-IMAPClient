@@ -3,6 +3,21 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.05: Wed Feb 20 08:59:37 CET 2008
+
+	Fixes:
+
+	- match ENVELOPE and BODYSTRUCTURE more strict in the
+	  grammar, to avoid confusion. [Zach Levow]
+
+	- get_envelope and get_bodystructure failed for servers which
+          did not return the whole answer in one piece. [Zach Levow]
+
+	- do not produce parser errors when get_envelope does not
+	  return an envelope. [Zach Levow]
+
+	- PLAIN login response possibly solely a '+' [Zach] and [Nick]
+
 version 3.04: Fri Jan 25 09:25:51 CET 2008
 
 	Fixes:

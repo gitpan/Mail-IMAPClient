@@ -178,8 +178,8 @@ part:	  multipart        { $return = bless $item{multipart}, $mibs }
 bodystructure:	"(" part(s) ")"
 	{ $return = $item{'part(s)'} }
 
-start:		/.*\(.*BODYSTRUCTURE \(/i part(1)  /\).*\)\r?\n?/
+start:		/.*?\(.*?BODYSTRUCTURE \(/i part(1)  /\).*\)\r?\n?/
 	{ $return = $item{'part(1)'}[0] }
 
-envelope:	/.*\(.*ENVELOPE/ envelopestruct /.*\)/
+envelope:	/.*?\(.*?ENVELOPE/ envelopestruct /.*\)/
 	{ $return = $item{envelopestruct} }
