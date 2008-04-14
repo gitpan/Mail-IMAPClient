@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.05';
+our $VERSION = '3.06';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1757,19 +1757,17 @@ sub close
 
 sub expunge
 {   my ($self, $folder) = @_;
-    defined $folder
-        or return;
 
-    my $old = $self->Folder;
+    my $old = $self->Folder || '';
     if(defined $old && $folder eq $old)
+    {   $self->_imap_command('EXPUNGE')
+            or return undef;
+    }
+    else
     {   $self->select($folder);
         my $succ = $self->_imap_command('EXPUNGE');
         $self->select($old);
         $succ or return undef;
-    }
-    else
-    {   $self->_imap_command('EXPUNGE')
-            or return undef;
     }
 
     wantarray ? $self->History : $self->Results;
@@ -2305,6 +2303,7 @@ sub append_string($$$;$$)
         if $self->Count >= $clear and $clear > 0;
 
     my $count  = $self->Count($self->Count+1);
+    $text =~ s/\r?\n/\r\n/g;
 
     my $command = "$count APPEND $folder " . ($flags ? "$flags " : "") .
         ($date ? "$date " : "") .  "{" . length($text) . "}\r\n";
@@ -2715,10 +2714,23 @@ sub getquota
     $self->_imap_command("GETQUOTA $who") ? $self->Results : undef;
 }
 
+# usage: $imap->setquota($folder, storage => 512)
+sub setquota(@)
+{   my ($self, $what) = (shift, shift);
+    my $who = $what ? $self->Massage($what) : "user/$self->{User}";
+    my @limits;
+    while(@_)
+    {   my $key = uc shift @_;
+        push @limits, $key => shift @_;
+    }
+    local $" = ' ';
+    $self->_imap_command("SETQUOTA $who (@limits)") ? $self->Results : undef;
+}
+
 sub quota
 {   my $self = shift;
     my $what = shift || "INBOX";
-    $self->_imap_command("GETQUOTA $what") || $self->getquotaroot($what);
+    $self->_imap_command("GETQUOTA $what") or $self->getquotaroot($what);
     (map { /.*STORAGE\s+\d+\s+(\d+).*\n$/ ? $1 : () } $self->Results)[0];
 }
 

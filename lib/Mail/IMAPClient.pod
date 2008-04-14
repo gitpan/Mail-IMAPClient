@@ -654,15 +654,9 @@ but had no matching results but populated with an error message if the
 search encountered a problem (such as invalid parameters).
 
 A number of IMAP commands do not have corresponding B<Mail::IMAPClient>
-methods. Instead, they are implemented via a default method and Perl's 
-L<AUTOLOAD|perlsub/autoload> facility. If you are looking for a specific
-IMAP client command (or IMAP extension) and do not see it documented in this
-pod, then that does not necessarily mean you can not use B<Mail::IMAPClient> to
-issue the command. In fact, you can issue almost any IMAP client
-command simply by I<pretending> that there is a corresponding 
-B<Mail::IMAPClient> method.  See the section on 
-L<"Other IMAP Client Commands and the Default Object Method">
-below for details on the default method.
+methods.  Please contribute them.  In pre-2.99 releases of this module,
+they were automatically created, but that was very error-prone and stalled
+the progress of this module.
 
 =head1 Mailbox Control Methods
 
@@ -1210,11 +1204,7 @@ method that doesn't exist to delete messages that you thought didn't
 exist. (Seriously, I'm not making any of this stuff up.)
 
 Or you could use the L<close> method, which de-selects as well as
-expunges and which likewise doesn't technically exist. As with any IMAP
-client command, that fact that these methods don't exist will not stop
-them from working anyway. This is a feature of the B<Mail::IMAPClient>
-module. (See L<"Other IMAP Client Commands and the Default Object Method"> 
-if you still don't believe me.)
+expunges and which likewise doesn't technically exist.
 
 =cut
 
@@ -2799,57 +2789,15 @@ just as you'd expect.
 
 =cut
 
-=head1 Other IMAP Client Commands and the Default Object Method
+=head1 Other IMAP Client Commands
 
-IMAP Client Commands not otherwise documented have been implemented via
-an AUTOLOAD hack and use a default method.
-
-If a program calls a method that is not defined (or inherited) by the
-B<IMAPClient> module then the B<IMAPClient> module will assume that it
-is an IMAP client command. It will prefix the command with the next
-available transaction number (or tag value), and append to it the
-space-delimited list of arguments supplied to the unimplemented method
-(if any). It will then read lines of output from the imap session until
-it finds a line containing the strings "OK" and "Completed", and return
-an array containing all of the lines of output (or, if called in scalar
-context, an array reference). If it finds "BAD" or "NO" instead of "OK"
-it returns C<undef>.
-
-Eg: 
-
-	my @results = $imap->FOO("bar","an example","of the default");
-
-
-results in:
-
-
-	99 FOO bar an example of the default\r\n 
-
-being sent to the IMAP server (assuming that 99 is the current
-transaction number).
-
-Notice that we used an uppercase method name "FOO" so as not to
-conflict with future implementations of that IMAP command. If you run
-your script with warnings turned on (always a good idea, at least
-during testing), then you will receive warnings whenever you use a
-lowercase method name that has not been implemented. An exception to
-this is when you use certain common (yet unimplemented) methods that,
-if ever explicitly implemented, are guaranteed to behave just like the
-default method. To date, those methods are either documented in the
-section labeled L<"OBJECT METHODS">, above, or listed here:
-
-B<Mail::IMAPClient>'s default method adds enormous flexibility and
-built-in extensibility but it is not psychic. It can handle almost
-any extension and truthfully tell you if the server successfully 
-performed your request. But it cannot predict how the command's
-output should be handled, beyond returning a true value on success
-and C<undef> on failure. So if you are running a command because
-you want the output then you may need to parse that output yourself.
-If you develop code that extends B<Mail::IMAPClient> in a way that
-you feel may be useful to others then please consider donating the
-code. Many of the methods in B<Mail::IMAPClient> were contributed
-by other programmers such as yourself. Their contributions are listed
-in the F<Changes> file as they occur.
+Until release B<2.99>, when you called a method which did not exist,
+they where automatically translated into an IMAP call with the same
+name via an AUTOLOAD hack.  This "feature" was removed for various
+reasons: people made typos in the capatization of method names, and the
+program still seemed to work correctly.  Besides, it blocked further
+development of this module, because people did not contribute their
+private extensions to the protocol implementation.
 
 =head2 copy($msg,$folder)
 
