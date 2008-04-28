@@ -1,8 +1,15 @@
+# Copyrights 2008.
+#  For other contributors see Changes.
+# See the manual pages for details on the licensing terms.
+# Pod stripped from pm file by OODoc 1.04.
 use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.06';
+use vars '$VERSION';
+$VERSION = '3.07';
+
+our $VERSION = '3.07';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -346,10 +353,16 @@ sub separator
     return $self->{separators}{$target}
         if $self->{separators}{$target};
 
-    my $list = $self->list(undef, $target) || 'NO';
-    my $s    = $list =~ /^\*\s+LIST\s+\([^)]*\)\s+(\S+)/ ? $1 : '/';
-    $s       =~ s/^\"(.*?)\"$/$1/;
-    $self->{separators}{$target} = $s;
+    my $list = $self->list(undef, $target);
+    foreach my $line (@$list)
+    {   if($line =~ /^\*\s+LIST\s+\([^)]*\)\s+(\S+)/)
+        {   my $s = $1;
+            $s =~ s/^\"(.*?)\"$/$1/;
+            return $self->{separators}{$target} = $s;
+        }
+    }
+    $self->{separators}{$target} = '/';
+
 }
 
 sub sort
@@ -393,7 +406,6 @@ sub lsub
     defined $target    or $target = '*';
     $target = $self->Massage($target);
 
-    my $string      =
     $self->_imap_command( qq[LSUB "$reference" $target] )
          or return undef;
 
@@ -1728,12 +1740,12 @@ sub store
     wantarray ? $self->History : $self->Results;
 }
 
-sub _imap_folder_command($$)
+sub _imap_folder_command($$@)
 {   my ($self, $command) = (shift, shift);
     delete $self->{Folders};
     my $folder = $self->Massage(shift);
 
-    $self->_imap_command("$command $folder")
+    $self->_imap_command(join ' ', $command, $folder, @_)
         or return;
 
     wantarray ? $self->History : $self->Results;
@@ -1742,7 +1754,7 @@ sub _imap_folder_command($$)
 sub subscribe($)   { $_[0]->_imap_folder_command(SUBSCRIBE   => $_[1]) }
 sub unsubscribe($) { $_[0]->_imap_folder_command(UNSUBSCRIBE => $_[1]) }
 sub delete($)      { $_[0]->_imap_folder_command(DELETE      => $_[1]) }
-sub create($)      { $_[0]->_imap_folder_command(CREATE      => $_[1]) }
+sub create($)      { my $self=shift; $self->_imap_folder_command(CREATE => @_)}
 
 # rfc2086
 sub myrights($)    { $_[0]->_imap_folder_command(MYRIGHTS    => $_[1]) }
@@ -1759,7 +1771,7 @@ sub expunge
 {   my ($self, $folder) = @_;
 
     my $old = $self->Folder || '';
-    if(defined $old && $folder eq $old)
+    if(defined $folder && $folder eq $old)
     {   $self->_imap_command('EXPUNGE')
             or return undef;
     }

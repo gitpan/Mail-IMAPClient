@@ -1,10 +1,20 @@
+# Copyrights 2008.
+#  For other contributors see Changes.
+# See the manual pages for details on the licensing terms.
+# Pod stripped from pm file by OODoc 1.04.
 package Mail::IMAPClient::BodyStructure::Parse;
+use vars '$VERSION';
+$VERSION = '3.07';
+
 use Parse::RecDescent;
 
 { my $ERRORS;
 
 
 package Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse;
+use vars '$VERSION';
+$VERSION = '3.07';
+
 use strict;
 use vars qw($skip $AUTOLOAD  );
 $skip = '\s*';
@@ -12578,7 +12588,10 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::mailboxname
 	return $return;
 }
 }
-package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
+package Mail::IMAPClient::BodyStructure::Parse;
+use vars '$VERSION';
+$VERSION = '3.07';
+ sub new { my $self = bless( {
                  '_AUTOTREE' => undef,
                  'localvars' => '',
                  'startcode' => '',

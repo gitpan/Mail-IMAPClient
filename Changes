@@ -3,6 +3,20 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.07: Mon Apr 28 09:17:30 CEST 2008
+
+	Fixes:
+
+	- expunge with no folder specified produced "use of undef"
+	  error.  Fixed by [André Warnier]
+
+	- additional arguments for create [Michael Bacon]
+
+	- accepts LIST answer with multiple lines [Michael Bacon]
+
+	- ::BodyStructure::_address() should be _addresses()
+	  Fixed by rt.cpan.org#35471 [Brian Kelly]
+
 version 3.06: Mon Apr 14 23:44:03 CEST 2008
 
 	Fixes:
