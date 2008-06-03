@@ -1,20 +1,10 @@
-# Copyrights 2008.
-#  For other contributors see Changes.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 1.04.
 package Mail::IMAPClient::Thread;
-use vars '$VERSION';
-$VERSION = '3.07';
-
 use Parse::RecDescent;
 
 { my $ERRORS;
 
 
 package Parse::RecDescent::Mail::IMAPClient::Thread;
-use vars '$VERSION';
-$VERSION = '3.07';
-
 use strict;
 use vars qw($skip $AUTOLOAD  );
 $skip = '\s*';
@@ -793,10 +783,7 @@ sub Parse::RecDescent::Mail::IMAPClient::Thread::threadmember
 	return $return;
 }
 }
-package Mail::IMAPClient::Thread;
-use vars '$VERSION';
-$VERSION = '3.07';
- sub new { my $self = bless( {
+package Mail::IMAPClient::Thread; sub new { my $self = bless( {
                  '_AUTOTREE' => undef,
                  'localvars' => '',
                  'startcode' => '',
@@ -833,7 +820,7 @@ $VERSION = '3.07';
                                                                                                'hashname' => '__STRING1__',
                                                                                                'description' => '\'(\'',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 177
+                                                                                               'line' => 180
                                                                                              }, 'Parse::RecDescent::InterpLit' ),
                                                                                       bless( {
                                                                                                'subrule' => 'threadmember',
@@ -844,19 +831,19 @@ $VERSION = '3.07';
                                                                                                'matchrule' => 0,
                                                                                                'repspec' => 's',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 177
+                                                                                               'line' => 180
                                                                                              }, 'Parse::RecDescent::Repetition' ),
                                                                                       bless( {
                                                                                                'pattern' => ')',
                                                                                                'hashname' => '__STRING2__',
                                                                                                'description' => '\')\'',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 177
+                                                                                               'line' => 180
                                                                                              }, 'Parse::RecDescent::InterpLit' ),
                                                                                       bless( {
                                                                                                'hashname' => '__ACTION1__',
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 178,
+                                                                                               'line' => 181,
                                                                                                'code' => '{
 		$return = $item{\'threadmember(s)\'}||undef;	
 	}'
@@ -867,7 +854,7 @@ $VERSION = '3.07';
                                                               ],
                                                    'name' => 'thread',
                                                    'vars' => '',
-                                                   'line' => 177
+                                                   'line' => 180
                                                  }, 'Parse::RecDescent::Rule' ),
                               'NUMBER' => bless( {
                                                    'impcount' => 0,
@@ -890,7 +877,7 @@ $VERSION = '3.07';
                                                                                                'description' => '/\\\\d+/',
                                                                                                'lookahead' => 0,
                                                                                                'rdelim' => '/',
-                                                                                               'line' => 170,
+                                                                                               'line' => 173,
                                                                                                'mod' => '',
                                                                                                'ldelim' => '/'
                                                                                              }, 'Parse::RecDescent::Token' )
@@ -900,7 +887,7 @@ $VERSION = '3.07';
                                                               ],
                                                    'name' => 'NUMBER',
                                                    'vars' => '',
-                                                   'line' => 168
+                                                   'line' => 171
                                                  }, 'Parse::RecDescent::Rule' ),
                               'start' => bless( {
                                                   'impcount' => 0,
@@ -925,7 +912,7 @@ $VERSION = '3.07';
                                                                                               'description' => '/^\\\\* THREAD /i',
                                                                                               'lookahead' => 0,
                                                                                               'rdelim' => '/',
-                                                                                              'line' => 183,
+                                                                                              'line' => 186,
                                                                                               'mod' => 'i',
                                                                                               'ldelim' => '/'
                                                                                             }, 'Parse::RecDescent::Token' ),
@@ -938,12 +925,12 @@ $VERSION = '3.07';
                                                                                               'matchrule' => 0,
                                                                                               'repspec' => 's?',
                                                                                               'lookahead' => 0,
-                                                                                              'line' => 183
+                                                                                              'line' => 186
                                                                                             }, 'Parse::RecDescent::Repetition' ),
                                                                                      bless( {
                                                                                               'hashname' => '__ACTION1__',
                                                                                               'lookahead' => 0,
-                                                                                              'line' => 183,
+                                                                                              'line' => 186,
                                                                                               'code' => '{
 	$return=$item{\'thread(s?)\'}||undef;
 }'
@@ -954,7 +941,7 @@ $VERSION = '3.07';
                                                              ],
                                                   'name' => 'start',
                                                   'vars' => '',
-                                                  'line' => 182
+                                                  'line' => 185
                                                 }, 'Parse::RecDescent::Rule' ),
                               'threadmember' => bless( {
                                                          'impcount' => 0,
@@ -980,12 +967,12 @@ $VERSION = '3.07';
                                                                                                      'implicit' => undef,
                                                                                                      'argcode' => undef,
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 174
+                                                                                                     'line' => 177
                                                                                                    }, 'Parse::RecDescent::Subrule' ),
                                                                                             bless( {
                                                                                                      'hashname' => '__ACTION1__',
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 174,
+                                                                                                     'line' => 177,
                                                                                                      'code' => '{ $return = $item{NUMBER} ; }'
                                                                                                    }, 'Parse::RecDescent::Action' )
                                                                                           ],
@@ -1006,21 +993,21 @@ $VERSION = '3.07';
                                                                                                      'implicit' => undef,
                                                                                                      'argcode' => undef,
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 175
+                                                                                                     'line' => 178
                                                                                                    }, 'Parse::RecDescent::Subrule' ),
                                                                                             bless( {
                                                                                                      'hashname' => '__ACTION1__',
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 175,
+                                                                                                     'line' => 178,
                                                                                                      'code' => '{ $return = $item{thread} ; }'
                                                                                                    }, 'Parse::RecDescent::Action' )
                                                                                           ],
-                                                                               'line' => 174
+                                                                               'line' => 177
                                                                              }, 'Parse::RecDescent::Production' )
                                                                     ],
                                                          'name' => 'threadmember',
                                                          'vars' => '',
-                                                         'line' => 172
+                                                         'line' => 175
                                                        }, 'Parse::RecDescent::Rule' )
                             }
                }, 'Parse::RecDescent' );

@@ -1,15 +1,8 @@
-# Copyrights 2008.
-#  For other contributors see Changes.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 1.04.
 use warnings;
 use strict;
 
 package Mail::IMAPClient;
-use vars '$VERSION';
-$VERSION = '3.07';
-
-our $VERSION = '3.07';
+our $VERSION = '3.08';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -607,13 +600,12 @@ sub message_to_file
         binmode $handle; # For those of you who need something like this...
     }
 
-
     my $clear = $self->Clear;
     $self->Clear($clear)
         if $self->Count >= $clear && $clear > 0;
 
     my $peek   = $self->Peek ? '.PEEK' : '';
-    my $cmd    = $self->imap4rev1 ? "RFC822$peek" : "BODY$peek\[]";
+    my $cmd    = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
     my $uid    = $self->Uid ? "UID " : "";
     my $trans  = $self->Count($self->Count+1);
     my $string = "$trans ${uid}FETCH $msgs $cmd";
@@ -1312,8 +1304,9 @@ sub _read_line
     {   my $transno = $self->Transaction;
 
         if($timeout)
-        {   my @ready = $self->{_select}->can_read($timeout);
-            unless(@ready)
+        {   my $rvec = 0;
+            vec($rvec, fileno($self->Socket), 1) = 1;
+            unless(CORE::select($rvec, undef, $rvec, $timeout))
             {   $self->LastError("Tag $transno: Timeout after $timeout seconds"
                     . " waiting for data from server");
 

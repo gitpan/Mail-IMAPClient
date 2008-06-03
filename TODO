@@ -1,10 +1,13 @@
 
+=== README
+
 Starting with release 2.99_01, I (Mark Overmeer) try to revive the
 module.  The original author David Kernen cannot be reached and didn't
-release any fixes in four years.  That is too long.
+release any fixes in four years.  That is far too long.
 
-In version 3.0, the installation procedure is been cleaned-up
-radically, and some minimal improvements in the code are made to
+The code and installation procedure has been cleaned-up radically,
+
+ and some minimal improvements in the code are made to
 fix things people reported.
 
 === wishlist:

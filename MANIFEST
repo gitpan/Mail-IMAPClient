@@ -4,7 +4,7 @@ INSTALL
 MANIFEST
 Makefile.PL
 README
-Todo
+TODO
 examples/build_dist.pl
 examples/build_ldif.pl
 examples/cleanTest.pl
@@ -21,12 +21,10 @@ examples/sharedFolder.pl
 lib/Mail/IMAPClient.pm
 lib/Mail/IMAPClient.pod
 lib/Mail/IMAPClient/BodyStructure.pm
-lib/Mail/IMAPClient/BodyStructure.pod
 lib/Mail/IMAPClient/BodyStructure/Parse.grammar
 lib/Mail/IMAPClient/BodyStructure/Parse.pm
 lib/Mail/IMAPClient/BodyStructure/Parse.pod
 lib/Mail/IMAPClient/MessageSet.pm
-lib/Mail/IMAPClient/MessageSet.pod
 lib/Mail/IMAPClient/Thread.grammar
 lib/Mail/IMAPClient/Thread.pm
 lib/Mail/IMAPClient/Thread.pod

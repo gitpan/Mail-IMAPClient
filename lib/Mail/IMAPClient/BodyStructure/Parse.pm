@@ -1,20 +1,10 @@
-# Copyrights 2008.
-#  For other contributors see Changes.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 1.04.
 package Mail::IMAPClient::BodyStructure::Parse;
-use vars '$VERSION';
-$VERSION = '3.07';
-
 use Parse::RecDescent;
 
 { my $ERRORS;
 
 
 package Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse;
-use vars '$VERSION';
-$VERSION = '3.07';
-
 use strict;
 use vars qw($skip $AUTOLOAD  );
 $skip = '\s*';
@@ -3590,7 +3580,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::multipart
 	while (!$_matched && !$commit)
 	{
 		
-		Parse::RecDescent::_trace(q{Trying production: [subpart <commit> basicfields bodyparms bodydisp bodylang bodyextra <defer:{  $subpartCount = 0 }>]},
+		Parse::RecDescent::_trace(q{Trying production: [subpart <commit> bodysubtype bodyparms bodydisp bodylang bodyloc bodyextra <defer:{  $subpartCount = 0 }>]},
 					  Parse::RecDescent::_tracefirst($_[1]),
 					  q{multipart},
 					  $tracelevel)
@@ -3657,17 +3647,17 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::multipart
 		push @item, $item{__DIRECTIVE1__}=$_tok;
 		
 
-		Parse::RecDescent::_trace(q{Trying subrule: [basicfields]},
+		Parse::RecDescent::_trace(q{Trying subrule: [bodysubtype]},
 				  Parse::RecDescent::_tracefirst($text),
 				  q{multipart},
 				  $tracelevel)
 					if defined $::RD_TRACE;
 		if (1) { no strict qw{refs};
-		$expectation->is(q{basicfields})->at($text);
-		unless (defined ($_tok = Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::basicfields($thisparser,$text,$repeating,$_noactions,sub { \@arg })))
+		$expectation->is(q{bodysubtype})->at($text);
+		unless (defined ($_tok = Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodysubtype($thisparser,$text,$repeating,$_noactions,sub { \@arg })))
 		{
 			
-			Parse::RecDescent::_trace(q{<<Didn't match subrule: [basicfields]>>},
+			Parse::RecDescent::_trace(q{<<Didn't match subrule: [bodysubtype]>>},
 						  Parse::RecDescent::_tracefirst($text),
 						  q{multipart},
 						  $tracelevel)
@@ -3675,14 +3665,14 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::multipart
 			$expectation->failed();
 			last;
 		}
-		Parse::RecDescent::_trace(q{>>Matched subrule: [basicfields]<< (return value: [}
+		Parse::RecDescent::_trace(q{>>Matched subrule: [bodysubtype]<< (return value: [}
 					. $_tok . q{]},
 					  
 					  Parse::RecDescent::_tracefirst($text),
 					  q{multipart},
 					  $tracelevel)
 						if defined $::RD_TRACE;
-		$item{q{basicfields}} = $_tok;
+		$item{q{bodysubtype}} = $_tok;
 		push @item, $_tok;
 		
 		}
@@ -3771,6 +3761,34 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::multipart
 		
 
 
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyloc]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{multipart},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		$expectation->is(q{bodyloc})->at($text);
+		
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyloc, 0, 1, $_noactions,$expectation,undef))) 
+		{
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyloc]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{multipart},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyloc]<< (}
+					. @$_tok . q{ times)},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{multipart},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{bodyloc(?)}} = $_tok;
+		push @item, $_tok;
+		
+
+
 		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyextra]},
 				  Parse::RecDescent::_tracefirst($text),
 				  q{multipart},
@@ -3832,11 +3850,13 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::multipart
 						if defined $::RD_TRACE;
 		
 
-		$_tok = ($_noactions) ? 0 : do { $return = $item{basicfields};
-	  $return->{bodytype}      = 'MULTIPART';
-	  $return->{bodystructure} = $item{'subpart(s)'};
+		$_tok = ($_noactions) ? 0 : do { $return =
+	    { bodysubtype   => $item{bodysubtype}
+	    , bodytype      => 'MULTIPART'
+	    , bodystructure => $item{'subpart(s)'}
+	    };
 	  take_optional_items($return, \%item
-              , qw/bodyparms bodydisp bodylang bodyextra/);
+              , qw/bodyparms bodydisp bodylang bodyloc bodyextra/);
 	  1;
 	};
 		unless (defined $_tok)
@@ -3854,7 +3874,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::multipart
 		
 
 
-		Parse::RecDescent::_trace(q{>>Matched production: [subpart <commit> basicfields bodyparms bodydisp bodylang bodyextra <defer:{  $subpartCount = 0 }>]<<},
+		Parse::RecDescent::_trace(q{>>Matched production: [subpart <commit> bodysubtype bodyparms bodydisp bodylang bodyloc bodyextra <defer:{  $subpartCount = 0 }>]<<},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{multipart},
 					  $tracelevel)
@@ -11507,6 +11527,203 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::BARESTRING
 }
 
 # ARGS ARE: ($parser, $text; $repeating, $_noactions, \@args)
+sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyloc
+{
+	my $thisparser = $_[0];
+	use vars q{$tracelevel};
+	local $tracelevel = ($tracelevel||0)+1;
+	$ERRORS = 0;
+	my $thisrule = $thisparser->{"rules"}{"bodyloc"};
+	
+	Parse::RecDescent::_trace(q{Trying rule: [bodyloc]},
+				  Parse::RecDescent::_tracefirst($_[1]),
+				  q{bodyloc},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+
+	my $def_at = @{$thisparser->{deferred}};
+	my $err_at = @{$thisparser->{errors}};
+
+	my $score;
+	my $score_return;
+	my $_tok;
+	my $return = undef;
+	my $_matched=0;
+	my $commit=0;
+	my @item = ();
+	my %item = ();
+	my $repeating =  defined($_[2]) && $_[2];
+	my $_noactions = defined($_[3]) && $_[3];
+ 	my @arg =        defined $_[4] ? @{ &{$_[4]} } : ();
+	my %arg =        ($#arg & 01) ? @arg : (@arg, undef);
+	my $text;
+	my $lastsep="";
+	my $expectation = new Parse::RecDescent::Expectation($thisrule->expected());
+	$expectation->at($_[1]);
+	
+	my $thisline;
+	tie $thisline, q{Parse::RecDescent::LineCounter}, \$text, $thisparser;
+
+	
+
+	while (!$_matched && !$commit)
+	{
+		
+		Parse::RecDescent::_trace(q{Trying production: [NIL]},
+					  Parse::RecDescent::_tracefirst($_[1]),
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		my $thisprod = $thisrule->{"prods"}[0];
+		$text = $_[1];
+		my $_savetext;
+		@item = (q{bodyloc});
+		%item = (__RULE__ => q{bodyloc});
+		my $repcount = 0;
+
+
+		Parse::RecDescent::_trace(q{Trying subrule: [NIL]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{bodyloc},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		if (1) { no strict qw{refs};
+		$expectation->is(q{})->at($text);
+		unless (defined ($_tok = Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::NIL($thisparser,$text,$repeating,$_noactions,sub { \@arg })))
+		{
+			
+			Parse::RecDescent::_trace(q{<<Didn't match subrule: [NIL]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{bodyloc},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			$expectation->failed();
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched subrule: [NIL]<< (return value: [}
+					. $_tok . q{]},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{NIL}} = $_tok;
+		push @item, $_tok;
+		
+		}
+
+
+		Parse::RecDescent::_trace(q{>>Matched production: [NIL]<<},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$_matched = 1;
+		last;
+	}
+
+		splice
+				@{$thisparser->{deferred}}, $def_at unless $_matched;
+				  
+	while (!$_matched && !$commit)
+	{
+		
+		Parse::RecDescent::_trace(q{Trying production: [STRING]},
+					  Parse::RecDescent::_tracefirst($_[1]),
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		my $thisprod = $thisrule->{"prods"}[1];
+		$text = $_[1];
+		my $_savetext;
+		@item = (q{bodyloc});
+		%item = (__RULE__ => q{bodyloc});
+		my $repcount = 0;
+
+
+		Parse::RecDescent::_trace(q{Trying subrule: [STRING]},
+				  Parse::RecDescent::_tracefirst($text),
+				  q{bodyloc},
+				  $tracelevel)
+					if defined $::RD_TRACE;
+		if (1) { no strict qw{refs};
+		$expectation->is(q{})->at($text);
+		unless (defined ($_tok = Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::STRING($thisparser,$text,$repeating,$_noactions,sub { \@arg })))
+		{
+			
+			Parse::RecDescent::_trace(q{<<Didn't match subrule: [STRING]>>},
+						  Parse::RecDescent::_tracefirst($text),
+						  q{bodyloc},
+						  $tracelevel)
+							if defined $::RD_TRACE;
+			$expectation->failed();
+			last;
+		}
+		Parse::RecDescent::_trace(q{>>Matched subrule: [STRING]<< (return value: [}
+					. $_tok . q{]},
+					  
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$item{q{STRING}} = $_tok;
+		push @item, $_tok;
+		
+		}
+
+
+		Parse::RecDescent::_trace(q{>>Matched production: [STRING]<<},
+					  Parse::RecDescent::_tracefirst($text),
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$_matched = 1;
+		last;
+	}
+
+		splice
+				@{$thisparser->{deferred}}, $def_at unless $_matched;
+				  
+        unless ( $_matched || defined($return) || defined($score) )
+	{
+				splice @{$thisparser->{deferred}}, $def_at;
+			  
+
+		$_[1] = $text;	# NOT SURE THIS IS NEEDED
+		Parse::RecDescent::_trace(q{<<Didn't match rule>>},
+					 Parse::RecDescent::_tracefirst($_[1]),
+					 q{bodyloc},
+					 $tracelevel)
+					if defined $::RD_TRACE;
+		return undef;
+	}
+	if (!defined($return) && defined($score))
+	{
+		Parse::RecDescent::_trace(q{>>Accepted scored production<<}, "",
+					  q{bodyloc},
+					  $tracelevel)
+						if defined $::RD_TRACE;
+		$return = $score_return;
+	}
+	splice @{$thisparser->{errors}}, $err_at;
+	$return = $item[$#item] unless defined $return;
+	if (defined $::RD_TRACE)
+	{
+		Parse::RecDescent::_trace(q{>>Matched rule<< (return value: [} .
+					  $return . q{])}, "",
+					  q{bodyloc},
+					  $tracelevel);
+		Parse::RecDescent::_trace(q{(consumed: [} .
+					  Parse::RecDescent::_tracemax(substr($_[1],0,-length($text))) . q{])}, 
+					  Parse::RecDescent::_tracefirst($text),
+					  , q{bodyloc},
+					  $tracelevel)
+	}
+	$_[1] = $text;
+	return $return;
+}
+
+# ARGS ARE: ($parser, $text; $repeating, $_noactions, \@args)
 sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodylang
 {
 	my $thisparser = $_[0];
@@ -12588,10 +12805,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::mailboxname
 	return $return;
 }
 }
-package Mail::IMAPClient::BodyStructure::Parse;
-use vars '$VERSION';
-$VERSION = '3.07';
- sub new { my $self = bless( {
+package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                  '_AUTOTREE' => undef,
                  'localvars' => '',
                  'startcode' => '',
@@ -12685,7 +12899,7 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 91
+                                                                                             'line' => 92
                                                                                            }, 'Parse::RecDescent::Subrule' )
                                                                                   ],
                                                                        'line' => undef
@@ -12705,15 +12919,15 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 91
+                                                                                             'line' => 92
                                                                                            }, 'Parse::RecDescent::Subrule' )
                                                                                   ],
-                                                                       'line' => 91
+                                                                       'line' => 92
                                                                      }, 'Parse::RecDescent::Production' )
                                                             ],
                                                  'name' => 'date',
                                                  'vars' => '',
-                                                 'line' => 91
+                                                 'line' => 92
                                                }, 'Parse::RecDescent::Rule' ),
                               'bodysubtype' => bless( {
                                                         'impcount' => 0,
@@ -12835,7 +13049,7 @@ $VERSION = '3.07';
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 78
+                                                                                                 'line' => 79
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
                                                                            'line' => undef
@@ -12855,15 +13069,15 @@ $VERSION = '3.07';
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 78
+                                                                                                 'line' => 79
                                                                                                }, 'Parse::RecDescent::Subrule' )
                                                                                       ],
-                                                                           'line' => 78
+                                                                           'line' => 79
                                                                          }, 'Parse::RecDescent::Production' )
                                                                 ],
                                                      'name' => 'hostname',
                                                      'vars' => '',
-                                                     'line' => 78
+                                                     'line' => 79
                                                    }, 'Parse::RecDescent::Rule' ),
                               'basicfields' => bless( {
                                                         'impcount' => 0,
@@ -12893,7 +13107,7 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 112
+                                                                                                    'line' => 113
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyparms',
@@ -12904,7 +13118,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 112
+                                                                                                    'line' => 113
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyid',
@@ -12915,7 +13129,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 112
+                                                                                                    'line' => 113
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodydesc',
@@ -12926,7 +13140,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 113
+                                                                                                    'line' => 114
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyenc',
@@ -12937,7 +13151,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 113
+                                                                                                    'line' => 114
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodysize',
@@ -12948,12 +13162,12 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 113
+                                                                                                    'line' => 114
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__ACTION1__',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 114,
+                                                                                                    'line' => 115,
                                                                                                     'code' => '{  $return = { bodysubtype => $item{bodysubtype} };
 	   take_optional_items($return, \\%item,
 	      qw/bodyparms bodyid bodydesc bodyenc bodysize/);
@@ -12966,7 +13180,7 @@ $VERSION = '3.07';
                                                                    ],
                                                         'name' => 'basicfields',
                                                         'vars' => '',
-                                                        'line' => 112
+                                                        'line' => 113
                                                       }, 'Parse::RecDescent::Rule' ),
                               'personalname' => bless( {
                                                          'impcount' => 0,
@@ -12992,7 +13206,7 @@ $VERSION = '3.07';
                                                                                                      'implicit' => undef,
                                                                                                      'argcode' => undef,
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 75
+                                                                                                     'line' => 76
                                                                                                    }, 'Parse::RecDescent::Subrule' )
                                                                                           ],
                                                                                'line' => undef
@@ -13012,15 +13226,15 @@ $VERSION = '3.07';
                                                                                                      'implicit' => undef,
                                                                                                      'argcode' => undef,
                                                                                                      'lookahead' => 0,
-                                                                                                     'line' => 75
+                                                                                                     'line' => 76
                                                                                                    }, 'Parse::RecDescent::Subrule' )
                                                                                           ],
-                                                                               'line' => 75
+                                                                               'line' => 76
                                                                              }, 'Parse::RecDescent::Production' )
                                                                     ],
                                                          'name' => 'personalname',
                                                          'vars' => '',
-                                                         'line' => 75
+                                                         'line' => 76
                                                        }, 'Parse::RecDescent::Rule' ),
                               'key' => bless( {
                                                 'impcount' => 0,
@@ -13078,7 +13292,7 @@ $VERSION = '3.07';
                                                                                            'implicit' => undef,
                                                                                            'argcode' => undef,
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 96
+                                                                                           'line' => 97
                                                                                          }, 'Parse::RecDescent::Subrule' )
                                                                                 ],
                                                                      'line' => undef
@@ -13086,7 +13300,7 @@ $VERSION = '3.07';
                                                           ],
                                                'name' => 'cc',
                                                'vars' => '',
-                                               'line' => 96
+                                               'line' => 97
                                              }, 'Parse::RecDescent::Rule' ),
                               'bodyMD5' => bless( {
                                                     'impcount' => 0,
@@ -13165,7 +13379,7 @@ $VERSION = '3.07';
                                                                                                  'description' => '/.*?\\\\(.*?ENVELOPE/',
                                                                                                  'lookahead' => 0,
                                                                                                  'rdelim' => '/',
-                                                                                                 'line' => 184,
+                                                                                                 'line' => 187,
                                                                                                  'mod' => '',
                                                                                                  'ldelim' => '/'
                                                                                                }, 'Parse::RecDescent::Token' ),
@@ -13175,7 +13389,7 @@ $VERSION = '3.07';
                                                                                                  'implicit' => undef,
                                                                                                  'argcode' => undef,
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 184
+                                                                                                 'line' => 187
                                                                                                }, 'Parse::RecDescent::Subrule' ),
                                                                                         bless( {
                                                                                                  'pattern' => '.*\\)',
@@ -13183,14 +13397,14 @@ $VERSION = '3.07';
                                                                                                  'description' => '/.*\\\\)/',
                                                                                                  'lookahead' => 0,
                                                                                                  'rdelim' => '/',
-                                                                                                 'line' => 184,
+                                                                                                 'line' => 187,
                                                                                                  'mod' => '',
                                                                                                  'ldelim' => '/'
                                                                                                }, 'Parse::RecDescent::Token' ),
                                                                                         bless( {
                                                                                                  'hashname' => '__ACTION1__',
                                                                                                  'lookahead' => 0,
-                                                                                                 'line' => 185,
+                                                                                                 'line' => 188,
                                                                                                  'code' => '{ $return = $item{envelopestruct} }'
                                                                                                }, 'Parse::RecDescent::Action' )
                                                                                       ],
@@ -13199,7 +13413,7 @@ $VERSION = '3.07';
                                                                 ],
                                                      'name' => 'envelope',
                                                      'vars' => '',
-                                                     'line' => 184
+                                                     'line' => 187
                                                    }, 'Parse::RecDescent::Rule' ),
                               'MESSAGE' => bless( {
                                                     'impcount' => 0,
@@ -13317,7 +13531,7 @@ $VERSION = '3.07';
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 88
+                                                                                                'line' => 89
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
                                                                           'line' => undef
@@ -13337,15 +13551,15 @@ $VERSION = '3.07';
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 88
+                                                                                                'line' => 89
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
-                                                                          'line' => 88
+                                                                          'line' => 89
                                                                         }, 'Parse::RecDescent::Production' )
                                                                ],
                                                     'name' => 'subject',
                                                     'vars' => '',
-                                                    'line' => 88
+                                                    'line' => 89
                                                   }, 'Parse::RecDescent::Rule' ),
                               'value' => bless( {
                                                   'impcount' => 0,
@@ -13467,60 +13681,6 @@ $VERSION = '3.07';
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 89
-                                                                                                }, 'Parse::RecDescent::Subrule' )
-                                                                                       ],
-                                                                            'line' => undef
-                                                                          }, 'Parse::RecDescent::Production' ),
-                                                                   bless( {
-                                                                            'number' => '1',
-                                                                            'strcount' => 0,
-                                                                            'dircount' => 0,
-                                                                            'uncommit' => undef,
-                                                                            'error' => undef,
-                                                                            'patcount' => 0,
-                                                                            'actcount' => 0,
-                                                                            'items' => [
-                                                                                         bless( {
-                                                                                                  'subrule' => 'STRING',
-                                                                                                  'matchrule' => 0,
-                                                                                                  'implicit' => undef,
-                                                                                                  'argcode' => undef,
-                                                                                                  'lookahead' => 0,
-                                                                                                  'line' => 89
-                                                                                                }, 'Parse::RecDescent::Subrule' )
-                                                                                       ],
-                                                                            'line' => 89
-                                                                          }, 'Parse::RecDescent::Production' )
-                                                                 ],
-                                                      'name' => 'inreplyto',
-                                                      'vars' => '',
-                                                      'line' => 89
-                                                    }, 'Parse::RecDescent::Rule' ),
-                              'messageid' => bless( {
-                                                      'impcount' => 0,
-                                                      'calls' => [
-                                                                   'NIL',
-                                                                   'STRING'
-                                                                 ],
-                                                      'changed' => 0,
-                                                      'opcount' => 0,
-                                                      'prods' => [
-                                                                   bless( {
-                                                                            'number' => '0',
-                                                                            'strcount' => 0,
-                                                                            'dircount' => 0,
-                                                                            'uncommit' => undef,
-                                                                            'error' => undef,
-                                                                            'patcount' => 0,
-                                                                            'actcount' => 0,
-                                                                            'items' => [
-                                                                                         bless( {
-                                                                                                  'subrule' => 'NIL',
-                                                                                                  'matchrule' => 0,
-                                                                                                  'implicit' => undef,
-                                                                                                  'argcode' => undef,
-                                                                                                  'lookahead' => 0,
                                                                                                   'line' => 90
                                                                                                 }, 'Parse::RecDescent::Subrule' )
                                                                                        ],
@@ -13547,9 +13707,63 @@ $VERSION = '3.07';
                                                                             'line' => 90
                                                                           }, 'Parse::RecDescent::Production' )
                                                                  ],
-                                                      'name' => 'messageid',
+                                                      'name' => 'inreplyto',
                                                       'vars' => '',
                                                       'line' => 90
+                                                    }, 'Parse::RecDescent::Rule' ),
+                              'messageid' => bless( {
+                                                      'impcount' => 0,
+                                                      'calls' => [
+                                                                   'NIL',
+                                                                   'STRING'
+                                                                 ],
+                                                      'changed' => 0,
+                                                      'opcount' => 0,
+                                                      'prods' => [
+                                                                   bless( {
+                                                                            'number' => '0',
+                                                                            'strcount' => 0,
+                                                                            'dircount' => 0,
+                                                                            'uncommit' => undef,
+                                                                            'error' => undef,
+                                                                            'patcount' => 0,
+                                                                            'actcount' => 0,
+                                                                            'items' => [
+                                                                                         bless( {
+                                                                                                  'subrule' => 'NIL',
+                                                                                                  'matchrule' => 0,
+                                                                                                  'implicit' => undef,
+                                                                                                  'argcode' => undef,
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 91
+                                                                                                }, 'Parse::RecDescent::Subrule' )
+                                                                                       ],
+                                                                            'line' => undef
+                                                                          }, 'Parse::RecDescent::Production' ),
+                                                                   bless( {
+                                                                            'number' => '1',
+                                                                            'strcount' => 0,
+                                                                            'dircount' => 0,
+                                                                            'uncommit' => undef,
+                                                                            'error' => undef,
+                                                                            'patcount' => 0,
+                                                                            'actcount' => 0,
+                                                                            'items' => [
+                                                                                         bless( {
+                                                                                                  'subrule' => 'STRING',
+                                                                                                  'matchrule' => 0,
+                                                                                                  'implicit' => undef,
+                                                                                                  'argcode' => undef,
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 91
+                                                                                                }, 'Parse::RecDescent::Subrule' )
+                                                                                       ],
+                                                                            'line' => 91
+                                                                          }, 'Parse::RecDescent::Production' )
+                                                                 ],
+                                                      'name' => 'messageid',
+                                                      'vars' => '',
+                                                      'line' => 91
                                                     }, 'Parse::RecDescent::Rule' ),
                               'sender' => bless( {
                                                    'impcount' => 0,
@@ -13574,7 +13788,7 @@ $VERSION = '3.07';
                                                                                                'implicit' => undef,
                                                                                                'argcode' => undef,
                                                                                                'lookahead' => 0,
-                                                                                               'line' => 100
+                                                                                               'line' => 101
                                                                                              }, 'Parse::RecDescent::Subrule' )
                                                                                     ],
                                                                          'line' => undef
@@ -13582,16 +13796,17 @@ $VERSION = '3.07';
                                                               ],
                                                    'name' => 'sender',
                                                    'vars' => '',
-                                                   'line' => 100
+                                                   'line' => 101
                                                  }, 'Parse::RecDescent::Rule' ),
                               'multipart' => bless( {
                                                       'impcount' => 0,
                                                       'calls' => [
                                                                    'subpart',
-                                                                   'basicfields',
+                                                                   'bodysubtype',
                                                                    'bodyparms',
                                                                    'bodydisp',
                                                                    'bodylang',
+                                                                   'bodyloc',
                                                                    'bodyextra'
                                                                  ],
                                                       'changed' => 0,
@@ -13615,22 +13830,22 @@ $VERSION = '3.07';
                                                                                                   'matchrule' => 0,
                                                                                                   'repspec' => 's',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 160
+                                                                                                  'line' => 161
                                                                                                 }, 'Parse::RecDescent::Repetition' ),
                                                                                          bless( {
                                                                                                   'hashname' => '__DIRECTIVE1__',
                                                                                                   'name' => '<commit>',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 160,
+                                                                                                  'line' => 161,
                                                                                                   'code' => '$commit = 1'
                                                                                                 }, 'Parse::RecDescent::Directive' ),
                                                                                          bless( {
-                                                                                                  'subrule' => 'basicfields',
+                                                                                                  'subrule' => 'bodysubtype',
                                                                                                   'matchrule' => 0,
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 160
+                                                                                                  'line' => 161
                                                                                                 }, 'Parse::RecDescent::Subrule' ),
                                                                                          bless( {
                                                                                                   'subrule' => 'bodyparms',
@@ -13641,7 +13856,7 @@ $VERSION = '3.07';
                                                                                                   'matchrule' => 0,
                                                                                                   'repspec' => '?',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 161
+                                                                                                  'line' => 162
                                                                                                 }, 'Parse::RecDescent::Repetition' ),
                                                                                          bless( {
                                                                                                   'subrule' => 'bodydisp',
@@ -13652,7 +13867,7 @@ $VERSION = '3.07';
                                                                                                   'matchrule' => 0,
                                                                                                   'repspec' => '?',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 161
+                                                                                                  'line' => 162
                                                                                                 }, 'Parse::RecDescent::Repetition' ),
                                                                                          bless( {
                                                                                                   'subrule' => 'bodylang',
@@ -13663,7 +13878,18 @@ $VERSION = '3.07';
                                                                                                   'matchrule' => 0,
                                                                                                   'repspec' => '?',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 161
+                                                                                                  'line' => 162
+                                                                                                }, 'Parse::RecDescent::Repetition' ),
+                                                                                         bless( {
+                                                                                                  'subrule' => 'bodyloc',
+                                                                                                  'expected' => undef,
+                                                                                                  'min' => 0,
+                                                                                                  'argcode' => undef,
+                                                                                                  'max' => 1,
+                                                                                                  'matchrule' => 0,
+                                                                                                  'repspec' => '?',
+                                                                                                  'lookahead' => 0,
+                                                                                                  'line' => 162
                                                                                                 }, 'Parse::RecDescent::Repetition' ),
                                                                                          bless( {
                                                                                                   'subrule' => 'bodyextra',
@@ -13674,24 +13900,26 @@ $VERSION = '3.07';
                                                                                                   'matchrule' => 0,
                                                                                                   'repspec' => '?',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 161
+                                                                                                  'line' => 162
                                                                                                 }, 'Parse::RecDescent::Repetition' ),
                                                                                          bless( {
                                                                                                   'hashname' => '__DIRECTIVE2__',
                                                                                                   'name' => '<defer:{  $subpartCount = 0 }>',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 162,
+                                                                                                  'line' => 163,
                                                                                                   'code' => 'push @{$thisparser->{deferred}}, sub {  $subpartCount = 0 };'
                                                                                                 }, 'Parse::RecDescent::Directive' ),
                                                                                          bless( {
                                                                                                   'hashname' => '__ACTION1__',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 163,
-                                                                                                  'code' => '{ $return = $item{basicfields};
-	  $return->{bodytype}      = \'MULTIPART\';
-	  $return->{bodystructure} = $item{\'subpart(s)\'};
+                                                                                                  'line' => 164,
+                                                                                                  'code' => '{ $return =
+	    { bodysubtype   => $item{bodysubtype}
+	    , bodytype      => \'MULTIPART\'
+	    , bodystructure => $item{\'subpart(s)\'}
+	    };
 	  take_optional_items($return, \\%item
-              , qw/bodyparms bodydisp bodylang bodyextra/);
+              , qw/bodyparms bodydisp bodylang bodyloc bodyextra/);
 	  1;
 	}'
                                                                                                 }, 'Parse::RecDescent::Action' )
@@ -13701,7 +13929,7 @@ $VERSION = '3.07';
                                                                  ],
                                                       'name' => 'multipart',
                                                       'vars' => '',
-                                                      'line' => 160
+                                                      'line' => 161
                                                     }, 'Parse::RecDescent::Rule' ),
                               'bodyenc' => bless( {
                                                     'impcount' => 0,
@@ -13865,7 +14093,7 @@ $VERSION = '3.07';
                                                                                               'description' => '/.*?\\\\(.*?BODYSTRUCTURE \\\\(/i',
                                                                                               'lookahead' => 0,
                                                                                               'rdelim' => '/',
-                                                                                              'line' => 181,
+                                                                                              'line' => 184,
                                                                                               'mod' => 'i',
                                                                                               'ldelim' => '/'
                                                                                             }, 'Parse::RecDescent::Token' ),
@@ -13878,7 +14106,7 @@ $VERSION = '3.07';
                                                                                               'matchrule' => 0,
                                                                                               'repspec' => '1',
                                                                                               'lookahead' => 0,
-                                                                                              'line' => 181
+                                                                                              'line' => 184
                                                                                             }, 'Parse::RecDescent::Repetition' ),
                                                                                      bless( {
                                                                                               'pattern' => '\\).*\\)\\r?\\n?',
@@ -13886,14 +14114,14 @@ $VERSION = '3.07';
                                                                                               'description' => '/\\\\).*\\\\)\\\\r?\\\\n?/',
                                                                                               'lookahead' => 0,
                                                                                               'rdelim' => '/',
-                                                                                              'line' => 181,
+                                                                                              'line' => 184,
                                                                                               'mod' => '',
                                                                                               'ldelim' => '/'
                                                                                             }, 'Parse::RecDescent::Token' ),
                                                                                      bless( {
                                                                                               'hashname' => '__ACTION1__',
                                                                                               'lookahead' => 0,
-                                                                                              'line' => 182,
+                                                                                              'line' => 185,
                                                                                               'code' => '{ $return = $item{\'part(1)\'}[0] }'
                                                                                             }, 'Parse::RecDescent::Action' )
                                                                                    ],
@@ -13902,7 +14130,7 @@ $VERSION = '3.07';
                                                              ],
                                                   'name' => 'start',
                                                   'vars' => '',
-                                                  'line' => 181
+                                                  'line' => 184
                                                 }, 'Parse::RecDescent::Rule' ),
                               'RFC822' => bless( {
                                                    'impcount' => 0,
@@ -13972,13 +14200,13 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 120
+                                                                                                    'line' => 121
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__DIRECTIVE1__',
                                                                                                     'name' => '<commit>',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 120,
+                                                                                                    'line' => 121,
                                                                                                     'code' => '$commit = 1'
                                                                                                   }, 'Parse::RecDescent::Directive' ),
                                                                                            bless( {
@@ -13987,7 +14215,7 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 120
+                                                                                                    'line' => 121
                                                                                                   }, 'Parse::RecDescent::Subrule' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'textlines',
@@ -13998,7 +14226,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 120
+                                                                                                    'line' => 121
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyMD5',
@@ -14009,7 +14237,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 120
+                                                                                                    'line' => 121
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodydisp',
@@ -14020,7 +14248,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 121
+                                                                                                    'line' => 122
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodylang',
@@ -14031,7 +14259,7 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 121
+                                                                                                    'line' => 122
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'subrule' => 'bodyextra',
@@ -14042,12 +14270,12 @@ $VERSION = '3.07';
                                                                                                     'matchrule' => 0,
                                                                                                     'repspec' => '?',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 121
+                                                                                                    'line' => 122
                                                                                                   }, 'Parse::RecDescent::Repetition' ),
                                                                                            bless( {
                                                                                                     'hashname' => '__ACTION1__',
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 122,
+                                                                                                    'line' => 123,
                                                                                                     'code' => '{
 	  $return = $item{basicfields} || {};
 	  $return->{bodytype} = \'TEXT\';
@@ -14062,7 +14290,7 @@ $VERSION = '3.07';
                                                                    ],
                                                         'name' => 'textmessage',
                                                         'vars' => '',
-                                                        'line' => 120
+                                                        'line' => 121
                                                       }, 'Parse::RecDescent::Rule' ),
                               'bodyid' => bless( {
                                                    'impcount' => 0,
@@ -14231,7 +14459,7 @@ $VERSION = '3.07';
                                                                                                          'implicit' => undef,
                                                                                                          'argcode' => undef,
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 130
+                                                                                                         'line' => 131
                                                                                                        }, 'Parse::RecDescent::Subrule' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'basicfields',
@@ -14239,7 +14467,7 @@ $VERSION = '3.07';
                                                                                                          'implicit' => undef,
                                                                                                          'argcode' => undef,
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 130
+                                                                                                         'line' => 131
                                                                                                        }, 'Parse::RecDescent::Subrule' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodyparms',
@@ -14250,7 +14478,7 @@ $VERSION = '3.07';
                                                                                                          'matchrule' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 130
+                                                                                                         'line' => 131
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodydisp',
@@ -14261,7 +14489,7 @@ $VERSION = '3.07';
                                                                                                          'matchrule' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 130
+                                                                                                         'line' => 131
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodylang',
@@ -14272,7 +14500,7 @@ $VERSION = '3.07';
                                                                                                          'matchrule' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 131
+                                                                                                         'line' => 132
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'subrule' => 'bodyextra',
@@ -14283,12 +14511,12 @@ $VERSION = '3.07';
                                                                                                          'matchrule' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 131
+                                                                                                         'line' => 132
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'hashname' => '__ACTION1__',
                                                                                                          'lookahead' => 0,
-                                                                                                         'line' => 132,
+                                                                                                         'line' => 133,
                                                                                                          'code' => '{ $return = { bodytype => $item{bodytype} };
 	  take_optional_items($return, \\%item
              , qw/bodyparms bodydisp bodylang bodyextra/ );
@@ -14302,7 +14530,7 @@ $VERSION = '3.07';
                                                                         ],
                                                              'name' => 'othertypemessage',
                                                              'vars' => '',
-                                                             'line' => 130
+                                                             'line' => 131
                                                            }, 'Parse::RecDescent::Rule' ),
                               'kvpair' => bless( {
                                                    'impcount' => 0,
@@ -14593,7 +14821,7 @@ $VERSION = '3.07';
                                                                                            'implicit' => undef,
                                                                                            'argcode' => undef,
                                                                                            'lookahead' => 0,
-                                                                                           'line' => 101
+                                                                                           'line' => 102
                                                                                          }, 'Parse::RecDescent::Subrule' )
                                                                                 ],
                                                                      'line' => undef
@@ -14601,7 +14829,7 @@ $VERSION = '3.07';
                                                           ],
                                                'name' => 'to',
                                                'vars' => '',
-                                               'line' => 101
+                                               'line' => 102
                                              }, 'Parse::RecDescent::Rule' ),
                               'NIL' => bless( {
                                                 'impcount' => 0,
@@ -14721,7 +14949,7 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 98
+                                                                                             'line' => 99
                                                                                            }, 'Parse::RecDescent::Subrule' )
                                                                                   ],
                                                                        'line' => undef
@@ -14729,7 +14957,7 @@ $VERSION = '3.07';
                                                             ],
                                                  'name' => 'from',
                                                  'vars' => '',
-                                                 'line' => 98
+                                                 'line' => 99
                                                }, 'Parse::RecDescent::Rule' ),
                               'bodystructure' => bless( {
                                                           'impcount' => 0,
@@ -14753,7 +14981,7 @@ $VERSION = '3.07';
                                                                                                       'hashname' => '__STRING1__',
                                                                                                       'description' => '\'(\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 178
+                                                                                                      'line' => 181
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'part',
@@ -14764,19 +14992,19 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => 's',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 178
+                                                                                                      'line' => 181
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'pattern' => ')',
                                                                                                       'hashname' => '__STRING2__',
                                                                                                       'description' => '\')\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 178
+                                                                                                      'line' => 181
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'hashname' => '__ACTION1__',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 179,
+                                                                                                      'line' => 182,
                                                                                                       'code' => '{ $return = $item{\'part(s)\'} }'
                                                                                                     }, 'Parse::RecDescent::Action' )
                                                                                            ],
@@ -14785,7 +15013,7 @@ $VERSION = '3.07';
                                                                      ],
                                                           'name' => 'bodystructure',
                                                           'vars' => '',
-                                                          'line' => 178
+                                                          'line' => 181
                                                         }, 'Parse::RecDescent::Rule' ),
                               'PLAIN' => bless( {
                                                   'impcount' => 0,
@@ -15040,12 +15268,12 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 173
+                                                                                             'line' => 176
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 173,
+                                                                                             'line' => 176,
                                                                                              'code' => '{ $return = bless $item{multipart}, $mibs }'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
@@ -15066,16 +15294,16 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 174
+                                                                                             'line' => 177
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 174,
+                                                                                             'line' => 177,
                                                                                              'code' => '{ $return = bless $item{textmessage}, $mibs }'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 174
+                                                                       'line' => 177
                                                                      }, 'Parse::RecDescent::Production' ),
                                                               bless( {
                                                                        'number' => '2',
@@ -15092,16 +15320,16 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 175
+                                                                                             'line' => 178
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 175,
+                                                                                             'line' => 178,
                                                                                              'code' => '{ $return = bless $item{nestedmessage}, $mibs }'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 175
+                                                                       'line' => 178
                                                                      }, 'Parse::RecDescent::Production' ),
                                                               bless( {
                                                                        'number' => '3',
@@ -15118,21 +15346,21 @@ $VERSION = '3.07';
                                                                                              'implicit' => undef,
                                                                                              'argcode' => undef,
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 176
+                                                                                             'line' => 179
                                                                                            }, 'Parse::RecDescent::Subrule' ),
                                                                                     bless( {
                                                                                              'hashname' => '__ACTION1__',
                                                                                              'lookahead' => 0,
-                                                                                             'line' => 176,
+                                                                                             'line' => 179,
                                                                                              'code' => '{ $return = bless $item{othertypemessage}, $mibs }'
                                                                                            }, 'Parse::RecDescent::Action' )
                                                                                   ],
-                                                                       'line' => 176
+                                                                       'line' => 179
                                                                      }, 'Parse::RecDescent::Production' )
                                                             ],
                                                  'name' => 'part',
                                                  'vars' => '',
-                                                 'line' => 173
+                                                 'line' => 176
                                                }, 'Parse::RecDescent::Rule' ),
                               'nestedmessage' => bless( {
                                                           'impcount' => 0,
@@ -15169,13 +15397,13 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 139
+                                                                                                      'line' => 140
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'hashname' => '__DIRECTIVE1__',
                                                                                                       'name' => '<commit>',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 139,
+                                                                                                      'line' => 140,
                                                                                                       'code' => '$commit = 1'
                                                                                                     }, 'Parse::RecDescent::Directive' ),
                                                                                              bless( {
@@ -15184,7 +15412,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 139
+                                                                                                      'line' => 140
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodyid',
@@ -15192,7 +15420,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 139
+                                                                                                      'line' => 140
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodydesc',
@@ -15200,7 +15428,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 139
+                                                                                                      'line' => 140
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodyenc',
@@ -15208,7 +15436,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 139
+                                                                                                      'line' => 140
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodysize',
@@ -15216,7 +15444,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 140
+                                                                                                      'line' => 141
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'envelopestruct',
@@ -15227,7 +15455,7 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 141
+                                                                                                      'line' => 142
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodystructure',
@@ -15238,7 +15466,7 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 141
+                                                                                                      'line' => 142
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'textlines',
@@ -15249,7 +15477,7 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 141
+                                                                                                      'line' => 142
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodyMD5',
@@ -15260,7 +15488,7 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 142
+                                                                                                      'line' => 143
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodydisp',
@@ -15271,7 +15499,7 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 142
+                                                                                                      'line' => 143
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodylang',
@@ -15282,7 +15510,7 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 142
+                                                                                                      'line' => 143
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'bodyextra',
@@ -15293,12 +15521,12 @@ $VERSION = '3.07';
                                                                                                       'matchrule' => 0,
                                                                                                       'repspec' => '?',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 142
+                                                                                                      'line' => 143
                                                                                                     }, 'Parse::RecDescent::Repetition' ),
                                                                                              bless( {
                                                                                                       'hashname' => '__ACTION1__',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 143,
+                                                                                                      'line' => 144,
                                                                                                       'code' => '{
 	  $return = {};
 	  $return->{$_} = $item{$_}
@@ -15322,7 +15550,7 @@ $VERSION = '3.07';
                                                                      ],
                                                           'name' => 'nestedmessage',
                                                           'vars' => '',
-                                                          'line' => 139
+                                                          'line' => 140
                                                         }, 'Parse::RecDescent::Rule' ),
                               'SINGLE_QUOTED_STRING' => bless( {
                                                                  'impcount' => 0,
@@ -15401,7 +15629,7 @@ $VERSION = '3.07';
                                                                                                   'implicit' => undef,
                                                                                                   'argcode' => undef,
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 93
+                                                                                                  'line' => 94
                                                                                                 }, 'Parse::RecDescent::Subrule' )
                                                                                        ],
                                                                             'line' => undef
@@ -15420,7 +15648,7 @@ $VERSION = '3.07';
                                                                                                   'hashname' => '__STRING1__',
                                                                                                   'description' => '\'(\'',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 94
+                                                                                                  'line' => 95
                                                                                                 }, 'Parse::RecDescent::InterpLit' ),
                                                                                          bless( {
                                                                                                   'subrule' => 'addressstruct',
@@ -15431,28 +15659,28 @@ $VERSION = '3.07';
                                                                                                   'matchrule' => 0,
                                                                                                   'repspec' => 's',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 94
+                                                                                                  'line' => 95
                                                                                                 }, 'Parse::RecDescent::Repetition' ),
                                                                                          bless( {
                                                                                                   'pattern' => ')',
                                                                                                   'hashname' => '__STRING2__',
                                                                                                   'description' => '\')\'',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 94
+                                                                                                  'line' => 95
                                                                                                 }, 'Parse::RecDescent::InterpLit' ),
                                                                                          bless( {
                                                                                                   'hashname' => '__ACTION1__',
                                                                                                   'lookahead' => 0,
-                                                                                                  'line' => 94,
+                                                                                                  'line' => 95,
                                                                                                   'code' => '{ $return = $item{\'addressstruct(s)\'} }'
                                                                                                 }, 'Parse::RecDescent::Action' )
                                                                                        ],
-                                                                            'line' => 94
+                                                                            'line' => 95
                                                                           }, 'Parse::RecDescent::Production' )
                                                                  ],
                                                       'name' => 'ADDRESSES',
                                                       'vars' => '',
-                                                      'line' => 93
+                                                      'line' => 94
                                                     }, 'Parse::RecDescent::Rule' ),
                               'bcc' => bless( {
                                                 'impcount' => 0,
@@ -15477,7 +15705,7 @@ $VERSION = '3.07';
                                                                                             'implicit' => undef,
                                                                                             'argcode' => undef,
                                                                                             'lookahead' => 0,
-                                                                                            'line' => 97
+                                                                                            'line' => 98
                                                                                           }, 'Parse::RecDescent::Subrule' )
                                                                                  ],
                                                                       'line' => undef
@@ -15485,7 +15713,7 @@ $VERSION = '3.07';
                                                            ],
                                                 'name' => 'bcc',
                                                 'vars' => '',
-                                                'line' => 97
+                                                'line' => 98
                                               }, 'Parse::RecDescent::Rule' ),
                               'rfc822message' => bless( {
                                                           'impcount' => 0,
@@ -15560,7 +15788,7 @@ $VERSION = '3.07';
                                                                                                       'hashname' => '__STRING1__',
                                                                                                       'description' => '\'(\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 80
+                                                                                                      'line' => 81
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'personalname',
@@ -15568,7 +15796,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 80
+                                                                                                      'line' => 81
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'sourceroute',
@@ -15576,7 +15804,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 80
+                                                                                                      'line' => 81
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'mailboxname',
@@ -15584,7 +15812,7 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 80
+                                                                                                      'line' => 81
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'subrule' => 'hostname',
@@ -15592,19 +15820,19 @@ $VERSION = '3.07';
                                                                                                       'implicit' => undef,
                                                                                                       'argcode' => undef,
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 80
+                                                                                                      'line' => 81
                                                                                                     }, 'Parse::RecDescent::Subrule' ),
                                                                                              bless( {
                                                                                                       'pattern' => ')',
                                                                                                       'hashname' => '__STRING2__',
                                                                                                       'description' => '\')\'',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 80
+                                                                                                      'line' => 81
                                                                                                     }, 'Parse::RecDescent::InterpLit' ),
                                                                                              bless( {
                                                                                                       'hashname' => '__ACTION1__',
                                                                                                       'lookahead' => 0,
-                                                                                                      'line' => 81,
+                                                                                                      'line' => 82,
                                                                                                       'code' => '{ bless { personalname => $item{personalname}
 		, sourceroute  => $item{sourceroute}
 		, mailboxname  => $item{mailboxname}
@@ -15618,7 +15846,7 @@ $VERSION = '3.07';
                                                                      ],
                                                           'name' => 'addressstruct',
                                                           'vars' => '',
-                                                          'line' => 80
+                                                          'line' => 81
                                                         }, 'Parse::RecDescent::Rule' ),
                               'sourceroute' => bless( {
                                                         'impcount' => 0,
@@ -15644,7 +15872,7 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 76
+                                                                                                    'line' => 77
                                                                                                   }, 'Parse::RecDescent::Subrule' )
                                                                                          ],
                                                                               'line' => undef
@@ -15664,15 +15892,15 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 76
+                                                                                                    'line' => 77
                                                                                                   }, 'Parse::RecDescent::Subrule' )
                                                                                          ],
-                                                                              'line' => 76
+                                                                              'line' => 77
                                                                             }, 'Parse::RecDescent::Production' )
                                                                    ],
                                                         'name' => 'sourceroute',
                                                         'vars' => '',
-                                                        'line' => 76
+                                                        'line' => 77
                                                       }, 'Parse::RecDescent::Rule' ),
                               'subpart' => bless( {
                                                     'impcount' => 0,
@@ -15696,7 +15924,7 @@ $VERSION = '3.07';
                                                                                                 'hashname' => '__STRING1__',
                                                                                                 'description' => '\'(\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 171
+                                                                                                'line' => 174
                                                                                               }, 'Parse::RecDescent::InterpLit' ),
                                                                                        bless( {
                                                                                                 'subrule' => 'part',
@@ -15704,26 +15932,26 @@ $VERSION = '3.07';
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 171
+                                                                                                'line' => 174
                                                                                               }, 'Parse::RecDescent::Subrule' ),
                                                                                        bless( {
                                                                                                 'pattern' => ')',
                                                                                                 'hashname' => '__STRING2__',
                                                                                                 'description' => '\')\'',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 171
+                                                                                                'line' => 174
                                                                                               }, 'Parse::RecDescent::InterpLit' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__ACTION1__',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 171,
+                                                                                                'line' => 174,
                                                                                                 'code' => '{$return = $item{part}}'
                                                                                               }, 'Parse::RecDescent::Action' ),
                                                                                        bless( {
                                                                                                 'hashname' => '__DIRECTIVE1__',
                                                                                                 'name' => '<defer:{  ++$subpartCount; }>',
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 171,
+                                                                                                'line' => 174,
                                                                                                 'code' => 'push @{$thisparser->{deferred}}, sub {  ++$subpartCount; };'
                                                                                               }, 'Parse::RecDescent::Directive' )
                                                                                      ],
@@ -15732,7 +15960,7 @@ $VERSION = '3.07';
                                                                ],
                                                     'name' => 'subpart',
                                                     'vars' => '',
-                                                    'line' => 171
+                                                    'line' => 174
                                                   }, 'Parse::RecDescent::Rule' ),
                               'textlines' => bless( {
                                                       'impcount' => 0,
@@ -15837,6 +16065,60 @@ $VERSION = '3.07';
                                                        'vars' => '',
                                                        'line' => 42
                                                      }, 'Parse::RecDescent::Rule' ),
+                              'bodyloc' => bless( {
+                                                    'impcount' => 0,
+                                                    'calls' => [
+                                                                 'NIL',
+                                                                 'STRING'
+                                                               ],
+                                                    'changed' => 0,
+                                                    'opcount' => 0,
+                                                    'prods' => [
+                                                                 bless( {
+                                                                          'number' => '0',
+                                                                          'strcount' => 0,
+                                                                          'dircount' => 0,
+                                                                          'uncommit' => undef,
+                                                                          'error' => undef,
+                                                                          'patcount' => 0,
+                                                                          'actcount' => 0,
+                                                                          'items' => [
+                                                                                       bless( {
+                                                                                                'subrule' => 'NIL',
+                                                                                                'matchrule' => 0,
+                                                                                                'implicit' => undef,
+                                                                                                'argcode' => undef,
+                                                                                                'lookahead' => 0,
+                                                                                                'line' => 74
+                                                                                              }, 'Parse::RecDescent::Subrule' )
+                                                                                     ],
+                                                                          'line' => undef
+                                                                        }, 'Parse::RecDescent::Production' ),
+                                                                 bless( {
+                                                                          'number' => '1',
+                                                                          'strcount' => 0,
+                                                                          'dircount' => 0,
+                                                                          'uncommit' => undef,
+                                                                          'error' => undef,
+                                                                          'patcount' => 0,
+                                                                          'actcount' => 0,
+                                                                          'items' => [
+                                                                                       bless( {
+                                                                                                'subrule' => 'STRING',
+                                                                                                'matchrule' => 0,
+                                                                                                'implicit' => undef,
+                                                                                                'argcode' => undef,
+                                                                                                'lookahead' => 0,
+                                                                                                'line' => 74
+                                                                                              }, 'Parse::RecDescent::Subrule' )
+                                                                                     ],
+                                                                          'line' => 74
+                                                                        }, 'Parse::RecDescent::Production' )
+                                                               ],
+                                                    'name' => 'bodyloc',
+                                                    'vars' => '',
+                                                    'line' => 74
+                                                  }, 'Parse::RecDescent::Rule' ),
                               'bodylang' => bless( {
                                                      'impcount' => 0,
                                                      'calls' => [
@@ -15943,7 +16225,7 @@ $VERSION = '3.07';
                                                                                                        'hashname' => '__STRING1__',
                                                                                                        'description' => '\'(\'',
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::InterpLit' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'date',
@@ -15951,7 +16233,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'subject',
@@ -15959,7 +16241,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'from',
@@ -15967,7 +16249,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'sender',
@@ -15975,7 +16257,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'replyto',
@@ -15983,7 +16265,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'to',
@@ -15991,7 +16273,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'cc',
@@ -15999,7 +16281,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 103
+                                                                                                       'line' => 104
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'bcc',
@@ -16007,7 +16289,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 104
+                                                                                                       'line' => 105
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'inreplyto',
@@ -16015,7 +16297,7 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 104
+                                                                                                       'line' => 105
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'subrule' => 'messageid',
@@ -16023,19 +16305,19 @@ $VERSION = '3.07';
                                                                                                        'implicit' => undef,
                                                                                                        'argcode' => undef,
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 104
+                                                                                                       'line' => 105
                                                                                                      }, 'Parse::RecDescent::Subrule' ),
                                                                                               bless( {
                                                                                                        'pattern' => ')',
                                                                                                        'hashname' => '__STRING2__',
                                                                                                        'description' => '\')\'',
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 104
+                                                                                                       'line' => 105
                                                                                                      }, 'Parse::RecDescent::InterpLit' ),
                                                                                               bless( {
                                                                                                        'hashname' => '__ACTION1__',
                                                                                                        'lookahead' => 0,
-                                                                                                       'line' => 105,
+                                                                                                       'line' => 106,
                                                                                                        'code' => '{ $return = bless {}, "Mail::IMAPClient::BodyStructure::Envelope";
 	  $return->{$_} = $item{$_}
 	     for qw/date subject from sender replyto to cc/
@@ -16049,7 +16331,7 @@ $VERSION = '3.07';
                                                                       ],
                                                            'name' => 'envelopestruct',
                                                            'vars' => '',
-                                                           'line' => 103
+                                                           'line' => 104
                                                          }, 'Parse::RecDescent::Rule' ),
                               'replyto' => bless( {
                                                     'impcount' => 0,
@@ -16074,7 +16356,7 @@ $VERSION = '3.07';
                                                                                                 'implicit' => undef,
                                                                                                 'argcode' => undef,
                                                                                                 'lookahead' => 0,
-                                                                                                'line' => 99
+                                                                                                'line' => 100
                                                                                               }, 'Parse::RecDescent::Subrule' )
                                                                                      ],
                                                                           'line' => undef
@@ -16082,7 +16364,7 @@ $VERSION = '3.07';
                                                                ],
                                                     'name' => 'replyto',
                                                     'vars' => '',
-                                                    'line' => 99
+                                                    'line' => 100
                                                   }, 'Parse::RecDescent::Rule' ),
                               'mailboxname' => bless( {
                                                         'impcount' => 0,
@@ -16108,7 +16390,7 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 77
+                                                                                                    'line' => 78
                                                                                                   }, 'Parse::RecDescent::Subrule' )
                                                                                          ],
                                                                               'line' => undef
@@ -16128,15 +16410,15 @@ $VERSION = '3.07';
                                                                                                     'implicit' => undef,
                                                                                                     'argcode' => undef,
                                                                                                     'lookahead' => 0,
-                                                                                                    'line' => 77
+                                                                                                    'line' => 78
                                                                                                   }, 'Parse::RecDescent::Subrule' )
                                                                                          ],
-                                                                              'line' => 77
+                                                                              'line' => 78
                                                                             }, 'Parse::RecDescent::Production' )
                                                                    ],
                                                         'name' => 'mailboxname',
                                                         'vars' => '',
-                                                        'line' => 77
+                                                        'line' => 78
                                                       }, 'Parse::RecDescent::Rule' )
                             }
                }, 'Parse::RecDescent' );

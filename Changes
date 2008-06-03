@@ -3,6 +3,23 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.08: Tue Jun  3 09:36:24 CEST 2008
+
+	Fixes:
+
+	- message_to_file used wrong command.
+	  rt.cpan.org#36184 [Parse Int]
+
+	- oops, distribution released with OODoc/oodist, not make dist.
+	  [Randy Harmon]
+
+	- fix parsing of body-structure information for multi-parts
+	  rt.cpan.org#36279 [Doug Claar]
+
+	Improvements:
+
+	- Updated README and TODO (Was 'Todo')
+
 version 3.07: Mon Apr 28 09:17:30 CEST 2008
 
 	Fixes:
@@ -30,9 +47,6 @@ version 3.06: Mon Apr 14 23:44:03 CEST 2008
 
 	- append_string needs LF -> CRLF translations, for some
 	  servers. rt.cpan.org #35031 [Jonathan Kamens]
-
-	- append_string needs LF -> CRLF translations, for some
-	  servers. rt.cpan.org #35032 [Jonathan Kamens]
 
 	Improvements:
 
