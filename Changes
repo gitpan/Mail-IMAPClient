@@ -3,6 +3,28 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.09: Fri Aug 22 16:38:25 CEST 2008
+
+	Fixes:
+
+	- return status of append_message reversed.
+	  rt.cpan.org#36726 [Jakob Hirsch]
+
+	- no line-breaks in base64 encoded strings when logging-in
+	  rt.cpan.org#36879 [David Jonas]
+
+	- fix MD5 authentication.
+	  rt.cpan.org#38654 [Thomas Jarosch]
+
+	Improvements:
+
+	- extensions and clean-ups in examples/imap_to_mbox.pl by
+	  [Ralph Sobek]
+
+	- an absolute path as Server setting will open a local ::UNIX
+	  socket, not an ::INET
+	  rt.cpan.org#38655 [Thomas Jarosch]
+
 version 3.08: Tue Jun  3 09:36:24 CEST 2008
 
 	Fixes:
@@ -13,7 +35,7 @@ version 3.08: Tue Jun  3 09:36:24 CEST 2008
 	- oops, distribution released with OODoc/oodist, not make dist.
 	  [Randy Harmon]
 
-	- fix parsing of body-structure information for multi-parts
+	- fix parsing of body-structure information for multi-parts.
 	  rt.cpan.org#36279 [Doug Claar]
 
 	Improvements:

@@ -902,8 +902,9 @@ unavailable but the connection to the server succeeds then B<connect>
 returns a pointer to the B<IMAPClient> object.
 
 The I<Server> parameter must be set (either during L<new> method
-invocation or via the L<Server> object method) before invoking
-B<connect>. If the L<Server> parameter is supplied to the L<new> method
+invocation or via the L<Server> object method) before invoking B<connect>.
+When the parameter is an absolute file path, an UNIX socket will get
+opened.  If the L<Server> parameter is supplied to the L<new> method
 then B<connect> is implicitly called during object construction.
 
 The B<connect> method sets the state of the object to C<connected> if
@@ -3716,10 +3717,7 @@ Foundation; either version 1, or (at your option) any later version.
 =back
 
 This program is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See either the GNU
-General Public License or the Artistic License for more details. All your
-base are belong to us.
-
-
-my $not_void = 0;	# This is a documentation-only file!
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE. See either the GNU General Public
+License or the Artistic License for more details. All your base are
+belong to us.

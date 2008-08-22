@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.08';
+our $VERSION = '3.09';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -19,6 +19,7 @@ use Fcntl       qw(F_GETFL F_SETFL O_NONBLOCK);
 use Errno       qw/EAGAIN/;
 use List::Util  qw/first min max sum/;
 use MIME::Base64;
+use File::Spec  ();
 
 use constant Unconnected   => 0;
 use constant Connected     => 1; # connected; not logged in
@@ -240,15 +241,26 @@ sub connect(@)
     my $port    = $self->Port;
     my @timeout = $self->Timeout ? (Timeout => $self->Timeout) : ();
 
-    $self->_debug("Connecting to $server port $port");
+    my $sock;
 
-    my $sock = IO::Socket::INET->new
-      ( PeerAddr => $server
-      , PeerPort => $port
-      , Proto    => 'tcp'
-      , Debug    => $self->Debug
-      , @timeout
-      );
+    if(File::Spec->file_name_is_absolute($server))
+    {   $self->_debug("Connecting to unix socket $server");
+        $sock = IO::Socket::UNIX->new
+         ( Peer  => $server
+         , Debug => $self->Debug
+         , @timeout
+         );
+    }
+    else
+    {   $self->_debug("Connecting to $server port $port");
+        my $sock = IO::Socket::INET->new
+          ( PeerAddr => $server
+          , PeerPort => $port
+          , Proto    => 'tcp'
+          , Debug    => $self->Debug
+          , @timeout
+          );
+    }
 
     unless($sock)
     {   $self->LastError("Unable to connect to $server: $@");
@@ -2478,7 +2490,7 @@ sub append_file
     }
     $fh->close;
 
-      $code eq 'OK' ? undef
+      $code ne 'OK' ? undef
     : defined $uid  ? $uid
     :                 $self;
 }
@@ -2525,7 +2537,7 @@ sub authenticate
           { my ($code, $client) = @_;
             use Digest::HMAC_MD5;
             my $hmac = Digest::HMAC_MD5::hmac_md5_hex(decode_base64($code), $client->Password);
-            encode_base64($client->User." ".$hmac);
+            encode_base64($client->User." ".$hmac, '');
           };
     }
     elsif($scheme eq 'DIGEST-MD5')
@@ -2550,7 +2562,7 @@ sub authenticate
              my $conn   = $sasl->client_new('imap', 'localhost', '');
              my $answer = $conn->client_step(decode_base64 $code);
 
-             encode_base64($response, '')
+             encode_base64($answer, '')
                  if defined $answer;
           };
     }
@@ -2558,7 +2570,7 @@ sub authenticate
     {   $response ||= sub
           { my ($code, $client) = @_;
             encode_base64($client->User . chr(0) . $client->Proxy
-               . chr(0) . $client->Password);
+               . chr(0) . $client->Password, '');
           };
     }
     elsif($scheme eq 'NTLM')
