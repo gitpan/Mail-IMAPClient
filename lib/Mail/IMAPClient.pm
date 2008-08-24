@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.09';
+our $VERSION = '3.10';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -253,7 +253,7 @@ sub connect(@)
     }
     else
     {   $self->_debug("Connecting to $server port $port");
-        my $sock = IO::Socket::INET->new
+        $sock = IO::Socket::INET->new
           ( PeerAddr => $server
           , PeerPort => $port
           , Proto    => 'tcp'

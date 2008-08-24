@@ -3,6 +3,13 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.10: Sun Aug 24 21:26:27 CEST 2008
+
+	Fixes:
+
+	- INET socket scope error, introduced by 3.09
+	  rt.cpan.org#38689 [Matt Moen]
+
 version 3.09: Fri Aug 22 16:38:25 CEST 2008
 
 	Fixes:
