@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.10';
+our $VERSION = '3.11';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1315,23 +1315,19 @@ sub _read_line
     )
     {   my $transno = $self->Transaction;
 
-        if($timeout)
-        {   my $rvec = 0;
-            vec($rvec, fileno($self->Socket), 1) = 1;
-            unless(CORE::select($rvec, undef, $rvec, $timeout))
-            {   $self->LastError("Tag $transno: Timeout after $timeout seconds"
-                    . " waiting for data from server");
+        if($timeout && !_read_more($socket, $timeout))
+        {   $self->LastError("Tag $transno: Timeout after $timeout seconds"
+              . " waiting for data from server");
 
-                $self->_record($transno,
-                    [ $self->_next_index($transno), "ERROR"
-                    , "$transno * NO Timeout after $timeout seconds " .
-                        "during read from server"]);
+            $self->_record($transno,
+              [ $self->_next_index($transno), "ERROR"
+              , "$transno * NO Timeout after $timeout seconds " .
+                "during read from server"]);
 
-                $self->LastError("Timeout after $timeout seconds during "
-                    . "read from server");
+            $self->LastError("Timeout after $timeout seconds during "
+              . "read from server");
 
-                return undef;
-            }
+            return undef;
         }
 
         my $ret = $self->_sysread($socket, \$iBuffer, $readlen,length $iBuffer);
@@ -1385,10 +1381,7 @@ sub _read_line
 
                 while($expected_size > length $litstring)
                 {   if($timeout)
-                    {    # wait for data from the the IMAP socket.
-                         my $rvec = 0;
-                         vec($rvec, fileno($self->Socket), 1) = 1;
-                         unless(CORE::select($rvec, undef, $rvec, $timeout))
+                    {    unless(_read_more($socket, $timeout))
                          {    $self->LastError("Tag $transno: Timeout waiting for "
                                  . "literal data from server");
                              return undef;
@@ -1398,7 +1391,7 @@ sub _read_line
                     {   CORE::select(undef, undef, undef, 0.001);
                     }
     
-                    fcntl($socket, F_SETFL, $self->{_fcntl})  #???why
+                    fcntl($socket, F_SETFL, $self->{_fcntl})  #???need???
                         if $fast_io && defined $self->{_fcntl};
     
                     my $ret = $self->_sysread($socket, \$litstring
@@ -1451,6 +1444,19 @@ sub _sysread($$$$)
 {   my ($self, $fh, $buf, $len, $off) = @_;
     my $rm   = $self->Readmethod;
     $rm ? $rm->($self, @_) : sysread($fh, $$buf, $len, $off);
+}
+
+sub _read_more($$)
+{   my ($socket, $timeout) = @_;
+
+    # IO::Socket::SSL buffers some data internally, so there might be some
+    # data available from the previous sysread of which the file-handle
+    # (used by select()) doesn't know of.
+    return 1 if $socket->isa("IO::Socket::SSL") && $socket->pending;
+
+    my $rvec = 0;
+    vec($rvec, fileno($socket), 1) = 1;
+    return CORE::select($rvec, undef, $rvec, $timeout);
 }
 
 sub _trans_index()   { sort {$a <=> $b} keys %{$_[0]->{History}} }

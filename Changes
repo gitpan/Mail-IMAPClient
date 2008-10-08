@@ -3,6 +3,18 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.11: Wed Oct  8 10:57:31 CEST 2008
+
+	Fixes:
+
+	- some SSL connections process more bytes then needed, which
+	  made the select() timeout.  Nice fix by [David Sansome]
+	  rt.cpan.org#39776
+
+	Improvements:
+
+	- improved example imap_to_mbox by [Ralph Sobek]
+
 version 3.10: Sun Aug 24 21:26:27 CEST 2008
 
 	Fixes:
