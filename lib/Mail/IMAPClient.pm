@@ -2,7 +2,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.11';
+our $VERSION = '3.12';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -21,15 +21,20 @@ use List::Util  qw/first min max sum/;
 use MIME::Base64;
 use File::Spec  ();
 
-use constant Unconnected   => 0;
-use constant Connected     => 1; # connected; not logged in
-use constant Authenticated => 2; # logged in; no mailbox selected
-use constant Selected      => 3; # mailbox selected
+use constant APPEND_BUFFER_SIZE => 1024 * 1024;
 
-use constant INDEX         => 0; # Array index for output line number
-use constant TYPE          => 1; # Array index for line type
-                                 #    (either OUTPUT, INPUT, or LITERAL)
-use constant DATA          => 2; # Array index for output line data
+use constant
+  { Unconnected   => 0
+  , Connected     => 1 # connected; not logged in
+  , Authenticated => 2 # logged in; no mailbox selected
+  , Selected      => 3 # mailbox selected
+  };
+
+use constant
+  { INDEX         => 0 # Array index for output line number
+  , TYPE          => 1 # Array index for line type (OUTPUT, INPUT, or LITERAL)
+  , DATA          => 2 # Array index for output line data
+  };
 
 use constant NonFolderArg => 1;  # Value to pass to Massage to
                                  #    indicate non-folder argument
@@ -2382,7 +2387,7 @@ sub append_file
         return undef;
     }
 
-    my $fh = IO::File->new($file);
+    my $fh = IO::File->new($file, 'rb');
     unless($fh)
     {   $self->LastError("Unable to open $file: $!");
         return undef;
@@ -2394,7 +2399,10 @@ sub append_file
         $date = qq{"$f" };
     }
 
-    my $bare_nl_count = grep m/^\n$|[^\r]\n$/, <$fh>;
+    my $bare_nl_count = 0;
+    while(<$fh>)                 # do no read the whole file at once!
+    {   $bare_nl_count++ if m/^\n$|[^\r]\n$/;
+    }
 
     seek($fh,0,0);
 
@@ -2438,38 +2446,23 @@ sub append_file
         }
     }
 
-    # Slurp up headers: later we'll make this more efficient I guess
+    # Now send the message itself
+    local $/ = ref $control ? "\n" : $control ? $control : "\n";
+    my $buffer;
 
-    local $/ = "\r\n\r\n";
-    my $text = <$fh>;
+    while($fh->sysread($buffer, APPEND_BUFFER_SIZE))
+    {    $buffer =~ s/\A\n/\r\n/;
+         $buffer =~ s/(?<![^\r])\n/\r\n/g;
 
-    $text =~ s/\r?\n/\r\n/g;
-    $self->_record($count, [$self->_next_index($count),"INPUT","{From $file}"]);
+         $self->_record( $count, [ $self->_next_index($count), "INPUT"
+                                 , '{'.length($buffer)." bytes from $file}" ] );
 
-    unless($self->_send_line($text))
-    {   $self->LastError("Error sending append msg text to IMAP: $!");
-        $fh->close;
-        return undef;
-    }
-    $self->_debug("control points to $$control\n") if ref $control;
-
-    $/ = ref $control ? "\n" : $control ? $control : "\n";
-    while(defined($text = <$fh>))
-    {   $text =~ s/\r?\n/\r\n/g;
-        $self->_record($count,
-            [ $self->_next_index($count), "INPUT", "{from $file}"]);
-
-        unless($self->_send_line($text,1))
-        {   $self->LastError("Error sending append msg text to IMAP: $!");
-            $fh->close;
-            return undef;
-        }
-    }
-
-    unless($self->_send_line("\r\n"))
-    {   $self->LastError("Error sending append msg text to IMAP: $!");
-        $fh->close;
-        return undef;
+         my $bytes_written = $self->_send_line($buffer, 1);
+         unless($bytes_written)
+         {    $self->LastError("Error sending append msg text to IMAP: $!");
+              $fh->close;
+              return undef;
+         }
     }
 
     # Now for the crucial test: Did the append work or not?

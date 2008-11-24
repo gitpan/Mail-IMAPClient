@@ -3,6 +3,14 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.12: Mon Nov 24 15:34:58 CET 2008
+
+	Improvement:
+
+	- major performance improvement in append_message(), avoiding
+	  reading the whole file in memory as the docs promised but the
+	  code didn't do.  [David Podolsky]
+
 version 3.11: Wed Oct  8 10:57:31 CEST 2008
 
 	Fixes:
