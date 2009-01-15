@@ -140,7 +140,7 @@ As of version 2.99_04 of this module, the I<Socket> parameter has
 changed semantics to make it more "DWIM". The I<RawSocket> parameter was
 introduced as a replacement for the I<Socket> parameter in older version.
 
-=item State, Server, Proxy, Password, and User Parameters
+=item State, Server, Proxy, Password, User, Domain Parameters
 
 If you need to make your own connection to the server and perform your
 authentication manually, then you can set these parameters to keep your
@@ -148,7 +148,7 @@ B<Mail::IMAPClient> object in sync with its actual status. Of these,
 only the I<State> parameter is always necessary.  The others need to be
 set only if you think your program will need them later.
 
-I<Proxy> is required for PLAIN (SASL) authentication.
+I<Proxy> is required for PLAIN (SASL) authentication.  I<Domain> for NTLM.
 
 =item Authmechanism 
 
@@ -2175,9 +2175,9 @@ Example:
 
 	$imap->run(@args) or die "Could not run: $@\n";
 
-Like Perl itself, the B<Mail::IMAPClient> module is designed to make
-common things easy and uncommon things possible. The B<run> method is
-provided to make those uncommon things possible.
+The B<run> method is provided to make those uncommon things
+possible... however, we would like you to contribute the knowledge
+of missing features with us.
 
 The B<run> method excepts one or two arguments. The first argument is a
 string containing an IMAP Client command, including a tag and all

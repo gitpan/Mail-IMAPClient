@@ -1,8 +1,11 @@
+
+# _{name} methods are undocumented and meant to be private.
+
 use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.12';
+our $VERSION = '3.13';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -61,10 +64,10 @@ sub _debug
 BEGIN {
    # set-up accessors
    foreach my $datum (
-     qw(State Port Server Folder Peek User Password Timeout Buffer
-        Debug Count Uid Debug_fh Maxtemperrors Authuser Authmechanism Authcallback
+     qw(State Port Server Folder Peek User Password Timeout Buffer Debug
+        Count Uid Debug_fh Maxtemperrors Authuser Authmechanism Authcallback
         Ranges Readmethod Showcredentials Prewritemethod Ignoresizeerrors
-        Supportedflags Proxy))
+        Supportedflags Proxy Domain))
    { no strict 'refs';
      *$datum = sub { @_ > 1 ? ($_[0]->{$datum} = $_[1]) : $_[0]->{$datum}
      };
@@ -235,7 +238,7 @@ sub new
         $self->RawSocket($sock) unless $self->{Socket};
     }
 
-    !$self->{Socket} && $self->{Server} ?  $self->connect : $self;
+    !$self->{Socket} && $self->{Server} ? $self->connect : $self;
 }
 
 sub connect(@)
@@ -771,18 +774,23 @@ sub migrate
         }
 
         # Get the "+ Go ahead" response:
-        my $code = 0;
-        until($code eq '+' || $code =~ /NO|BAD|OK/)
+        my $code;
+        until(defined $code)
         {
              my $readSoFar  = 0;
-             my $fromBuffer = '';;
+             my $fromBuffer = '';
              $readSoFar += sysread($toSock, $fromBuffer, 1, $readSoFar) || 0
                  until $fromBuffer =~ /\r\n/;
 
-             $code = $fromBuffer =~ /^\+/ ? $1
-                   : $fromBuffer =~ / ^(?:\d+\s(BAD|NO))/ ? $1 : 0;
+             $code = $fromBuffer =~ /^\+/ ? 'OK'
+                   : $fromBuffer =~ /^(?:\d+\s(BAD|NO|OK))/ ? $1 : undef;
 
              $peer->_debug("$folder: received $fromBuffer from server");
+
+             if($fromBuffer =~ /^\*\s+BYE/i)
+             {   $self->State(Unconnected);
+                 return undef;
+             }
 
              # ... and log it in the history buffers
              $self->_record($trans, [0, "OUTPUT",
@@ -790,7 +798,7 @@ sub migrate
              $peer->_record($ptrans, [0, "OUTPUT", $fromBuffer] );
         }
 
-        if($code ne '+')
+        if($code ne 'OK')
         {   $self->_debug("Error writing to target host: $@");
             next MIGMSG;
         }
@@ -1075,12 +1083,10 @@ sub tag_and_run
     @{$self->Results};  #??? enforce list context
 }
 
-# _{name} methods are undocumented and meant to be private.
 
-# _imap_command runs a command, inserting the correct tag
-# and <CR><LF> and whatnot.
-# When updating _imap_command, remember to examine the run method,
-# too, since it is very similar.
+# _imap_command runs a command, inserting the correct tag and <CR><LF> and whatnot.
+# When updating _imap_command, remember to examine the run() method too, since
+# it is very similar.
 
 sub _imap_command
 {   my $self   = shift;
@@ -1090,7 +1096,7 @@ sub _imap_command
 
     my $clear = $self->Clear;
     $self->Clear($clear)
-        if $self->Count >= $clear and $clear > 0;
+        if $self->Count >= $clear && $clear > 0;
 
     my $count  = $self->Count($self->Count+1);
     $string    = "$count $string";
@@ -1111,14 +1117,14 @@ sub _imap_command
         {   $self->_record($count, $o);
             $self->_is_output($o) or next;
 
-            if($good eq '+')
-            {   $o->[DATA] =~ /^$count\s+(OK|BAD|NO|$qgood)|^($qgood)/mi;
-                $code = $1||$2;
+            if($good eq '+' && $o->[DATA] =~ /^$qgood/m)
+            {   $code = $qgood;
             }
             else
             {   ($code) = $o->[DATA] =~ /^$count\s+(OK|BAD|NO|$qgood)/mi;
             }
-            if ($o->[DATA] =~ /^\*\s+BYE/im)
+
+            if($o->[DATA] =~ /^\*\s+BYE/im)
             {   $self->State(Unconnected);
                 return undef;
             }
@@ -1126,7 +1132,6 @@ sub _imap_command
     }
 
     $code =~ /^OK|$qgood/im ? $self : undef;
-
 }
 
 sub _imap_uid_command
@@ -1140,42 +1145,40 @@ sub run
 {   my $self   = shift;
     my $string = shift or return undef;
     my $good   = shift || 'GOOD';
+    my $qgood  = quotemeta $good;
+
     my $count  = $self->Count($self->Count+1);
     my $tag    = $string =~ /^(\S+) / ? $1 : undef;
 
     $tag or $self->LastError("Invalid string passed to run method; no tag found.");
 
-    my $qgood  = quotemeta($good);
     my $clear  = $self->Clear;
     $self->Clear($clear)
         if $self->Count >= $clear && $clear > 0;
 
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 
-    unless($self->_send_line("$string",1))
+    unless($self->_send_line($string, 1))
     {   $self->LastError("Error sending '$string' to IMAP: $!");
         return undef;
     }
 
-    my ($code, $output);
-    $output = "";
-
+    my $code = '';
     until($code =~ /(OK|BAD|NO|$qgood)/m )
-    {   $output = $self->_read_line or return undef;
+    {   my $output = $self->_read_line or return undef;
         foreach my $o (@$output)
-        {   $self->_record($count,$o);
+        {   $self->_record($count, $o);
             $self->_is_output($o) or next;
 
-            if($good eq '+')
-            {   $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$qgood)|(^$qgood)/m;
-                $code = $1 || $2;
+            if($good eq '+' && $o->[DATA] =~ /^$qgood/mi)
+            {   $code = $qgood;
             }
             else
-            {   ($code) = $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$qgood)/m;
+            {   ($code) = $o->[DATA] =~ /^(?:$tag|\*) (OK|BAD|NO|$qgood)/mi;
             }
 
-            $o->[DATA] =~ /^\*\s+BYE/
-                and $self->State(Unconnected);
+            $self->State(Unconnected)
+                if $o->[DATA] =~ /^\*\s+BYE/;
         }
     }
 
@@ -1287,7 +1290,7 @@ sub _send_line
 # It is also re-implemented in: message_to_file
 #
 # $output = $self->_read_line($literal_callback, $output_callback)
-#    Both input argument are optional, but if supplied must either
+#    Both input arguments are optional, but if supplied must either
 #    be a filehandle, coderef, or undef.
 #
 #    Returned argument is a reference to an array of arrays, ie:
@@ -1586,7 +1589,7 @@ sub get_bodystructure
         return undef;
     }
 
-    my @out = $self->fetch($msg,"BODYSTRUCTURE");
+    my @out = $self->fetch($msg, "BODYSTRUCTURE");
     my $bs = "";
     my $output = first { /BODYSTRUCTURE\s+\(/i } @out;    # Wee! ;-)
     if($output =~ /\r\n$/)
@@ -1615,13 +1618,13 @@ sub get_bodystructure
         eval { $bs = Mail::IMAPClient::BodyStructure->new( $output )};
     }
 
-    $self->_debug("get_bodystructure: msg $msg returns: ". $bs||"UNDEF");
+    $self->_debug("get_bodystructure: msg $msg returns: ". ($bs||"UNDEF"));
     $bs;
 }
 
 # Updated to handle embedded literal strings
 sub get_envelope
-{   my ($self,$msg) = @_;
+{   my ($self, $msg) = @_;
     unless( eval {require Mail::IMAPClient::BodyStructure ; 1 } )
     {   $self->LastError("Unable to use get_envelope: $@");
         return undef;
@@ -2328,7 +2331,7 @@ sub append_string($$$;$$)
 
     my $clear  = $self->Clear;
     $self->Clear($clear)
-        if $self->Count >= $clear and $clear > 0;
+        if $self->Count >= $clear && $clear > 0;
 
     my $count  = $self->Count($self->Count+1);
     $text =~ s/\r?\n/\r\n/g;
@@ -2408,7 +2411,7 @@ sub append_file
 
     my $clear = $self->Clear;
     $self->Clear($clear)
-        if $self->Count >= $clear and $clear > 0;
+        if $self->Count >= $clear && $clear > 0;
 
     my $length = $bare_nl_count + -s $file;
     my $string = "$count APPEND $mfolder $fflags $date\{$length}\r\n";
@@ -2578,6 +2581,7 @@ sub authenticate
            require Authen::NTLM;
            Authen::NTLM::ntlm_user($self->User);
            Authen::NTLM::ntlm_password($self->Password);
+           Authen::NTLM::ntlm_domain($self->Domain) if $self->Domain;
            Authen::NTLM::ntlm();
          };
     }

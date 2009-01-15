@@ -34,7 +34,7 @@ RFC822:		/^"RFC822"|^RFC822/i  	{ $return = "RFC822" }
 NIL:		/^NIL/i			{ $return = "NIL"    }
 NUMBER:		/^(\d+)/		{ $return = $item[1] }
 
-# 	Strings:
+# Strings:
 
 SINGLE_QUOTED_STRING: "'" /(?:\\'|[^'])*/ "'" { $return = $item{__PATTERN1__} }
 DOUBLE_QUOTED_STRING: '"' /(?:\\"|[^"])*/ '"' { $return = $item{__PATTERN1__} }
@@ -128,11 +128,11 @@ textmessage: 	TEXT <commit> basicfields textlines(?) bodyMD5(?)
 	  1;
 	}
 
-othertypemessage: bodytype basicfields bodyparms(?) bodydisp(?)
+othertypemessage: bodytype basicfields bodyMD5(?) bodydisp(?)
 	          bodylang(?) bodyextra(?)
 	{ $return = { bodytype => $item{bodytype} };
 	  take_optional_items($return, \%item
-             , qw/bodyparms bodydisp bodylang bodyextra/ );
+             , qw/bodyMD5 bodydisp bodylang bodyextra/ );
 	  merge_hash($return, $item{basicfields});
 	  1;
 	}
@@ -148,7 +148,7 @@ nestedmessage:	rfc822message <commit> bodyparms bodyid bodydesc bodyenc
 #             envelopestruct bodystructure textlines/;
 
 	  take_optional_items($return, \%item
-, qw/envelopestruct bodystructure textlines/
+            , qw/envelopestruct bodystructure textlines/
 	    , qw/bodyMD5 bodydisp bodylang bodyextra/);
 
 	  merge_hash($return, $item{bodystructure}[0]);

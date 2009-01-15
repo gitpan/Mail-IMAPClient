@@ -4,7 +4,7 @@ use warnings;
 use strict;
 use lib 'lib';
 
-use Test::More tests => 10;
+use Test::More tests => 11;
 
 use Data::Dumper;
 $Data::Dumper::Indent=1;
@@ -51,3 +51,12 @@ END_OF_BS4
 
 $bsobj = Mail::IMAPClient::BodyStructure->new($bs4);
 ok(defined $bsobj, 'parsed fourth');
+
+# test bodyMD5, contributed by Micheal Stok
+my $bs5 = <<'END_OF_BS5';
+* 6 FETCH (UID 17280 BODYSTRUCTURE ((("text" "plain" ("charset" "utf-8") NIL NIL "quoted-printable" 1143 37 NIL NIL NIL)("text" "html" ("charset" "utf-8") NIL NIL "quoted-printable" 4618 106 NIL NIL NIL) "alternative" ("boundary" "Boundary-00=_Z7P340MWKGMMYJ0CCJD0") NIL NIL)("image" "tiff" ("name" "8dd0e430.tif") NIL NIL "base64" 204134 "pmZp5QOBa9BIqFNmvxUiyQ==" ("attachment" ("filename" "8dd0e430.tif")) NIL) "mixed" ("boundary" "Boundary-00=_T7P340MWKGMMYJ0CCJD0") NIL NIL))
+END_OF_BS5
+
+$bsobj = Mail::IMAPClient::BodyStructure->new($bs5);
+ok(defined $bsobj, 'parsed fifth');
+

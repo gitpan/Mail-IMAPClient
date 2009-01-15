@@ -3,6 +3,21 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.13: Thu Jan 15 10:29:04 CET 2009
+
+	Fixes:
+
+	- "othermessage" in bodystructure parser should expect an MD5,
+	  not bodyparams.  Fix and test(!) by [Michael Stok]
+
+	Improvement:
+
+	- minor simplifications in code of run() and _imap_command()
+
+	- get_bodystructure trace message fix [Michael Stok]
+
+	- add Domain option for NTLM authentication.
+
 version 3.12: Mon Nov 24 15:34:58 CET 2008
 
 	Improvement:

@@ -5649,7 +5649,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 	while (!$_matched && !$commit)
 	{
 		
-		Parse::RecDescent::_trace(q{Trying production: [bodytype basicfields bodyparms bodydisp bodylang bodyextra]},
+		Parse::RecDescent::_trace(q{Trying production: [bodytype basicfields bodyMD5 bodydisp bodylang bodyextra]},
 					  Parse::RecDescent::_tracefirst($_[1]),
 					  q{othertypemessage},
 					  $tracelevel)
@@ -5722,30 +5722,30 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 		
 		}
 
-		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyparms]},
+		Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyMD5]},
 				  Parse::RecDescent::_tracefirst($text),
 				  q{othertypemessage},
 				  $tracelevel)
 					if defined $::RD_TRACE;
-		$expectation->is(q{bodyparms})->at($text);
+		$expectation->is(q{bodyMD5})->at($text);
 		
-		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyparms, 0, 1, $_noactions,$expectation,undef))) 
+		unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyMD5, 0, 1, $_noactions,$expectation,undef))) 
 		{
-			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyparms]>>},
+			Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyMD5]>>},
 						  Parse::RecDescent::_tracefirst($text),
 						  q{othertypemessage},
 						  $tracelevel)
 							if defined $::RD_TRACE;
 			last;
 		}
-		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyparms]<< (}
+		Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyMD5]<< (}
 					. @$_tok . q{ times)},
 					  
 					  Parse::RecDescent::_tracefirst($text),
 					  q{othertypemessage},
 					  $tracelevel)
 						if defined $::RD_TRACE;
-		$item{q{bodyparms(?)}} = $_tok;
+		$item{q{bodyMD5(?)}} = $_tok;
 		push @item, $_tok;
 		
 
@@ -5843,7 +5843,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 
 		$_tok = ($_noactions) ? 0 : do { $return = { bodytype => $item{bodytype} };
 	  take_optional_items($return, \%item
-             , qw/bodyparms bodydisp bodylang bodyextra/ );
+             , qw/bodyMD5 bodydisp bodylang bodyextra/ );
 	  merge_hash($return, $item{basicfields});
 	  1;
 	};
@@ -5862,7 +5862,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
 		
 
 
-		Parse::RecDescent::_trace(q{>>Matched production: [bodytype basicfields bodyparms bodydisp bodylang bodyextra]<<},
+		Parse::RecDescent::_trace(q{>>Matched production: [bodytype basicfields bodyMD5 bodydisp bodylang bodyextra]<<},
 					  Parse::RecDescent::_tracefirst($text),
 					  q{othertypemessage},
 					  $tracelevel)
@@ -9512,7 +9512,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::nestedmessage
 #             envelopestruct bodystructure textlines/;
 
 	  take_optional_items($return, \%item
-, qw/envelopestruct bodystructure textlines/
+            , qw/envelopestruct bodystructure textlines/
 	    , qw/bodyMD5 bodydisp bodylang bodyextra/);
 
 	  merge_hash($return, $item{bodystructure}[0]);
@@ -14436,7 +14436,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                              'calls' => [
                                                                           'bodytype',
                                                                           'basicfields',
-                                                                          'bodyparms',
+                                                                          'bodyMD5',
                                                                           'bodydisp',
                                                                           'bodylang',
                                                                           'bodyextra'
@@ -14470,7 +14470,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'line' => 131
                                                                                                        }, 'Parse::RecDescent::Subrule' ),
                                                                                                 bless( {
-                                                                                                         'subrule' => 'bodyparms',
+                                                                                                         'subrule' => 'bodyMD5',
                                                                                                          'expected' => undef,
                                                                                                          'min' => 0,
                                                                                                          'argcode' => undef,
@@ -14519,7 +14519,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'line' => 133,
                                                                                                          'code' => '{ $return = { bodytype => $item{bodytype} };
 	  take_optional_items($return, \\%item
-             , qw/bodyparms bodydisp bodylang bodyextra/ );
+             , qw/bodyMD5 bodydisp bodylang bodyextra/ );
 	  merge_hash($return, $item{basicfields});
 	  1;
 	}'
@@ -15534,7 +15534,7 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
 #             envelopestruct bodystructure textlines/;
 
 	  take_optional_items($return, \\%item
-, qw/envelopestruct bodystructure textlines/
+            , qw/envelopestruct bodystructure textlines/
 	    , qw/bodyMD5 bodydisp bodylang bodyextra/);
 
 	  merge_hash($return, $item{bodystructure}[0]);
