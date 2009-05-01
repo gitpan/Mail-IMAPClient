@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: sharedFolder.pl,v 19991216.1 2003/06/12 21:38:35 dkernen Exp $
+#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/sharedFolder.pl#1 $
 
 use Mail::IMAPClient;
 use Getopt::Std;

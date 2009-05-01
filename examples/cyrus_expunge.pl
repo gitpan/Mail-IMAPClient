@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: cyrus_expunge.pl,v 19991216.3 2003/06/12 21:38:31 dkernen Exp $
+#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/cyrus_expunge.pl#1 $
 
 use Mail::IMAPClient;
 use IO::File;

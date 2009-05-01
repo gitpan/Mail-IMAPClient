@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: build_dist.pl,v 19991216.7 2003/06/12 21:38:29 dkernen Exp $
+#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/build_dist.pl#1 $
 
 use Mail::IMAPClient;
 
@@ -132,7 +132,7 @@ All rights reserved.
 =cut
 
 
-# $Id: build_dist.pl,v 19991216.7 2003/06/12 21:38:29 dkernen Exp $
+# $Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/build_dist.pl#1 $
 # $Log: build_dist.pl,v $
 # Revision 19991216.7  2003/06/12 21:38:29  dkernen
 #

@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: migrate_mail2.pl,v 19991216.4 2003/06/12 21:38:33 dkernen Exp $
+#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/migrate_mail2.pl#1 $
 #
 # An example of how to migrate from a Netscape server
 # (which uses a slash as a separator and which does

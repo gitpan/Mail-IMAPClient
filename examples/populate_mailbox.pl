@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl							
-#$Id: populate_mailbox.pl,v 19991216.8 2003/06/12 21:38:34 dkernen Exp $									#
+#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/populate_mailbox.pl#1 $									#
 use Time::Local								;
 use FileHandle								;
 use File::Copy								;
@@ -256,7 +256,7 @@ All rights reserved.
 
 =cut
 
-# $Id: populate_mailbox.pl,v 19991216.8 2003/06/12 21:38:34 dkernen Exp $
+# $Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/populate_mailbox.pl#1 $
 # $Log: populate_mailbox.pl,v $
 # Revision 19991216.8  2003/06/12 21:38:34  dkernen
 #

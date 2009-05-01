@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: copy_folder.pl,v 19991216.3 2003/06/12 21:38:30 dkernen Exp $
+#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/copy_folder.pl#1 $
 ++$|;
 use Getopt::Std;
 use Mail::IMAPClient;

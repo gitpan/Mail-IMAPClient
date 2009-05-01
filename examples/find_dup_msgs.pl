@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-# $Id: find_dup_msgs.pl,v 19991216.5 2003/06/12 21:38:32 dkernen Exp $
+# $Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/find_dup_msgs.pl#1 $
 
 use Mail::IMAPClient;
 use Mozilla::LDAP::Conn;
