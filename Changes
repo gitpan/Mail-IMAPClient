@@ -1,22 +1,87 @@
 
 == Revision History for Mail::IMAPClient
-Changes from 3.17_01+ to ?       made by Phil Lobbes
-Changes from 2.99_01  to 3.16    made by Mark Overmeer
-Changes from 0.09     to 2.99_01 made by David Kernen
+Changes from 3.17_01 to ?       made by Phil Lobbes
+Changes from 2.99_01 to 3.16    made by Mark Overmeer
+Changes from 0.09    to 2.99_01 made by David Kernen
 
-version 3.17-02: Fri May  1 16:44:21 EDT 2009
-        - version 3.17_02
-        - cleanup of use/imported data
-        - use Socket $CRLF in many cases not \r\n per perlport/IMAP spec
-        - new Keepalive attr for use with new()/Socket() enables SO_KEEPALIVE
-        - LastError now uses Carp::confess for stack trace if Debug is true
-        - Maxcommandlength now defaults to 1000 per RFC2683 section 3.2.1.5
-        - added noop() to support IMAP NOOP
-        - _imap_command now sets LastError if a OK/$good response is not seen
-        - fixed fetch_hash() to return FLAGS as "" not () when no FLAGS set
+version 3.17: Thu May 21 01:40:08 EDT 2009
+	- ran all test code and lib/Mail/IMAPClient.pm through Perl::Tidy
+	- plan on using perltidy to standardize format going forward
+	- added 13 tests to t/basic.t to cover more methods
+	- fix some broken tests
+	- update Makefile.PL to provide info about optional modules
+
+version 3.17_05: Tue May 19 11:04:28 EDT 2009
+	Potential compatibility issues highlighted with '*':
+	- *reset LastError for every call to _imap_command_do()
+	- *run() - use _imap_command_do(), return arrayref in scalar context
+	- *tag_and_run() - return arrayref in scalar context
+	- *done() - use _imap_command_do(), return arrayref in scalar context
+	- *search() now returns empty arrayref not undef if no matches found
+	- _imap_command_do() made more flexible to avoid code duplication
+	- _list_response_parse renamed _list_or_lsub_response_parse
+	- updated POD with new/updated behavior
+	- append_string() now uses _imap_command_do() for Reconnectretry
+	- internally use defined return values instead of only LastError()
+	- run() updated to use same/similar code to _imap_command_do()
+	- make several return statements more consistent
+	- delete() now unsets current Folder attribute on success
+
+version 3.17_04: Fri May 15 17:18:52 EDT 2009
+	- updated POD with new reconnect() method and Reconnectretry attr
+	- *new _imap_command() after renaming old one to _imap_command_do
+	  support retrying commands X times EPIPE/ECONNRESET errors
+	- *added Reconnectretry attr to control number of retry
+	  attempts (default is 0 - no reconnect/retry)
+	- *added reconnect() method to support Reconnectretry attr
+	  reconnect and updated _imap_command() method
+	- *_imap_command_do will return undef if command given has no TAG
+	- fixed message_string() logic/errors for failed size() calls
+	- local-ize $! anywhere we use Carp routines as older versions
+	  of Carp could cause $! to be reset
+	- several 'BUG?' comments -- raising red flag for future work
+	- minor cleanup of sort() logic
+	- reduce duplicate code, hopefully improved error handling:
+	  new _list_or_lsub() for list() and lsub()
+	  new _folders_or_subscribed() for folders() and subscribed()
+	  + new _list_response_preprocess() keeping old code/logic in
+	    for now, but may remove in the future (for buggy servers?)
+	- some updates for migrate() but this method needs much work
+	- body_string() now handles fetch() errors
+	- tag_and_run now handles _imap_command() errors
+	- changed non-timeout CORE::select() timeout from 0.001 to 0.025
+	- minor cleanup of _read_line() error handling/debug output
+	- get_bodystructure() handle more fetch() errors
+	- expunge() handle select() errors
+	- restore_message() handle store() errors
+	- uidvalidity() handle status() errors
+	- uidnext() handle status() errors
+	- is_parent() use _list_response_preprocess() for parsing
+	- move() send delete_message() errors to stderr
+	- simplify size() method
+
+version 3.17_03: Fri May  8 16:37:08 EDT 2009
+	- *added uidexpunge() for UID EXPUNGE UIDPLUS support
+	- *search() now DWIM: auto-escapes args, SCALAR refs not escaped
+	  rt.cpan.org#44936 [cjhenck]
+	- _quote_search() provides auto-escape capability for search()
+	- many POD updates as well as some major reformatting (incomplete)
+	- login now fails if passwd and user are not defined
+	- _sysread(): $self was in args to 'Readmethod' twice
+	- authenticate() return undef on scheme eq "" or LOGIN
+	- "require" instead "use" Digest::HMAC_MD5 for CRAM-MD5 support
+
+version 3.17_02: Fri May  1 16:44:21 EDT 2009
+	- cleanup of use/imported data
+	- use Socket $CRLF in many cases not \r\n per perlport/IMAP spec
+	- new Keepalive attr for use with new()/Socket() enables SO_KEEPALIVE
+	- LastError now uses Carp::confess for stack trace if Debug is true
+	- Maxcommandlength now defaults to 1000 per RFC2683 section 3.2.1.5
+	- added noop() to support IMAP NOOP
+	- _imap_command now sets LastError if a OK/$good response is not seen
+	- fixed fetch_hash() to return FLAGS as "" not () when no FLAGS set
 
 version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
-	Potential compatibility issues highlighted with '*':
 	- *new attribute Maxcommandlength used by fetch() to limit
 	  length of commands sent to a server.  This should removes
 	  need for utilities like imapsync to create their own split()
@@ -27,7 +92,7 @@ version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	  errors, thus timeouts were not working properly (now they
 	  work...)
 	- *change default timeout 30s => 600s: 30s seems too short in
-           practice
+	   practice
 	- *explicit import of encode_base64 and decode_base64 from
 	  MIME::Base64 note the code forces a disconnect from the
 	  server on timeout as we can not easily recover from this
@@ -39,16 +104,16 @@ version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	  + now return undef if an error occured for NAMESPACE or LIST calls
 	  + *no longer defaults to '/' if NAMESPACE call does not succeed
 	- new internal _list_response_parse() method for parsing LIST
-          responses
+	  responses
 	- handle ECONNRESET errors on syswrite and mark connection as
-          Unconnected
+	  Unconnected
 	  + error "Connection lost" changed to "Write failed"
 	- previously untrapped syswrite error now generate "Write
-          failed" errors
+	  failed" errors
 	- fix in _imap_command where LastError would be erroneously
-          set on LOGOUT
+	  set on LOGOUT
 	- _record() no longer tries to infer errors based on data
-          being "recorded"
+	  being "recorded"
 	- _send_line()
 	  + cleanup in watching for: +|NO|BAD|BYE
 	  + now sets LastError when an unexpected response is seen
@@ -57,9 +122,9 @@ version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	  + forcefully _disconnect() on timeouts as this breaks app logic
 	  + reduced duplication of code on error handling
 	- added _disconnect() method to brute force drop connections
-          on timeout
+	  on timeout
 	- added _list_response_parse() to reduce duplicate code for
-          LIST parsing
+	  LIST parsing
 	- added _split_sequence() to support new Maxcommandlength argument
 	- fetch()
 	  + use new Maxcommandlength to split a request into multiple
