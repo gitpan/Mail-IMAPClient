@@ -32,7 +32,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 62;
+      : plan tests    => 64;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -190,6 +190,12 @@ ok( $uid2, "copy $target2" );
 my @res = $imap->fetch( 1, "RFC822.TEXT" );
 ok( scalar @res, "fetch rfc822" );
 
+my $res1 = $imap->fetch_hash("RFC822.SIZE");
+is( ref($res1), "HASH", "fetch_hash(RFC822.SIZE)" );
+
+my $res2 = $imap->fetch_hash( 1, "RFC822.SIZE" );
+is( ref($res2), "HASH", "fetch_hash(1,RFC822.SIZE)" );
+
 my $h = $imap->parse_headers( 1, "Subject" );
 ok( $h, "got subject" );
 like( $h->{Subject}[0], qr/^Testing from pid/, "subject matched" );
@@ -227,10 +233,10 @@ ok(
 );
 
 $imap->select("INBOX");
-$@ = "";
+$@ = undef;
 @hits =
   $imap->search( BEFORE => Mail::IMAPClient::Rfc2060_date(time), "UNDELETED" );
-ok( !$@, "search undeleted: $@" );
+ok( !$@, "search undeleted" ) or diag( '$@:' . $@ );
 
 #
 # Test migrate method
@@ -276,7 +282,7 @@ $im2->close;
 $im2->select($migtarget)
   or die "can't select $migtarget: $@";
 
-cmp_ok( $@, 'eq', '', "LastError not set" );
+ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
 
 #
 my $total_bytes1 = 0;
@@ -293,7 +299,7 @@ for ( $im2->search("ALL") ) {
     print "Size of msg $_ is $s\n" if $debug;
 }
 
-cmp_ok( $@,            'eq', '',            "LastError not set" );
+ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
 cmp_ok( $total_bytes1, '==', $total_bytes2, 'size source==target' );
 
 # cleanup
@@ -312,7 +318,7 @@ ok( $im2->logout, "logout" );
         ok( my $idle = $imap->idle, "idle" );
         sleep 1;
         ok( $imap->done($idle), "done" );
-        cmp_ok( $@, 'eq', '', "LastError not set" );
+        ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
     }
     else {
         ok( 1, "idle not supported" );

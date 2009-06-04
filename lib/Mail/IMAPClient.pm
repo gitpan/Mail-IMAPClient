@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.17';
+our $VERSION = '3.18';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -61,11 +61,12 @@ BEGIN {
 
     # set-up accessors
     foreach my $datum (
-        qw(State Port Server Folder Peek User Password Timeout Buffer
-        Debug Count Uid Debug_fh Maxtemperrors Authuser Authmechanism
-        Authcallback Ranges Readmethod Showcredentials Prewritemethod
-        Ignoresizeerrors Supportedflags Proxy Domain Maxcommandlength
-        Keepalive Reconnectretry)
+        qw(Authcallback Authmechanism Authuser Buffer Count Debug
+        Debug_fh Domain Folder Ignoresizeerrors Keepalive
+        Maxcommandlength Maxtemperrors Password Peek Port
+        Prewritemethod Proxy Ranges Readmethod Reconnectretry
+        Server Showcredentials State Supportedflags Timeout Uid
+        User Ssl)
       )
     {
         no strict 'refs';
@@ -82,9 +83,17 @@ sub LastError {
 
     # allow LastError to be reset with undef
     if ( defined $err ) {
-        $err =~ s/$CRLF$//o;
+        $err =~ s/$CRLF$//og;
         local ($!);    # old versions of Carp could reset $!
         $self->_debug( Carp::longmess("ERROR: $err") );
+
+        # hopefully this is rare...
+        if ( $err eq "NO not connected" ) {
+            my $lerr = $self->{LastError} || "";
+            my $emsg = "Trying command when NOT connected!";
+            $emsg .= " LastError was: $lerr" if $lerr;
+            Carp::cluck($emsg);
+        }
     }
     $@ = $self->{LastError} = $err;
 }
@@ -175,10 +184,9 @@ sub Strip_cr {
         return $string;
     }
 
-    return
-      wantarray
-      ? map { s/$CRLF/\n/ogm; $_ } ( ref $_[0] ? @{ $_[0] } : @_ )
-      : [ map { s/$CRLF/\n/ogm; $_ } ( ref $_[0] ? @{ $_[0] } : @_ ) ];
+    return wantarray
+      ? map { s/$CRLF/\n/og; $_ } ( ref $_[0] ? @{ $_[0] } : @_ )
+      : [ map { s/$CRLF/\n/og; $_ } ( ref $_[0] ? @{ $_[0] } : @_ ) ];
 }
 
 # The following defines a special method to deal with the Clear parameter:
@@ -263,16 +271,15 @@ sub connect(@) {
     my $self = shift;
 
     # BUG? We should restrict which keys can be passed/set here.
-    %$self = ( %$self, @_ );
+    %$self = ( %$self, @_ ) if @_;
 
     my $server  = $self->Server;
     my $port    = $self->Port;
     my @timeout = $self->Timeout ? ( Timeout => $self->Timeout ) : ();
-
     my $sock;
 
     if ( File::Spec->file_name_is_absolute($server) ) {
-        $self->_debug("Connecting to unix socket $server");
+        $self->_debug("Connecting to unix socket $server @timeout");
         $sock = IO::Socket::UNIX->new(
             Peer  => $server,
             Debug => $self->Debug,
@@ -280,8 +287,18 @@ sub connect(@) {
         );
     }
     else {
-        $self->_debug("Connecting to $server port $port");
-        $sock = IO::Socket::INET->new(
+        my $ioclass = "IO::Socket::INET";
+        if ( $self->Ssl ) {
+            $ioclass = "IO::Socket::SSL";
+            eval "require $ioclass";
+            if ($@) {
+                $self->LastError("Unable to load '$ioclass' for Ssl: $@");
+                return undef;
+            }
+        }
+
+        $self->_debug("Connecting via $ioclass to $server:$port @timeout");
+        $sock = $ioclass->new(
             PeerAddr => $server,
             PeerPort => $port,
             Proto    => 'tcp',
@@ -295,7 +312,7 @@ sub connect(@) {
         return undef;
     }
 
-    $self->_debug("Connected to $server");
+    $self->_debug( "Connected to $server" . ( $! ? " errno($!)" : "" ) );
     $self->Socket($sock);
 }
 
@@ -323,25 +340,15 @@ sub Socket($) {
 
     setsockopt( $sock, SOL_SOCKET, SO_KEEPALIVE, 1 ) if $self->Keepalive;
 
-    my $code;
-  LINE:
-    while ( my $output = $self->_read_line ) {
-        foreach my $o (@$output) {
-            $self->_record( $self->Count, $o );
-            next unless $o->[TYPE] eq "OUTPUT";
-
-            $code = $o->[DATA] =~ /^\*\s+(OK|BAD|NO|PREAUTH)/i ? uc($1) : undef;
-            last LINE;
-        }
-    }
-    $code or return undef;    # LastError may be set by _read_line
+    # LastError may be set by _read_line via _get_response
+    # look for "* (OK|BAD|NO|PREAUTH)"
+    my $code = $self->_get_response( '*', 'PREAUTH' ) or return undef;
 
     if ( $code eq 'BYE' || $code eq 'NO' ) {
         $self->State(Unconnected);
         return undef;
     }
-
-    if ( $code eq 'PREAUTH' ) {
+    elsif ( $code eq 'PREAUTH' ) {
         $self->State(Authenticated);
         return $self;
     }
@@ -423,7 +430,7 @@ sub sort {
         my @results = $self->History;
         foreach (@results) {
             chomp;
-            s/\r$//;
+            s/$CR$//;
             s/^\*\s+SORT\s+// or next;
             push @hits, grep /\d/, split;
         }
@@ -453,7 +460,7 @@ sub _folders_or_subscribed {
     my ( $self, $method, $what ) = @_;
     my @folders;
 
-    # do BLOCK allowing use of "last if LastError" and avoiding dup code
+    # do BLOCK allowing use of "last if undef/error" and avoiding dup code
     do {
         {
             my @list;
@@ -570,7 +577,7 @@ sub getacl {
             $self->_debug("Permissions: $u => $p");
         }
     }
-    $hash;
+    return $hash;
 }
 
 sub listrights {
@@ -604,12 +611,13 @@ sub select {
 
     $self->State(Selected);
     $self->Folder($target);
-    $old || $self;    # ??$self??
+    return $old || $self;    # ??$self??
 }
 
 sub message_string {
     my ( $self, $msg ) = @_;
 
+    return undef unless defined $self->imap4rev1;
     my $peek = $self->Peek      ? '.PEEK'        : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
 
@@ -632,7 +640,7 @@ sub message_string {
         }
     }
 
-    $string;
+    return $string;
 }
 
 sub bodypart_string {
@@ -641,7 +649,8 @@ sub bodypart_string {
     unless ( $self->imap4rev1 ) {
         $self->LastError( "Unable to get body part; server "
               . $self->Server
-              . " does not support IMAP4REV1" );
+              . " does not support IMAP4REV1" )
+          unless $self->LastError;
         return undef;
     }
 
@@ -677,9 +686,11 @@ sub message_to_file {
     $self->Clear($clear)
       if $self->Count >= $clear && $clear > 0;
 
+    return undef unless defined $self->imap4rev1;
     my $peek = $self->Peek      ? '.PEEK'        : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
-    my $uid  = $self->Uid       ? "UID "         : "";
+
+    my $uid    = $self->Uid ? "UID " : "";
     my $trans  = $self->Count( $self->Count + 1 );
     my $string = "$trans ${uid}FETCH $msgs $cmd";
 
@@ -691,26 +702,11 @@ sub message_to_file {
         return undef;
     }
 
-    my $code;
+    # look for "<tag> (OK|BAD|NO)"
+    my $code = $self->_get_response( { outref => $handle }, $trans )
+      or return undef;
 
-  READ:
-    until ($code) {
-        my $output = $self->_read_line($handle)
-          or return undef;
-
-        foreach my $o (@$output) {
-            $self->_record( $trans, $o );
-            next unless $self->_is_output($o);
-
-            $code = $o->[DATA] =~ /^$trans\s+(OK|BAD|NO)/mi ? $1 : undef;
-            if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                $self->State(Unconnected);
-                return undef;
-            }
-        }
-    }
-    ref $fh or close $handle;
-    $code =~ /^OK/im ? $self : undef;
+    return $code eq 'OK' ? $self : undef;
 }
 
 sub message_uid {
@@ -718,7 +714,7 @@ sub message_uid {
 
     my $ref = $self->fetch( $msg, "UID" ) or return undef;
     foreach (@$ref) {
-        return $1 if m/\(UID\s+(\d+)\s*\)\r?$/;
+        return $1 if m/\(UID\s+(\d+)\s*\)$CR?$/o;
     }
     return undef;
 }
@@ -736,8 +732,8 @@ sub migrate {
 
     local $SIG{PIPE} = 'IGNORE';    # avoid SIGPIPE on syswrite, handle as error
 
-    unless ( eval { $peer->IsConnected } ) {
-        $self->LastError( "Invalid or unconnected "
+    unless ( $peer and $peer->IsConnected ) {
+        $self->LastError( "Invalid or unconnected peer "
               . ref($self)
               . " object used as target for migrate. $@" );
         return undef;
@@ -814,6 +810,7 @@ sub migrate {
         }
 
         # otherwise break it up into digestible pieces:
+        return undef unless defined $self->imap4rev1;
         my ( $cmd, $extract_size );
         if ( $self->imap4rev1 ) {
             $cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
@@ -825,7 +822,6 @@ sub migrate {
         }
 
         # Now let's warn the peer that there's a message coming:
-
         my $pstring =
             "$ptrans APPEND "
           . $self->Massage($folder)
@@ -849,14 +845,15 @@ sub migrate {
               until $fromBuffer =~ /$CRLF/o;
 
             $code =
-                $fromBuffer =~ /^\+/                   ? 'OK'
-              : $fromBuffer =~ /^(?:\d+\s(BAD|NO|OK))/ ? $1
-              :                                          undef;
+                $fromBuffer =~ /^\+/                  ? 'OK'
+              : $fromBuffer =~ /^\d+\s+(BAD|NO|OK)\b/ ? $1
+              :                                         undef;
 
             $peer->_debug("$folder: received $fromBuffer from server");
 
-            if ( $fromBuffer =~ /^\*\s+BYE/i ) {
+            if ( $fromBuffer =~ /^(\*\s+BYE.*?)$CR?$LF/oi ) {
                 $self->State(Unconnected);
+                $self->LastError($1);
                 return undef;
             }
 
@@ -886,7 +883,7 @@ sub migrate {
           if $self->Count >= $clear && $clear > 0;
 
         # position will tell us how far from beginning of msg the
-        # next IMAP FETCH should start (1st time start at offet zero):
+        # next IMAP FETCH should start (1st time start at offset zero):
         my $position   = 0;
         my $chunkCount = 0;
         my $readSoFar  = 0;
@@ -912,12 +909,11 @@ sub migrate {
 
                 $self->_record( $trans, [ 0, "OUTPUT", $fromBuffer ] );
 
-                if ( $fromBuffer =~ /^$trans (?:NO|BAD)/ ) {
+                if ( $fromBuffer =~ /^$trans\s+(?:NO|BAD)/ ) {
                     $self->LastError($fromBuffer);
                     next MIGMSG;
                 }
-
-                if ( $fromBuffer =~ /^$trans (?:OK)/ ) {
+                elsif ( $fromBuffer =~ /^$trans\s+OK/ ) {
                     $self->LastError( "Unexpected good return code "
                           . "from source host: $fromBuffer" );
                     next MIGMSG;
@@ -984,65 +980,33 @@ sub migrate {
         $leftSoFar -= $readSoFar;
         my $fromBuffer = "";
 
-        # Finish up reading the server response from the fetch cmd
-        #     on the source system:
+        # Finish up reading the server fetch response from the source system:
+        # look for "<trans> (OK|BAD|NO)"
+        $self->_debug("Reading from source: expecting 'OK' response");
+        $code = $self->_get_response($trans) or return undef;
+        return undef unless $code eq 'OK';
 
-        undef $code;
-        until ($code) {
-            $self->_debug(
-                "Reading from source server; expecting ') OK' type response");
-            my $output = $self->_read_line or return undef;
-            foreach my $o (@$output) {
-                $self->_record( $trans, $o );
-                $self->_is_output($o) or next;
-
-                $code = $o->[DATA] =~ /^$trans (OK|BAD|NO)/mi ? $1 : undef;
-                if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                    $self->State(Unconnected);
-                    return undef;
-                }
-            }
-        }
-
-        # Now let's send a <CR><LF> to the peer to signal end of APPEND cmd:
-        {
-            my $wroteSoFar = 0;
-            my $fromBuffer = $CRLF;
-            until ( $wroteSoFar >= 2 ) {
-                $wroteSoFar +=
-                  syswrite( $toSock, $fromBuffer, 2 - $wroteSoFar, $wroteSoFar )
-                  || 0;
-                if ( $! == EPIPE or $! == ECONNRESET ) {
-                    $self->State(Unconnected);
-                    $self->LastError("Write failed '$!'");
-                    return undef;
-                }
-            }
+        # Now let's send a CRLF to the peer to signal end of APPEND cmd:
+        unless ( $peer->_send_bytes( \$CRLF ) ) {
+            $self->LastError( "Error appending CRLF: " . $self->LastError );
+            return undef;
         }
 
         # Finally, let's get the new message's UID from the peer:
-        my $new_mid;
-        undef $code;
-        until ($code) {
-            $peer->_debug("Reading from target: expect new uid in response");
+        # look for "<tag> (OK|BAD|NO)"
+        $peer->_debug("Reading from target: expect new uid in response");
+        $code = $peer->_get_response($ptrans) or return undef;
 
-            my $output = $peer->_read_line or last;
-            foreach my $o (@$output) {
-                $peer->_record( $ptrans, $o );
-                next unless $peer->_is_output($o);
+        my $new_mid = "unknown";
+        if ( $code eq 'OK' ) {
+            my $data = join '', $self->Results;
 
-                $code    = $o->[DATA] =~ /^$ptrans (OK|BAD|NO)/mi ? $1 : undef;
-                $new_mid = $o->[DATA] =~ /APPENDUID \d+ (\d+)/    ? $1 : undef
-                  if $code;
-
-                if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                    $peer->State(Unconnected);
-                    return undef;
-                }
-            }
-
-            $new_mid ||= "unknown";
+            # look for something like return size or self if no size found:
+            # <tag> OK [APPENDUID <uid> <size>] APPEND completed
+            my $ret = $data =~ m#\s+(\d+)\]# ? $1 : undef;
+            $new_mid = $ret;
         }
+
         if ( $self->Debug ) {
             $self->_debug( "Copied message $mid in folder $folder to "
                   . $peer->User . '@'
@@ -1056,7 +1020,7 @@ sub migrate {
         }
     }
 
-    $self;
+    return $self;
 }
 
 # Optimization of wait time between syswrite calls only runs if syscalls
@@ -1170,45 +1134,81 @@ sub tag_and_run {
 sub reconnect {
     my $self = shift;
 
-    if ( $self->IsConnected ) {
-        $self->_debug("reconnect called while still connected");
+    if ( $self->IsAuthenticated ) {
+        $self->_debug("reconnect called but already authenticated");
         return $self;
     }
 
     my $einfo = $self->LastError || "";
     $self->_debug( "reconnecting to ", $self->Server, ", last error: $einfo" );
 
-    # reset error
-    $self->LastError(undef);
-
     # reconnect and select appropriate folder
-    unless ( $self->connect ) {
-        $self->LastError( $einfo . ", reconnect error: " . $self->LastError );
-        return undef;
-    }
-    if ( $self->Folder and !$self->select( $self->Folder ) ) {
-        $self->LastError( $einfo . ", reconnect error: " . $self->LastError );
-        return undef;
-    }
-    return $self;
+    $self->connect or return undef;
+
+    return ( defined $self->Folder ) ? $self->select( $self->Folder ) : $self;
 }
 
 # wrapper for _imap_command_do to enable retrying on lost connections
 sub _imap_command {
-    my $self  = shift;
-    my $retry = $self->Reconnectretry || 0;
-    my $tries = 0;
+    my $self = shift;
 
-    my $rc;
+    my $tries = 0;
+    my $retry = $self->Reconnectretry || 0;
+    my ( $rc, @err );
+
+    # LastError (if set) will be overwritten masking any earlier errors
     while ( $tries++ <= $retry ) {
-        $rc = $self->_imap_command_do(@_);
+
+        # do command on the first try or if Connected (reconnect ongoing)
+        if ( $tries == 1 or $self->IsConnected ) {
+            $rc = $self->_imap_command_do(@_);
+            push( @err, $self->LastError ) if $self->LastError;
+        }
+
         if ( !defined($rc) and $retry and $self->IsUnconnected ) {
-            ( $! == EPIPE or $! == ECONNRESET ) ? $self->reconnect : last;
+            last
+              unless (
+                   $! == EPIPE
+                or $! == ECONNRESET
+                or $self->LastError =~ /(?:timeout|error) waiting\b/
+                or $self->LastError =~ /(?:socket closed|\* BYE)\b/
+
+                # BUG? reconnect if caller ignored/missed earlier errors?
+                # or $self->LastError =~ /NO not connected/
+              );
+            if ( $self->reconnect ) {
+                $self->_debug("reconnect successful on try #$tries");
+            }
+            else {
+                $self->_debug("reconnect failed on try #$tries");
+                push( @err, $self->LastError ) if $self->LastError;
+            }
         }
         else {
             last;
         }
     }
+
+    unless ($rc) {
+        my ( %seen, @keep, @info );
+
+        foreach my $str (@err) {
+            my ( $sz, $len ) = ( 96, length($str) );
+            $str =~ s/$CR?$LF$/\\n/omg;
+            if ( !$self->Debug and $len > $sz * 2 ) {
+                my $beg = substr( $str, 0,    $sz );
+                my $end = substr( $str, -$sz, $sz );
+                $str = $beg . "..." . $end;
+            }
+            next if $seen{$str}++;
+            push( @keep, $str );
+        }
+        foreach my $msg (@keep) {
+            push( @info, $msg . ( $seen{$msg} > 1 ? " ($seen{$msg}x)" : "" ) );
+        }
+        $self->LastError( join( "; ", @info ) );
+    }
+
     return $rc;
 }
 
@@ -1221,15 +1221,15 @@ sub _imap_command_do {
     my $self   = shift;
     my $opt    = ref( $_[0] ) eq "HASH" ? shift : {};
     my $string = shift or return undef;
-    my $good   = shift || 'GOOD';
-    my $qgood  = quotemeta $good;
+    my $good   = shift;
 
     $opt->{addcrlf} = 1 unless exists $opt->{addcrlf};
     $opt->{addtag}  = 1 unless exists $opt->{addtag};
 
     # reset error in case the last error was non-fatal but never cleared
     if ( $self->LastError ) {
-        $self->_debug( "Reset LastError: " . $self->LastError );
+
+        #DEBUG $self->_debug( "Reset LastError: " . $self->LastError );
         $self->LastError(undef);
     }
 
@@ -1242,49 +1242,94 @@ sub _imap_command_do {
     $string = "$tag $string" if $opt->{addtag};
 
     # for APPEND (append_string) only log first line of command
-    my $lstring = $string;
-    $lstring = $1 if ( $string =~ / ^ ( $tag \s+ APPEND \s+ .* ) $ /xi );
+    my $logstr = ( $string =~ /^($tag\s+APPEND\s+.*?)$CR?$LF/ ) ? $1 : $string;
 
     # BUG? use $self->_next_index($tag) ? or 0 ???
-    # $self->_record($tag, [$self->_next_index($tag), "INPUT", $lstring] );
-    $self->_record( $count, [ 0, "INPUT", $lstring ] );
+    # $self->_record($tag, [$self->_next_index($tag), "INPUT", $logstr] );
+    $self->_record( $count, [ 0, "INPUT", $logstr ] );
 
+    # $suppress (adding CRLF) set to 0 if $opt->{addcrlf} is TRUE
     unless ( $self->_send_line( $string, $opt->{addcrlf} ? 0 : 1 ) ) {
-        $self->LastError( "Error sending '$lstring': " . $self->LastError );
+        $self->LastError( "Error sending '$logstr': " . $self->LastError );
         return undef;
     }
 
-    my ( $code, $data );
+    # look for "<tag> (OK|BAD|NO|$good)" (or "+..." if $good is '+')
+    my $code = $self->_get_response( $tag, $good ) or return undef;
 
+    if ( $code eq 'OK' ) {
+        return $self;
+    }
+    elsif ( $good and $code eq $good ) {
+        return $self;
+    }
+    else {
+        return undef;
+    }
+}
+
+# _get_response get IMAP response optionally send data somewhere
+# options:
+#   outref => GLOB|CODE - reference to send output to (see _read_line)
+sub _get_response {
+    my $self = shift;
+    my $opt  = ref( $_[0] ) eq "HASH" ? shift : {};
+    my $tag  = shift;
+    my $good = shift;
+
+    # tag can be a ref (compiled regex) or we quote it or default to \S+
+    my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
+    my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
+    my @readopt = defined( $opt->{outref} ) ? ( $opt->{outref} ) : ();
+
+    my ( $count, $out, $code, $byemsg ) = ( $self->Count, [], undef, undef );
     until ($code) {
-        my $output = $self->_read_line or return undef;
+        my $output = $self->_read_line(@readopt) or return undef;
+        $out = $output;    # keep last response just in case
+
+        # not using last on first match? paranoia or right thing?
+        # only uc() when match is not on case where $tag|$good is a ref()
         foreach my $o (@$output) {
             $self->_record( $count, $o );
             $self->_is_output($o) or next;
 
-            if ( $good eq '+' && $o->[DATA] =~ /^$qgood/m ) {
+            my $data = $o->[DATA];
+            if ( $good and $good ne '+' and $data =~ /^$qtag\s+($qgood)/i ) {
+                $code = $1;
+                $code = uc($code) unless ref($good);
+            }
+            elsif ( $good and $good eq '+' and $data =~ /^$qgood/ ) {
                 $code = $good;
             }
-            elsif ( $o->[DATA] =~ /^$tag\s+(OK|BAD|NO|$qgood)/mi ) {
-                ($code) = $1;
-                $data = $o->[DATA];
+            elsif ( $tag eq '+' and $data =~ /^$qtag/ ) {
+                $code = $tag;
             }
-
-            if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                $self->State(Unconnected);
-                $self->LastError( $o->[DATA] ) unless $string eq "$tag LOGOUT";
-                return undef;
+            elsif ( $data =~ /^$qtag\s+(OK|BAD|NO)\b/i ) {
+                $code = uc($1);
+                $self->LastError($data) unless ( $code eq 'OK' );
+            }
+            elsif ( $data =~ /^\*\s+(BYE)\b/i ) {
+                $code   = uc($1);
+                $byemsg = $data;
             }
         }
     }
 
-    if ( $code eq "OK" or $code eq $good ) {
-        return $self;
+    if ($code) {
+        $code = uc($code) unless ( $good and $code eq $good );
+
+        # on a successful LOGOUT $code is OK not BYE
+        if ( $code eq 'BYE' ) {
+            $self->State(Unconnected);
+            $self->LastError($byemsg) if $byemsg;
+        }
     }
-    else {
-        $self->LastError($data);
-        return undef;
+    elsif ( !$self->LastError ) {
+        my $info = "unexpected response: " . join( " ", @$out );
+        $self->LastError($info);
     }
+
+    return $code;
 }
 
 sub _imap_uid_command {
@@ -1332,38 +1377,17 @@ sub _send_line {
 
     if ( $string =~ s/^([^\n{]*\{(\d+)\}$CRLF)(.)/$3/o ) {
 
-        # Line starts with literal
+        # string starts with literal
         my ( $first, $len ) = ( $1, $2 );
         $self->_debug("Sending literal: $first\tthen: $string");
 
         $self->_send_line($first) or return undef;
-        my $output = $self->_read_line or return undef;
 
-        my $code;
-        foreach my $o (@$output) {
-            $self->_record( $self->Count, $o );
-            if ( $o->[DATA] =~ /^\+/ ) {
-                $code = 1;
-            }
-            elsif ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                $self->close;
-                $self->LastError( $o->[DATA] );
-                return undef;
-            }
-            elsif ( $o->[DATA] =~ /^\S+\s+(?:NO|BAD)/i ) {
-                $self->LastError( $o->[DATA] );
-                return undef;
-            }
-        }
+        # look for "<anything> OK|NO|BAD" or "+..."
+        my $code = $self->_get_response( qr(\S+), '+' ) or return undef;
+        return undef unless $code eq '+';
 
-        unless ($code) {
-            $self->LastError( "unexpected response: " . join( " ", @$output ) )
-              unless $self->LastError;
-            return undef;
-        }
-
-        # the second part follows the non-literal output, as below.
+        # non-literal part continues below...
     }
 
     unless ( $self->IsConnected ) {
@@ -1421,7 +1445,7 @@ sub _send_bytes($) {
     }
 
     $self->_debug("Sent $total bytes");
-    $total;
+    return $total;
 }
 
 # _read_line: read one line from the socket
@@ -1457,7 +1481,8 @@ sub _read_line {
     until (
         @$oBuffer    # there's stuff in output buffer:
           && $oBuffer->[-1][TYPE] eq 'OUTPUT'    # that thing is an output line:
-          && $oBuffer->[-1][DATA] =~ /\r?\n$/  # the last thing there has cr-lf:
+          && $oBuffer->[-1][DATA] =~
+          /$CR?$LF$/o            # the last thing there has cr-lf:
           && !length $iBuffer    # and the input buffer has been MT'ed:
       )
     {
@@ -1487,12 +1512,12 @@ sub _read_line {
         my $ret =
           $self->_sysread( $socket, \$iBuffer, $readlen, length $iBuffer );
         if ( $timeout && !defined $ret ) {
-            $emsg = "Error while reading data from server: $!";
+            $emsg = "error while reading data from server: $!";
             $self->State(Unconnected) if ( $! == ECONNRESET );
         }
 
         if ( defined $ret && $ret == 0 ) {    # Caught EOF...
-            $emsg = "Socket closed while reading data from server";
+            $emsg = "socket closed while reading data from server";
             $self->State(Unconnected);
         }
 
@@ -1508,10 +1533,10 @@ sub _read_line {
             return undef;
         }
 
-        while ( $iBuffer =~ s/^(.*?\r?\n)// )    # consume line
+        while ( $iBuffer =~ s/^(.*?$CR?$LF)//o )    # consume line
         {
             my $current_line = $1;
-            if ( $current_line !~ s/\s*\{(\d+)\}\r?\n$// ) {
+            if ( $current_line !~ s/\s*\{(\d+)\}$CR?$LF$//o ) {
                 push @$oBuffer, [ $index++, 'OUTPUT', $current_line ];
                 next;
             }
@@ -1572,17 +1597,18 @@ sub _read_line {
                     );
 
                     if ( $timeout && !defined $ret ) {
-                        $emsg = "Error while reading data from server: $!";
+                        $emsg = "error while reading data from server: $!";
                         $self->State(Unconnected) if ( $! == ECONNRESET );
                     }
 
                     # EOF: note IO::Socket::SSL does not support eof()
                     if ( defined $ret && $ret == 0 ) {
-                        $emsg = "Socket closed while reading data from server";
+                        $emsg = "socket closed while reading data from server";
                         $self->State(Unconnected);
                     }
 
-                    $self->_debug( "Received ret=$ret "
+                    $self->_debug( "Received ret="
+                          . ( defined($ret) ? "$ret " : "<undef> " )
                           . length($litstring)
                           . " of $expected_size" );
 
@@ -1779,7 +1805,7 @@ sub exists {
 # Updated to handle embedded literal strings
 sub get_bodystructure {
     my ( $self, $msg ) = @_;
-    unless ( eval { require Mail::IMAPClient::BodyStructure; 1 } ) {
+    unless ( eval { require Mail::IMAPClient::BodyStructure; } ) {
         $self->LastError("Unable to use get_bodystructure: $@");
         return undef;
     }
@@ -1823,7 +1849,7 @@ sub get_bodystructure {
 # Updated to handle embedded literal strings
 sub get_envelope {
     my ( $self, $msg ) = @_;
-    unless ( eval { require Mail::IMAPClient::BodyStructure; 1 } ) {
+    unless ( eval { require Mail::IMAPClient::BodyStructure; } ) {
         $self->LastError("Unable to use get_envelope: $@");
         return undef;
     }
@@ -1872,14 +1898,19 @@ sub get_envelope {
     $bs;
 }
 
+# fetch( [$seq_set|ALL], @msg_data_items )
 sub fetch {
     my $self = shift;
     my $what = shift || "ALL";
 
-    my $take =
-        $what eq 'ALL' ? $self->Range( $self->messages )
-      : ref $what || $what =~ /^[,:\d]+\w*$/ ? $self->Range($what)
-      :                                        $what;
+    my $take = $what;
+    if ( $what eq 'ALL' ) {
+        my $msgs = $self->messages or return undef;
+        $take = $self->Range($msgs);
+    }
+    elsif ( ref $what || $what =~ /^[,:\d]+\w*$/ ) {
+        $take = $self->Range($what);
+    }
 
     my ( @data, $cmd );
     my ( $seq_set, @fetch_att ) = $self->_split_sequence( $take, "FETCH", @_ );
@@ -1913,9 +1944,8 @@ sub _split_sequence {
     # split take => sequence-set and (optional) fetch-att
     my ( $seq, @att ) = split( / /, $take, 2 );
 
-    # default to the entire sequence
-    my @seqs = ($seq);
-
+    # use the entire sequence unless Maxcommandlength is set
+    my @seqs;
     my $maxl = $self->Maxcommandlength;
     if ($maxl) {
 
@@ -1928,32 +1958,46 @@ sub _split_sequence {
         my $diff = $maxl - $clen;
         my $most = $diff > 64 ? $diff : 64;
 
-        @seqs = ( $seq =~ m/(.{1,$most})(?:,|$)/g );
+        @seqs = ( $seq =~ m/(.{1,$most})(?:,|$)/g ) if defined $seq;
         $self->_debug( "split_sequence: length($maxl-$clen) parts: ",
             $#seqs + 1 )
           if ( $#seqs != 0 );
     }
+    else {
+        push( @seqs, $seq ) if defined $seq;
+    }
     return \@seqs, @att;
 }
 
+# fetch_hash( [$seq_set|ALL], @msg_data_items, [\%msg_by_ids] )
 sub fetch_hash {
     my $self  = shift;
     my $uids  = ref $_[-1] ? pop @_ : {};
     my @words = @_;
-    my $what  = join ' ', @_;
+
+    # take an optional leading list of messages argument or default to
+    # ALL let fetch turn that list of messages into a msgref as needed
+    # fetch has similar logic for dealing with message list
+    my $msgs = 'ALL';
+    if ( $words[0] ) {
+        if ( $words[0] eq 'ALL' || ref $words[0] ) {
+            $msgs = shift @words;
+        }
+        elsif ( $words[0] =~ s/^([,:\d]+)\s*// ) {
+            $msgs = $1;
+            shift @words if $words[0] eq "";
+        }
+    }
+
+    # message list (if any) is now removed from @words
+    my $what = join ' ', @words;
 
     for (@words) {
         s/([\( ])FAST([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE$2/i;
 s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
 
-    my $msgref = $self->messages;
-    return undef unless defined $msgref;
-
-    my $output = [];
-    if ($msgref) {
-        $output = $self->fetch( $msgref, "($what)" ) or return undef;
-    }
+    my $output = $self->fetch( $msgs, "($what)" ) or return undef;
 
     for ( my $x = 0 ; $x <= $#$output ; $x++ ) {
         my $entry = {};
@@ -1977,11 +2021,11 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
         foreach my $w (@words) {
             if ( $l =~ /\Q$w\E\s*$/i ) {
                 $entry->{$w} = $output->[ $x + 1 ];
-                $entry->{$w} =~ s/(?:\n?\r)+$//g;
+                $entry->{$w} =~ s/(?:$CR?$LF)+$//og;
                 chomp $entry->{$w};
             }
             elsif (
-                $l =~ /\(      # open paren followed by ...
+                $l =~ /\(  # open paren followed by ...
                 (?:.*\s)?  # ...optional stuff and a space
                 \Q$w\E\s   # escaped fetch field<sp>
                 (?:"       # then: a dbl-quote
@@ -2187,7 +2231,7 @@ sub parse_headers {
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
     my $msgid;
 
-    foreach my $header ( map { split /\r?\n/ } @$raw ) {
+    foreach my $header ( map { split /$CR?$LF/o } @$raw ) {
 
         # little problem: Windows2003 has UID as body, not in header
         if (
@@ -2310,7 +2354,7 @@ sub _search_date($$$) {
     my @hits;
     foreach ( $self->History ) {
         chomp;
-        s/\r$//;
+        s/$CR?$LF$//o;
         s/^\*\s+SEARCH\s+//i or next;
         push @hits, grep /\d/, split;
     }
@@ -2337,7 +2381,7 @@ sub or {
     my @hits;
     foreach ( $self->History ) {
         chomp;
-        s/\r$//;
+        s/$CR?$LF$//o;
         s/^\*\s+SEARCH\s+//i or next;
         push @hits, grep /\d/, split;
     }
@@ -2376,7 +2420,7 @@ sub search {
     my @hits;
     foreach ( $self->History ) {
         chomp;
-        s/\r\n?/ /g;
+        s/$CR?$LF$//o;
         s/^\*\s+SEARCH\s+(?=.*?\d)// or next;
         push @hits, grep /^\d+$/, split;
     }
@@ -2398,13 +2442,14 @@ my $thread_parser;
 sub thread {
     my $self = shift;
 
-    # BUG? check return from has_capability?
+    return undef unless defined $self->has_capability("THREAD=REFERENCES");
     my $algorythm = shift
       || (
         $self->has_capability("THREAD=REFERENCES")
         ? 'REFERENCES'
         : 'ORDEREDSUBJECT'
       );
+
     my $charset = shift || 'UTF-8';
     my @a = @_ ? @_ : 'ALL';
 
@@ -2417,7 +2462,7 @@ sub thread {
     unless ($thread_parser) {
         return if $thread_parser == 0;
 
-        eval "require Mail::IMAPClient::Thread";
+        eval { require Mail::IMAPClient::Thread; };
         if ($@) {
             $self->LastError($@);
             $thread_parser = 0;
@@ -2429,7 +2474,7 @@ sub thread {
     my $thread;
     foreach ( $self->History ) {
         /^\*\s+THREAD\s+/ or next;
-        s/\r\n*|\n+/ /g;
+        s/$CR?$LF|$LF+/ /og;
         $thread = $thread_parser->start($_);
     }
 
@@ -2496,10 +2541,12 @@ sub capability {
     return wantarray ? @caps : \@caps;
 }
 
+# use "" not undef when lookup fails to differentiate imap command
+# failure vs lack of capability
 sub has_capability {
     my ( $self, $which ) = @_;
-    $self->capability;
-    $which ? $self->{CAPABILITY}{ uc $which } : undef;
+    $self->capability or return undef;
+    $which ? $self->{CAPABILITY}{ uc $which } : "";
 }
 
 sub imap4rev1 {
@@ -2526,7 +2573,8 @@ sub namespace {
 
     my $self = shift;
     unless ( $self->has_capability("NAMESPACE") ) {
-        $self->LastError( "NO NAMESPACE not supported by " . $self->Server );
+        $self->LastError( "NO NAMESPACE not supported by " . $self->Server )
+          unless $self->LastError;
         return undef;
     }
 
@@ -2534,7 +2582,7 @@ sub namespace {
     my @namespaces = map { /^\* NAMESPACE (.*)/ ? $1 : () } $got->Results;
 
     my $namespace = shift @namespaces;
-    $namespace =~ s/\r?\n$//;
+    $namespace =~ s/$CR?$LF$//o;
 
     my ( $personal, $shared, $public ) = $namespace =~ m#
         (NIL|\((?:\([^\)]+\)\s*)+\))\s
@@ -2610,7 +2658,6 @@ sub append {
     my $self   = shift;
     my $folder = shift;
     my $text   = @_ > 1 ? join( $CRLF, @_ ) : shift;
-    $text =~ s/\r?\n/$CRLF/og;
 
     $self->append_string( $folder, $text );
 }
@@ -2633,7 +2680,7 @@ sub append_string($$$;$$) {
         $date = qq("$date") if $date !~ /^"/;
     }
 
-    $text =~ s/\r?\n/$CRLF/g;
+    $text =~ s/\r?\n/$CRLF/og;
 
     my $command =
         "APPEND $folder "
@@ -2643,7 +2690,7 @@ sub append_string($$$;$$) {
       . "}$CRLF";
 
     $command .= $text . $CRLF;
-    $self->_imap_command($command) or return undef;
+    $self->_imap_command( { addcrlf => 0 }, $command ) or return undef;
 
     my $data = join '', $self->Results;
 
@@ -2656,80 +2703,69 @@ sub append_string($$$;$$) {
 
 sub append_file {
     my ( $self, $folder, $file, $control, $flags, $use_filetime ) = @_;
-    my $count   = $self->Count( $self->Count + 1 );    #???? too early?
     my $mfolder = $self->Massage($folder);
 
     $flags ||= '';
     my $fflags = $flags =~ m/^\(.*\)$/ ? $flags : "($flags)";
 
-    unless ( -f $file ) {
-        $self->LastError("File $file not found.");
+    my @err;
+    push( @err, "folder not specified" )
+      unless ( defined($folder) and $folder ne "" );
+
+    my $fh;
+    if ( !defined($file) ) {
+        push( @err, "file not specified" );
+    }
+    elsif ( ref($file) ) {
+        $fh = $file;    # let the caller pass in their own file handle directly
+    }
+    elsif ( !-f $file ) {
+        push( @err, "file '$file' not found" );
+    }
+    else {
+        $fh = IO::File->new( $file, 'r' )
+          or push( @err, "Unable to open file '$file': $!" );
+    }
+
+    if (@err) {
+        $self->LastError( join( ", ", @err ) );
         return undef;
     }
 
-    my $fh = IO::File->new( $file, 'r' );
-    unless ($fh) {
-        $self->LastError("Unable to open $file: $!");
-        return undef;
+    my $date;
+    if ( $fh and $use_filetime ) {
+        my $f = $self->Rfc2060_datetime( ( stat($fh) )[9] );
+        $date = qq("$f");
     }
 
-    my $date = '';
-    if ($use_filetime) {
-        my $f = $self->Rfc2060_datetime( ( $fh->stat )[9] );
-        $date = qq("$f" );
+    # BUG? seems wasteful to do this always, provide a "fast path" option?
+    my $length = 0;
+    {
+        local $/ = "\n";    # just in case global is not default
+        while ( my $line = <$fh> ) {    # do no read the whole file at once!
+            $line =~ s/\r?\n$/$CRLF/;
+            $length += length($line);
+        }
+        seek( $fh, 0, 0 );
     }
 
-    my $bare_nl_count = 0;
-    while (<$fh>) {    # do no read the whole file at once!
-        $bare_nl_count++ if m/^\n$|[^\r]\n$/;
-    }
+    my $string = "APPEND $mfolder";
+    $string .= " $fflags" if ( $fflags ne "" );
+    $string .= " $date"   if ( defined($date) );
+    $string .= " {$length}";
 
-    seek( $fh, 0, 0 );
-
-    my $clear = $self->Clear;
-    $self->Clear($clear)
-      if $self->Count >= $clear && $clear > 0;
-
-    my $length = $bare_nl_count + -s $file;
-    my $string = "$count APPEND $mfolder $fflags $date\{$length}$CRLF";
-
-    $self->_record( $count, [ $self->_next_index($count), "INPUT", $string ] );
-
-    unless ( $self->_send_line($string) ) {
+    my $rc = $self->_imap_command( $string, '+' );
+    unless ($rc) {
         $self->LastError( "Error sending '$string': " . $self->LastError );
-        $fh->close;
         return undef;
     }
 
-    my $code;
-
-    until ($code) {
-        my $output = $self->_read_line;
-        unless ($output) {
-            $fh->close;
-            return undef;
-        }
-
-        foreach my $o (@$output) {
-            $self->_record( $count, $o );
-            $code = $o->[DATA] =~ /(^\+|^\d+\sNO\s|^\d+\sBAD)\s/i ? $1 : undef;
-
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                $fh->close;
-                return undef;
-            }
-            elsif ( $o->[DATA] =~ /^\d+\s+(NO|BAD)/i ) {
-                $fh->close;
-                return undef;
-            }
-        }
-    }
+    my $count = $self->Count;
 
     # Now send the message itself
     my $buffer;
     while ( $fh->sysread( $buffer, APPEND_BUFFER_SIZE ) ) {
-        $buffer =~ s/(?<!\r)\n/$CRLF/og;
+        $buffer =~ s/\r?\n/$CRLF/og;
 
         $self->_record(
             $count,
@@ -2741,42 +2777,36 @@ sub append_file {
 
         my $bytes_written = $self->_send_bytes( \$buffer );
         unless ($bytes_written) {
-            $self->LastError(
-                "Error sending append msg text: " . $self->LastError );
-            $fh->close;
+            $self->LastError( "Error appending message: " . $self->LastError );
             return undef;
         }
     }
 
-    # Now for the crucial test: Did the append work or not?
-    my $uid;
-    undef $code;
-    until ($code) {
-        my $output = $self->_read_line or return undef;
-        foreach my $o (@$output) {
-            $self->_record( $count, $o );
-            $self->_debug("append_file: Does $o->[DATA] have the code");
-            $code = $o->[DATA] =~ m/^\d+\s(NO|BAD|OK)/i  ? $1 : undef;
-            $uid  = $o->[DATA] =~ m/UID\s+\d+\s+(\d+)\]/ ? $1 : undef;
-
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                $fh->close;
-                return undef;
-            }
-            elsif ( $o->[DATA] =~ /^\d+\s+(NO|BAD)/i ) {
-                $fh->close;
-                return undef;
-            }
-        }
+    # finish off append
+    unless ( $self->_send_bytes( \$CRLF ) ) {
+        $self->LastError( "Error appending CRLF: " . $self->LastError );
+        return undef;
     }
-    $fh->close;
 
-    $code ne 'OK' ? undef
-      : defined $uid ? $uid
-      :                $self;
+    # Now for the crucial test: Did the append work or not?
+    # look for "<tag> (OK|BAD|NO)"
+    my $code = $self->_get_response($count) or return undef;
+
+    if ( $code eq 'OK' ) {
+        my $data = join '', $self->Results;
+
+        # look for something like return size or self if no size found:
+        # <tag> OK [APPENDUID <uid> <size>] APPEND completed
+        my $ret = $data =~ m#\s+(\d+)\]# ? $1 : $self;
+
+        return $ret;
+    }
+    else {
+        return undef;
+    }
 }
 
+# BUG? we should retry if "socket closed while..." but do not currently
 sub authenticate {
     my ( $self, $scheme, $response ) = @_;
     $scheme   ||= $self->Authmechanism;
@@ -2794,35 +2824,21 @@ sub authenticate {
         return undef;
     }
 
-    my $count  = $self->Count( $self->Count + 1 );
-    my $string = "$count AUTHENTICATE $scheme";
+    my $string = "AUTHENTICATE $scheme";
 
-    $self->_record( $count, [ $self->_next_index, "INPUT", $string ] );
+    # use _imap_command for retry mechanism...
+    $self->_imap_command( $string, '+' ) or return undef;
 
-    unless ( $self->_send_line($string) ) {
-        $self->LastError( "Error sending '$string': " . $self->LastError );
-        return undef;
-    }
-
+    my $count = $self->Count;
     my $code;
-    until ($code) {
-        my $output = $self->_read_line or return undef;
-        foreach my $o (@$output) {
-            $self->_record( $count, $o );
-            $code =
-                $o->[DATA] =~ /^\+\s+(\S+)\s*$/ ? $1
-              : $o->[DATA] =~ /^\+\s*$/         ? 'OK'
-              :                                   undef;
 
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                return undef;
-            }
+    # look for "+ <anyword>" or just "+"
+    foreach my $line ( $self->Results ) {
+        if ( $line =~ /^\+\s*(.*?)\s*$/ ) {
+            $code = $1;
+            last;
         }
     }
-
-    return undef
-      if $code =~ /^BAD|^NO/;
 
     if ( $scheme eq 'CRAM-MD5' ) {
         $response ||= sub {
@@ -2840,8 +2856,8 @@ sub authenticate {
             require Authen::SASL;
             require Digest::MD5;
 
-            my $authname = $client->Authuser;
-            defined $authname or $authname = $client->User;
+            my $authname =
+              defined $client->Authuser ? $client->Authuser : $client->User;
 
             my $sasl = Authen::SASL->new(
                 mechanism => 'DIGEST-MD5',
@@ -2876,6 +2892,7 @@ sub authenticate {
     elsif ( $scheme eq 'NTLM' ) {
         $response ||= sub {
             my ( $code, $client ) = @_;
+
             require Authen::NTLM;
             Authen::NTLM::ntlm_user( $self->User );
             Authen::NTLM::ntlm_password( $self->Password );
@@ -2885,11 +2902,12 @@ sub authenticate {
     }
 
     unless ( $self->_send_line( $response->( $code, $self ) ) ) {
-        $self->LastError(
-            "Error sending append msg text: " . $self->LastError );
+        $self->LastError( "Error sending $scheme data: " . $self->LastError );
         return undef;
     }
 
+    # this code may be a little too custom to try and use _get_response()
+    # look for "+ <anyword>" (not just "+") otherwise "<tag> (OK|BAD|NO)"
     undef $code;
     until ($code) {
         my $output = $self->_read_line or return undef;
@@ -2900,29 +2918,31 @@ sub authenticate {
             if ($code) {
                 unless ( $self->_send_line( $response->( $code, $self ) ) ) {
                     $self->LastError(
-                        "Error sending append msg text: " . $self->LastError );
+                        "Error sending $scheme data: " . $self->LastError );
                     return undef;
                 }
-                undef $code;    # Clear code; we're still not finished
+                undef $code;    # clear code as we are not finished yet
             }
 
-            $code = $1 if $o->[DATA] =~ /^$count\s+(OK|NO|BAD)\b/;
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
+            if ( $o->[DATA] =~ /^$count\s+(OK|NO|BAD)\b/i ) {
+                $code = uc($1);
+                $self->LastError( $o->[DATA] ) unless ( $code eq 'OK' );
+            }
+            elsif ( $o->[DATA] =~ /^\*\s+BYE/ ) {
                 $self->State(Unconnected);
+                $self->LastError( $o->[DATA] );
                 return undef;
             }
         }
     }
 
-    $code eq 'OK'
-      or return undef;
+    return undef unless $code eq 'OK';
 
     Authen::NTLM::ntlm_reset()
       if $scheme eq 'NTLM';
 
     $self->State(Authenticated);
-    $self;
-
+    return $self;
 }
 
 # UIDPLUS response from a copy: [COPYUID (uidvalidity) (origuid) (newuid)]
@@ -2948,7 +2968,7 @@ sub copy {
     my @uids;
     foreach (@results) {
         chomp;
-        s/\r$//;
+        s/$CR?$LF$//o;
         s/^.*\[COPYUID\s+\d+\s+[\d:,]+\s+([\d:,]+)\].*/$1/ or next;
         push @uids, /(\d+):(\d+)/ ? ( $1 ... $2 ) : ( split /\,/ );
 
@@ -3022,8 +3042,22 @@ sub size {
     my ( $self, $msg ) = @_;
     my $data = $self->fetch( $msg, "(RFC822.SIZE)" ) or return undef;
 
+    # beware of response like: * NO Cannot open message $msg
+    my $cmd = shift @$data;
+    my $err;
     foreach my $line (@$data) {
         return $1 if ( $line =~ /RFC822\.SIZE\s+(\d+)/ );
+        $err = $line if ( $line =~ /\* NO\b/ );
+    }
+
+    if ($err) {
+        my $info = "$err was returned for $cmd";
+        $info =~ s/$CR?$LF//og;
+        $self->LastError($info);
+    }
+    elsif ( !$self->LastError ) {
+        my $info = "no RFC822.SIZE found in: " . join( " ", @$data );
+        $self->LastError($info);
     }
     return undef;
 }
@@ -3040,7 +3074,7 @@ sub getquota {
     return $self->_imap_command("GETQUOTA $who") ? $self->Results : undef;
 }
 
-# usage: $imap->setquota($folder, storage => 512)
+# usage: $self->setquota($folder, storage => 512)
 sub setquota(@) {
     my ( $self, $what ) = ( shift, shift );
     my $who = $what ? $self->Massage($what) : "user/$self->{User}";
