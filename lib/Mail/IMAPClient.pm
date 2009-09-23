@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.20';
+our $VERSION = '3.21';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -140,8 +140,8 @@ my @mnt = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 sub Rfc822_date {
     my $class = shift;
-    my $date = $class =~ /^\d+$/ ? $class : shift;    # method or function?
-    my @date = gmtime($date);
+    my $date  = $class =~ /^\d+$/ ? $class : shift;    # method or function?
+    my @date  = gmtime($date);
 
     #Date: Fri, 09 Jul 1999 13:10:55 -0000
     sprintf(
@@ -159,6 +159,7 @@ sub Rfc822_date {
 sub Rfc2060_date {
     $_[0] =~ /^\d+$/ ? Rfc3501_date(@_) : shift->Rfc3501_date(@_);
 }
+
 sub Rfc3501_date {
     my $class = shift;
     my $stamp = $class =~ /^\d+$/ ? $class : shift;
@@ -171,6 +172,7 @@ sub Rfc3501_date {
 sub Rfc2060_datetime($;$) {
     $_[0] =~ /^\d+$/ ? Rfc3501_datetime(@_) : shift->Rfc3501_datetime(@_);
 }
+
 sub Rfc3501_datetime($;$) {
     my $class = shift;
     my $stamp = $class =~ /^\d+$/ ? $class : shift;
@@ -477,6 +479,12 @@ sub _list_or_lsub {
 sub list { shift->_list_or_lsub( "LIST", @_ ) }
 sub lsub { shift->_list_or_lsub( "LSUB", @_ ) }
 
+sub xlist {
+    my ($self) = @_;
+    return undef unless $self->has_capability("XLIST");
+    shift->_list_or_lsub( "XLIST", @_ );
+}
+
 sub _folders_or_subscribed {
     my ( $self, $method, $what ) = @_;
     my @folders;
@@ -529,6 +537,25 @@ sub folders {
     my @folders = $self->_folders_or_subscribed( "list", $what );
     $self->{Folders} = \@folders unless $what;
     return wantarray ? @folders : \@folders;
+}
+
+sub xlist_folders {
+    my ($self) = @_;
+    my $xlist = $self->xlist;
+    return undef unless defined $xlist;
+
+    my %xlist;
+    my $xlist_re = qr/\A\\(Inbox|AllMail|Trash|Drafts|Sent|Spam|Starred)\Z/;
+
+    for my $resp (@$xlist) {
+        my $rec = $self->_list_or_lsub_response_parse($resp);
+        next unless defined $rec->{name};
+        for my $attr ( @{ $rec->{attrs} } ) {
+            $xlist{$1} = $rec->{name} if ( $attr =~ $xlist_re );
+        }
+    }
+
+    return wantarray ? %xlist : \%xlist;
 }
 
 sub subscribed {
@@ -1337,7 +1364,7 @@ sub _get_response {
     if ($code) {
         $code = uc($code) unless ( $good and $code eq $good );
 
-        # on a successful LOGOUT $code is OK not BYE
+        # on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
         if ( $code eq 'BYE' ) {
             $self->State(Unconnected);
             $self->LastError($byemsg) if $byemsg;
@@ -1771,7 +1798,7 @@ sub _disconnect {
     $self;
 }
 
-# LIST or LSUB Response
+# LIST/XLIST/LSUB Response
 #   Contents: name attributes, hierarchy delimiter, name
 #   Example: * LIST (\Noselect) "/" ~/Mail/foo
 # NOTE: in _list_response_preprocess we append literal data so we need
@@ -1784,10 +1811,10 @@ sub _list_or_lsub_response_parse {
 
     $resp =~ s/\015?\012$//;
     if (
-        $resp =~ / ^\* \s+ (?:LIST|LSUB) \s+   # * LIST or LSUB
-                 \( ([^\)]*) \)          \s+   # (attrs)
-           (?:   \" ([^"]*)  \" | NIL  ) \s    # "delimiter" or NIL
-           (?:\s*\" (.*)     \" | (.*) )       # "name" or name
+        $resp =~ / ^\* \s+ (?:LIST|XLIST|LSUB) \s+ # * LIST|XLIST|LSUB
+                 \( ([^\)]*) \)                \s+ # (attrs)
+           (?:   \" ([^"]*)  \" | NIL  )       \s  # "delimiter" or NIL
+           (?:\s*\" (.*)     \" | (.*) )           # "name" or name
          /ix
       )
     {
@@ -2015,55 +2042,84 @@ sub fetch_hash {
         s/([\( ])FAST([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE$2/i;
 s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
+    my %words = map { uc($_) => 1 } @words;
 
     my $output = $self->fetch( $msgs, "($what)" ) or return undef;
 
-    for ( my $x = 0 ; $x <= $#$output ; $x++ ) {
-        my $entry = {};
-        my $l     = $output->[$x];
+    while ( my $l = shift @$output ) {
+        next if $l !~ m/^\*\s(\d+)\sFETCH\s\(/g;
+        my ( $mid, $entry ) = ( $1, {} );
+        my ( $key, $value );
+      ATTR:
+        while ( $l !~ m/\G\s*\)\s*$/gc ) {
+            if ( $l =~ m/\G\s*([\w\d\.]+(?:\[[^\]]*\])?)\s*/gc ) {
+                $key = uc($1);
+            }
+            elsif ( !defined $key ) {
+
+                # some kind of malformed response
+                $self->LastError("Invalid item name in FETCH response: $l");
+                return undef;
+            }
+
+            if ( $l =~ m/\G\s*$/gc ) {
+                $value         = shift @$output;
+                $entry->{$key} = $value;
+                $l             = shift @$output;
+                next ATTR;
+            }
+            elsif ( $l =~ m/\G(?:"([^"]+)"|([^()\s]+))\s*/gc ) {
+                $value = defined $1 ? $1 : $2;
+                $entry->{$key} = $value;
+                next ATTR;
+            }
+            elsif ( $l =~ m/\G\(/gc ) {
+                my $depth = 1;
+                $value = "";
+                while ( $l =~ m/\G(\(|\)|[^()]+)/gc ) {
+                    my $stuff = $1;
+                    if ( $stuff eq "(" ) {
+                        $depth++;
+                        $value .= "(";
+                    }
+                    elsif ( $stuff eq ")" ) {
+                        $depth--;
+                        if ( $depth == 0 ) {
+                            $entry->{$key} = $value;
+                            next ATTR;
+                        }
+                        $value .= ")";
+                    }
+                    else {
+                        $value .= $stuff;
+                    }
+                }
+                m/\G\s*/gc;
+            }
+            else {
+                $self->LastError("Invalid item value in FETCH response: $l");
+                return undef;
+            }
+        }
 
         if ( $self->Uid ) {
-            my $uid = $l =~ /\bUID\s+(\d+)/i ? $1 : undef;
-            $uid or next;
-
-            if ( $uids->{$uid} ) { $entry = $uids->{$uid} }
-            else                 { $uids->{$uid} ||= $entry }
+            $uids->{ $entry->{UID} } = $entry;
         }
         else {
-            my $mid = $l =~ /^\* (\d+) FETCH/i ? $1 : undef;
-            $mid or next;
-
-            if ( $uids->{$mid} ) { $entry = $uids->{$mid} }
-            else                 { $uids->{$mid} ||= $entry }
+            $uids->{$mid} = $entry;
         }
 
-        foreach my $w (@words) {
-            if ( $l =~ /\Q$w\E\s*$/i ) {
-                $entry->{$w} = $output->[ $x + 1 ];
-                $entry->{$w} =~ s/(?:$CR?$LF)+$//og;
-                chomp $entry->{$w};
+        for my $word ( keys %$entry ) {
+            next if exists $words{$word};
+
+            if ( my ($stuff) = $word =~ m/^BODY(\[.*)$/ ) {
+                next if exists $words{ "BODY.PEEK" . $stuff };
             }
-            elsif (
-                $l =~ /\(  # open paren followed by ...
-                (?:.*\s)?  # ...optional stuff and a space
-                \Q$w\E\s   # escaped fetch field<sp>
-                (?:"       # then: a dbl-quote
-                  (\\.|    # then bslashed anychar(s) or ...
-                   [^"]+)  # ... nonquote char(s)
-                "|         # then closing quote; or ...
-                \(         # ...an open paren
-                  ([^\)]*) # ... non-close-paren char(s)
-                \)|        # then closing paren; or ...
-                (\S+))     # unquoted string
-                (?:\s.*)?  # possibly followed by space-stuff
-                \)         # close paren
-               /xi
-              )
-            {
-                $entry->{$w} = defined $1 ? $1 : defined $2 ? $2 : $3;
-            }
+
+            delete $entry->{$word};
         }
     }
+
     return wantarray ? %$uids : $uids;
 }
 
@@ -2111,16 +2167,20 @@ sub close {
 sub expunge {
     my ( $self, $folder ) = @_;
 
-    my $old = $self->Folder || '';
-    if ( defined $folder && $folder eq $old ) {
+    return undef unless ( defined $folder or defined $self->Folder );
+
+    my $old = defined $self->Folder ? $self->Folder : '';
+
+    if ( !defined($folder) || $folder eq $old ) {
         $self->_imap_command('EXPUNGE')
           or return undef;
     }
     else {
         $self->select($folder) or return undef;
         my $succ = $self->_imap_command('EXPUNGE');
-        $self->select($old) or return undef;    # BUG? this should be fatal?
-        $succ or return undef;
+
+        # if $old eq '' IMAP4 select should close $folder without EXPUNGE
+        return undef unless ( $self->select($old) and $succ );
     }
 
     return wantarray ? $self->History : $self->Results;
@@ -2128,6 +2188,8 @@ sub expunge {
 
 sub uidexpunge {
     my ( $self, $msgspec ) = ( shift, shift );
+
+    return undef unless $self->has_capability("UIDPLUS");
 
     my $msg =
       UNIVERSAL::isa( $msgspec, 'Mail::IMAPClient::MessageSet' )
