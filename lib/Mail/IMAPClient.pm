@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.21';
+our $VERSION = '3.22';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -66,7 +66,7 @@ BEGIN {
         Maxcommandlength Maxtemperrors Password Peek Port
         Prewritemethod Proxy Ranges Readmethod Reconnectretry
         Server Showcredentials State Supportedflags Timeout Uid
-        User Ssl)
+        User Ssl Starttls)
       )
     {
         no strict 'refs';
@@ -101,7 +101,7 @@ sub LastError {
 sub Fast_io(;$) {
     my ( $self, $use ) = @_;
     defined $use
-      or return $self->{File_io};
+      or return $self->{Fast_io};
 
     my $socket = $self->{Socket}
       or return undef;
@@ -239,7 +239,7 @@ sub new {
         Clear            => 5,
         Keepalive        => 0,
         Maxcommandlength => 1000,
-        Maxtemperrors    => 'unlimited',
+        Maxtemperrors    => undef,
         State            => Unconnected,
         Authmechanism    => 'LOGIN',
         Port             => 143,
@@ -366,7 +366,59 @@ sub Socket($) {
         return $self;
     }
 
+    if ( $self->Starttls ) {
+        $self->starttls or return undef;
+    }
+
     $self->User && $self->Password ? $self->login : $self;
+}
+
+# RFC2595 section 3.1
+sub starttls {
+    my ($self) = @_;
+
+    # BUG? RFC requirement checks commented out for now...
+    #if ( $self->IsUnconnected or $self->IsAuthenticated ) {
+    #    $self->LastError("NO must be connected but not authenticated");
+    #    return undef;
+    #}
+
+    # BUG? strict check on capability commented out for now...
+    #return undef unless $self->has_capability("STARTTLS");
+
+    $self->_imap_command("STARTTLS") or return undef;
+
+    # MUST discard cached capability info; should re-issue capability command
+    delete $self->{CAPABILITY};
+
+    my $ioclass = "IO::Socket::SSL";
+    eval "require $ioclass";
+    if ($@) {
+        $self->LastError("Unable to load '$ioclass' for starttls: $@");
+        return undef;
+    }
+
+    my $sock     = $self->RawSocket;
+    my $blocking = $sock->blocking;
+
+    # BUG: force blocking for now
+    $sock->blocking(1);
+
+    # give caller control of args to start_SSL if desired
+    my @sslargs =
+        ( $self->Starttls and ref( $self->Starttls ) eq "ARRAY" )
+      ? ( @${ $self->Starttls } )
+      : ( Timeout => 30 );
+
+    unless ( $ioclass->start_SSL( $sock, @sslargs ) ) {
+        $self->LastError( "Unable to start TLS: " . $ioclass->errstr );
+        return undef;
+    }
+
+    # return blocking to previous setting
+    $sock->blocking($blocking);
+
+    return $self;
 }
 
 sub login {
@@ -978,8 +1030,8 @@ sub migrate {
             my $temperrs   = 0;
             my $waittime   = .02;
             my $maxwrite   = 0;
-            my $maxagain   = $self->Maxtemperrors || 10;
-            undef $maxagain if $maxagain eq 'unlimited';
+            my $maxagain   = $self->Maxtemperrors;
+            undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
             my @previous_writes;
 
             while ( $wroteSoFar < $chunk ) {
@@ -1452,8 +1504,8 @@ sub _send_bytes($) {
     my $waittime = .02;
     my @previous_writes;
 
-    my $maxagain = $self->Maxtemperrors || 10;
-    undef $maxagain if $maxagain eq 'unlimited';
+    my $maxagain = $self->Maxtemperrors;
+    undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
 
     local $SIG{PIPE} = 'IGNORE';    # handle SIGPIPE as normal error
 
@@ -1521,6 +1573,10 @@ sub _read_line {
     my $timeout = $self->Timeout;
     my $readlen = $self->{Buffer} || 4096;
 
+    my $temperrs = 0;
+    my $maxagain = $self->Maxtemperrors;
+    undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
+
     until (
         @$oBuffer    # there's stuff in output buffer:
           && $oBuffer->[-1][TYPE] eq 'OUTPUT'    # that thing is an output line:
@@ -1554,9 +1610,25 @@ sub _read_line {
         my $emsg;
         my $ret =
           $self->_sysread( $socket, \$iBuffer, $readlen, length $iBuffer );
-        if ( $timeout && !defined $ret ) {
-            $emsg = "error while reading data from server: $!";
-            $self->State(Unconnected) if ( $! == ECONNRESET );
+
+        if ($timeout) {
+            if ( defined $ret ) {
+                $temperrs = 0;
+            }
+            else {
+                $emsg = "error while reading data from server: $!";
+                if ( $! == ECONNRESET ) {
+                    $self->State(Unconnected);
+                }
+                elsif ( $! == EAGAIN ) {
+                    if ( defined $maxagain && $temperrs++ >= $maxagain ) {
+                        $emsg .= " ($temperrs)";
+                    }
+                    else {
+                        next;    # try again
+                    }
+                }
+            }
         }
 
         if ( defined $ret && $ret == 0 ) {    # Caught EOF...
@@ -1609,6 +1681,10 @@ sub _read_line {
                 $litstring = $iBuffer;
                 $iBuffer   = '';
 
+                my $temperrs = 0;
+                my $maxagain = $self->Maxtemperrors;
+                undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
+
                 while ( $expected_size > length $litstring ) {
                     if ($timeout) {
                         my $rc = _read_more( $socket, $timeout );
@@ -1639,9 +1715,27 @@ sub _read_line {
                         length $litstring
                     );
 
-                    if ( $timeout && !defined $ret ) {
-                        $emsg = "error while reading data from server: $!";
-                        $self->State(Unconnected) if ( $! == ECONNRESET );
+                    if ($timeout) {
+                        if ( defined $ret ) {
+                            $temperrs = 0;
+                        }
+                        else {
+                            $emsg = "error while reading data from server: $!";
+                            if ( $! == ECONNRESET ) {
+                                $self->State(Unconnected);
+                            }
+                            elsif ( $! == EAGAIN ) {
+                                if ( defined $maxagain
+                                    && $temperrs++ >= $maxagain )
+                                {
+                                    $emsg .= " ($temperrs)";
+                                }
+                                else {
+                                    undef $emsg;
+                                    next;    # try again
+                                }
+                            }
+                        }
                     }
 
                     # EOF: note IO::Socket::SSL does not support eof()
@@ -1789,6 +1883,7 @@ sub logout {
 sub _disconnect {
     my $self = shift;
 
+    delete $self->{CAPABILITY};
     delete $self->{Folders};
     delete $self->{_IMAP4REV1};
     $self->State(Unconnected);
@@ -2305,6 +2400,7 @@ sub parse_headers {
       . ( $fields eq 'ALL' ? '[HEADER]' : "[HEADER.FIELDS ($fields)]" );
 
     my $raw = $self->fetch($string) or return undef;
+    my $cmd = shift @$raw;
 
     my %headers;    # message ids to headers
     my $h;          # fields for current msgid
@@ -2312,6 +2408,7 @@ sub parse_headers {
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
     my $msgid;
 
+    # BUG: parsing this way is prone to be buggy but works most of the time
     # some example responses:
     # * OK Message 1 no longer exists
     # * 1 FETCH (UID 26535 BODY[HEADER] "")
@@ -2319,7 +2416,7 @@ sub parse_headers {
     # header: value...
     foreach my $header ( map { split /$CR?$LF/o } @$raw ) {
 
-        # little problem: Windows2003 has UID as body, not in header
+        # Windows2003/Maillennium/others? have UID after headers
         if (
             $header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
                         \( (.*?) BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix
@@ -2331,7 +2428,6 @@ sub parse_headers {
             {
                 $msgid = $msgattrs =~ m/\b UID \s+ (\d+)/x ? $1 : undef;
             }
-
             $headers{$msgid} = $h if $msgid;
         }
         $header =~ /\S/ or next;    # skip empty lines.
@@ -2341,8 +2437,9 @@ sub parse_headers {
             undef $h;                # inbetween headers
             next;
         }
-        elsif ( !$msgid && $header =~ /^\s*UID\s+(\d+)\s*\)/ ) {
-            $headers{$1} = $h;       # finally found msgid, win2003
+        elsif ( !$msgid && $header =~ /^\s*UID\s+(\d+).*\)$/ ) {
+            $headers{$1} = $h;       # found UID win2003/Maillennium
+
             undef $h;
             next;
         }
