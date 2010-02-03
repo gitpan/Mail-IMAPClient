@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.22';
+our $VERSION = '3.23';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -43,6 +43,28 @@ my %SEARCH_KEYS = map { ( $_ => 1 ) } qw(
   SEEN SENTBEFORE SENTON SENTSINCE SINCE SMALLER SUBJECT
   TEXT TO UID UNANSWERED UNDELETED UNDRAFT UNFLAGGED
   UNKEYWORD UNSEEN);
+
+# modules require(d) during runtime when applicable
+my %Load_Module = (
+    "SSL"           => "IO::Socket::SSL",
+    "BodyStructure" => "Mail::IMAPClient::BodyStructure",
+    "Envelope"      => "Mail::IMAPClient::BodyStructure::Envelope",
+    "Thread"        => "Mail::IMAPClient::Thread",
+);
+
+sub _load_module {
+    my $self   = shift;
+    my $modkey = shift;
+    my $module = $Load_Module{$modkey} || $modkey;
+
+    local ($@);    # avoid stomping on global $@
+    eval "require $module";
+    if ($@) {
+        $self->LastError("Unable to load '$module': $@");
+        return undef;
+    }
+    return $module;
+}
 
 sub _debug {
     my $self = shift;
@@ -106,10 +128,10 @@ sub Fast_io(;$) {
     my $socket = $self->{Socket}
       or return undef;
 
+    local ($@);    # avoid stomping on global $@
     unless ($use) {
         eval { fcntl( $socket, F_SETFL, delete $self->{_fcntl} ) }
           if exists $self->{_fcntl};
-        $@ = '';
         $self->{Fast_io} = 0;
         return undef;
     }
@@ -119,7 +141,6 @@ sub Fast_io(;$) {
         $self->{Fast_io} = 0;
         $self->_debug("not using Fast_IO; not available on this platform")
           unless $self->{_fastio_warning_}++;
-        $@ = '';
         return undef;
     }
 
@@ -302,12 +323,7 @@ sub connect(@) {
     else {
         my $ioclass = "IO::Socket::INET";
         if ( $self->Ssl ) {
-            $ioclass = "IO::Socket::SSL";
-            eval "require $ioclass";
-            if ($@) {
-                $self->LastError("Unable to load '$ioclass' for Ssl: $@");
-                return undef;
-            }
+            $ioclass = $self->_load_module("SSL") or return undef;
         }
 
         $self->_debug("Connecting via $ioclass to $server:$port @timeout");
@@ -391,13 +407,7 @@ sub starttls {
     # MUST discard cached capability info; should re-issue capability command
     delete $self->{CAPABILITY};
 
-    my $ioclass = "IO::Socket::SSL";
-    eval "require $ioclass";
-    if ($@) {
-        $self->LastError("Unable to load '$ioclass' for starttls: $@");
-        return undef;
-    }
-
+    my $ioclass  = $self->_load_module("SSL") or return undef;
     my $sock     = $self->RawSocket;
     my $blocking = $sock->blocking;
 
@@ -1215,6 +1225,40 @@ sub idle {
     $self->_imap_command( "IDLE", $good ) ? $count : undef;
 }
 
+sub idle_data {
+    my $self    = shift;
+    my $timeout = defined( $_[0] ) ? shift : 0.025;
+    my $socket  = $self->Socket;
+
+    # current index in Results array
+    my $trans_c1 = $self->_next_index;
+
+    # look for all untagged responses
+    my $rc;
+    while (
+        (
+            $rc =
+            $self->_read_more( { error_on_timeout => 0 }, $socket, $timeout )
+        ) > 0
+      )
+    {
+        $self->_get_response( '*', qr/\S+/ ) or return undef;
+    }
+
+    # select returns -1 on errors
+    return undef if $rc < 0;
+
+    my $trans_c2 = $self->_next_index;
+
+    # if current index in Results array has changed return data
+    my @res;
+    if ( $trans_c1 < $trans_c2 ) {
+        @res = $self->Results;
+        @res = @res[ $trans_c1 .. ( $trans_c2 - 1 ) ];
+    }
+    return wantarray ? @res : \@res;
+}
+
 sub done {
     my $self = shift;
     my $count = shift || $self->Count;
@@ -1268,7 +1312,7 @@ sub _imap_command {
               unless (
                    $! == EPIPE
                 or $! == ECONNRESET
-                or $self->LastError =~ /(?:timeout|error) waiting\b/
+                or $self->LastError =~ /(?:error\(.*?\)|timeout) waiting\b/
                 or $self->LastError =~ /(?:socket closed|\* BYE)\b/
 
                 # BUG? reconnect if caller ignored/missed earlier errors?
@@ -1314,7 +1358,7 @@ sub _imap_command {
 # options:
 #   addcrlf => 0|1  - suppress adding CRLF to $string
 #   addtag  => 0|1  - suppress adding $tag to $string
-#   tag     => $tag - use this $tag instead of incrementing count
+#   tag     => $tag - use this $tag instead of incrementing $self->Count
 sub _imap_command_do {
     my $self   = shift;
     my $opt    = ref( $_[0] ) eq "HASH" ? shift : {};
@@ -1414,6 +1458,7 @@ sub _get_response {
     }
 
     if ($code) {
+        $code =~ s/$CR?$LF?$//o;
         $code = uc($code) unless ( $good and $code eq $good );
 
         # on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
@@ -1588,23 +1633,8 @@ sub _read_line {
         my $transno = $self->Transaction;
 
         if ($timeout) {
-            my $rc = _read_more( $socket, $timeout );
-            unless ( $rc > 0 ) {
-                my $msg =
-                    ( $rc ? "error" : "timeout" )
-                  . " waiting ${timeout}s for data from server"
-                  . ( $! ? ": $!" : "" );
-                $self->LastError($msg);
-                $self->_record(
-                    $transno,
-                    [
-                        $self->_next_index($transno), "ERROR",
-                        "$transno * NO $msg"
-                    ]
-                );
-                $self->_disconnect;    # BUG: can not handle timeouts gracefully
-                return undef;
-            }
+            my $rc = $self->_read_more( $socket, $timeout );
+            return undef unless ( $rc > 0 );
         }
 
         my $emsg;
@@ -1687,25 +1717,10 @@ sub _read_line {
 
                 while ( $expected_size > length $litstring ) {
                     if ($timeout) {
-                        my $rc = _read_more( $socket, $timeout );
-                        unless ( $rc > 0 ) {
-                            my $msg =
-                                ( $rc ? "error" : "timeout" )
-                              . " waiting ${timeout}s for literal data from server"
-                              . ( $! ? ": $!" : "" );
-                            $self->LastError($msg);
-                            $self->_record(
-                                $transno,
-                                [
-                                    $self->_next_index($transno), "ERROR",
-                                    "$transno * NO $msg"
-                                ]
-                            );
-                            $self->_disconnect;   # BUG: can not handle timeouts
-                            return undef;
-                        }
+                        my $rc = $self->_read_more( $socket, $timeout );
+                        return undef unless ( $rc > 0 );
                     }
-                    else {                        # 25 ms before retry
+                    else {    # 25 ms before retry
                         CORE::select( undef, undef, undef, 0.025 );
                     }
 
@@ -1797,7 +1812,9 @@ sub _sysread($$$$) {
     $rm ? $rm->(@_) : sysread( $fh, $$buf, $len, $off );
 }
 
-sub _read_more($$) {
+sub _read_more {
+    my $self = shift;
+    my $opt = ref( $_[0] ) eq "HASH" ? shift : {};
     my ( $socket, $timeout ) = @_;
 
     # IO::Socket::SSL buffers some data internally, so there might be some
@@ -1807,7 +1824,30 @@ sub _read_more($$) {
 
     my $rvec = '';
     vec( $rvec, fileno($socket), 1 ) = 1;
-    return CORE::select( $rvec, undef, $rvec, $timeout );
+
+    my $rc = CORE::select( $rvec, undef, $rvec, $timeout );
+
+    # fast track success
+    return $rc if $rc > 0;
+
+    # by default set an error on timeout
+    my $err_on_timeout =
+      exists $opt->{error_on_timeout} ? $opt->{error_on_timeout} : 1;
+
+    # $rc is 0 then we timed out
+    return $rc if !$rc and !$err_on_timeout;
+
+    # set the appropriate error and return
+    my $transno = $self->Transaction;
+    my $msg =
+        ( $rc ? "error($rc)" : "timeout" )
+      . " waiting ${timeout}s for data from server"
+      . ( $! ? ": $!" : "" );
+    $self->LastError($msg);
+    $self->_record( $transno,
+        [ $self->_next_index($transno), "ERROR", "$transno * NO $msg" ] );
+    $self->_disconnect;    # BUG: can not handle timeouts gracefully
+    return $rc;
 }
 
 sub _trans_index() {
@@ -1876,8 +1916,9 @@ sub Unescape {
 
 sub logout {
     my $self = shift;
-    $self->_imap_command("LOGOUT");
+    my $rc   = $self->_imap_command("LOGOUT");
     $self->_disconnect;
+    return $rc;
 }
 
 sub _disconnect {
@@ -1888,6 +1929,7 @@ sub _disconnect {
     delete $self->{_IMAP4REV1};
     $self->State(Unconnected);
     if ( my $sock = delete $self->{Socket} ) {
+        local ($@);    # avoid stomping on global $@
         eval { $sock->close };
     }
     $self;
@@ -1946,17 +1988,15 @@ sub exists {
 # Updated to handle embedded literal strings
 sub get_bodystructure {
     my ( $self, $msg ) = @_;
-    unless ( eval { require Mail::IMAPClient::BodyStructure; } ) {
-        $self->LastError("Unable to use get_bodystructure: $@");
-        return undef;
-    }
+
+    my $class = $self->_load_module("BodyStructure") or return undef;
 
     my $out = $self->fetch( $msg, "BODYSTRUCTURE" ) or return undef;
 
     my $bs = "";
     my $output = first { /BODYSTRUCTURE\s+\(/i } @$out;    # Wee! ;-)
     if ( $output =~ /$CRLF$/o ) {
-        $bs = eval { Mail::IMAPClient::BodyStructure->new($output) };
+        $bs = eval { $class->new($output) };    # BUG? localize $@ here?
     }
     else {
         $self->_debug("get_bodystructure: reassembling original response");
@@ -1965,7 +2005,7 @@ sub get_bodystructure {
         foreach my $o ( $self->_transaction ) {
             next unless $self->_is_output_or_literal($o);
             $started++ if $o->[DATA] =~ /BODYSTRUCTURE \(/i;
-            ;    # Hi, vi! ;-)
+            ;                                   # Hi, vi! ;-)
             $started or next;
 
             if ( length $output && $self->_is_literal($o) ) {
@@ -1979,7 +2019,7 @@ sub get_bodystructure {
 
             $self->_debug("get_bodystructure: reassembled output=$output<END>");
         }
-        eval { $bs = Mail::IMAPClient::BodyStructure->new($output) };
+        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
 
     $self->_debug(
@@ -1990,10 +2030,10 @@ sub get_bodystructure {
 # Updated to handle embedded literal strings
 sub get_envelope {
     my ( $self, $msg ) = @_;
-    unless ( eval { require Mail::IMAPClient::BodyStructure; } ) {
-        $self->LastError("Unable to use get_envelope: $@");
-        return undef;
-    }
+
+    # Envelope class is defined within BodyStructure
+    my $class = $self->_load_module("BodyStructure") or return undef;
+    $class .= "::Envelope";
 
     my $out = $self->fetch( $msg, 'ENVELOPE' ) or return undef;
 
@@ -2006,7 +2046,7 @@ sub get_envelope {
     }
 
     if ( $output =~ /$CRLF$/o ) {
-        eval { $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output) };
+        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
     else {
         $self->_debug("get_envelope: reassembling original response");
@@ -2032,7 +2072,7 @@ sub get_envelope {
             $self->_debug("get_envelope: reassembled output=$output<END>");
         }
 
-        eval { $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output) };
+        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
 
     $self->_debug( "get_envelope: msg $msg returns ref: " . $bs || "UNDEF" );
@@ -2653,13 +2693,12 @@ sub thread {
     unless ($thread_parser) {
         return if $thread_parser == 0;
 
-        eval { require Mail::IMAPClient::Thread; };
-        if ($@) {
-            $self->LastError($@);
+        my $class = $self->_load_module("Thread");
+        unless ($class) {
             $thread_parser = 0;
             return undef;
         }
-        $thread_parser = Mail::IMAPClient::Thread->new;
+        $thread_parser = $class->new;
     }
 
     my $thread;
@@ -3028,6 +3067,7 @@ sub authenticate {
         }
     }
 
+    # BUG? use _load_module for these too?
     if ( $scheme eq 'CRAM-MD5' ) {
         $response ||= sub {
             my ( $code, $client ) = @_;
@@ -3082,14 +3122,19 @@ sub authenticate {
             my ( $code, $client ) = @_;
 
             require Authen::NTLM;
-            Authen::NTLM::ntlm_user( $self->User );
-            Authen::NTLM::ntlm_password( $self->Password );
-            Authen::NTLM::ntlm_domain( $self->Domain ) if $self->Domain;
-            Authen::NTLM::ntlm();
+            Authen::NTLM::ntlm_user( $client->User );
+            Authen::NTLM::ntlm_password( $client->Password );
+            Authen::NTLM::ntlm_domain( $client->Domain ) if $client->Domain;
+            Authen::NTLM::ntlm($code);
         };
     }
 
-    unless ( $self->_send_line( $response->( $code, $self ) ) ) {
+    my $resp = $response->( $code, $self );
+    unless ( defined($resp) ) {
+        $self->LastError( "Error getting $scheme data: " . $self->LastError );
+        return undef;
+    }
+    unless ( $self->_send_line($resp) ) {
         $self->LastError( "Error sending $scheme data: " . $self->LastError );
         return undef;
     }
