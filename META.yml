@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Mail-IMAPClient
-version:            3.25
+version:            3.26
 abstract:           IMAP4 client library
 author:
     - Phil Pearl (Lobbes) <phil@zimbra.com>
@@ -22,6 +22,7 @@ requires:
     List::Util:         0
     MIME::Base64:       0
     Parse::RecDescent:  1.94
+    perl:               5.008
     Test::More:         0
 no_index:
     directory:

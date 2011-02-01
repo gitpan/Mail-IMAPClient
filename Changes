@@ -5,6 +5,61 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
+version 3.26: Mon Jan 31 22:15:04 EST 2011
+	- *require Perl 5.8.1 as constant use is invalid on 5.6
+	- rt.cpan.org#63524: fetch_hash() parse errors
+	  [Brian Kroth]
+	  + fixed handling of LITERAL values in response
+	  + fixed handling of field names with a dash (e.g. X-SAVEDATE)
+	  + fetch_hash now uses Escaped_results() method
+	- *fixed Escaped_results() to properly join LITERAL data with
+	  the data that comes before and after it
+	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
+	  [Jason Long]
+	  $date should now be 1 (to use the file mtime) or a valid RFC3501 date
+	- *rt.cpan.org#61292: memory consumption with message_string()/append()
+	   rt.cpan.org#61806: Major problem with one function in IMAPClient
+	  [Gilles Lamiral, Casey Duquette]
+	  + use @_ / $_[<num>] in critical places to avoid pass by
+	    value memory overhead
+	  + use in memory files in a few critical places as that code
+	    path in Mail::IMAPClient is significantly more efficient
+	    with internal memory usage
+	  + *new (undocumented/do-not-use-without-good-reason)
+	    attribute Maxappendstringlength used by append() and
+	    append_string() holds the size (in bytes, default 1 MiB)
+	    that triggers when message SCALAR(s) passed to these
+	    methods will be treated as an in memory file.  This
+	    attribute will likely be removed in a future version.
+	  + *append() and append_string() now call append_file() and
+	    use an im memory file when length($message) is greater
+	    than Maxappendstringlength; other minor code cleanup
+	  + *message_string() now calls message_to_file() and uses an
+	    in memory file
+	  + refactor message_to_file() to use internal _imap_uid_command()
+	  + update _read_line() to be more efficient w/CPU in critical
+	    section by pulling isa() checks out of main loop also
+	    conserve memory by not storing an extra copy of LITERAL
+	    data if the data was put into a filehandle from the caller
+	  + Memory/working set (KB) comparison (Perl 5.10 cygwin Win7):
+	    - test: message_string on 6.1M msg and then append 6.1M msg
+	      version | start | after message_string | after append
+	      --------+-------+----------------------+-------------
+	        2.2.9 |  7624 |                74404 |       131896
+	         3.25 |  7716 |                74408 |       156532
+	         3.26 |  7684 |                33372 |        42608
+	- minor arg cleanup of noop() and tag_and_run()
+	- rt.cpan.org#63444: relax get_envelope(), allow empty reply-to
+	  [Nikolay Kravchenko]
+	- rt.cpan.org#61068: append_string can invalidate a good $date
+	- rt.cpan.org#60045: Logout error if delay between BYE and tagged OK
+	  [Armin Wolfermann]
+	  no longer set an error when this happens
+	- rt.cpan.org#61062: migrate() errors
+	  [Johan Ekenberg]
+	  + rewrote migrate() to be functional and simple
+	- Update README and cleanup several old or out of date files
+
 version 3.25: Fri May 28 00:07:40 EDT 2010
 	- fix body_string parsing bug and added tests in t/body_string.t
 	  [Heiko Schlittermann] 

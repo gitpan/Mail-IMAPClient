@@ -4,7 +4,7 @@
 # Note that the migrate method is considered experimental and should 
 # be used with caution. 
 # 
-#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/migrate_mbox.pl#1 $
+#$Id$
 # 
 
 use Mail::IMAPClient;

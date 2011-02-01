@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/cyrus_expunge.pl#1 $
+#$Id$
 
 use Mail::IMAPClient;
 use IO::File;

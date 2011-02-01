@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/build_ldif.pl#1 $
+#$Id$
 use Mail::IMAPClient;
 use MIME::Lite;
 use Data::Dumper;
@@ -180,7 +180,7 @@ All rights reserved.
 
 =cut
 
-# $Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/build_ldif.pl#1 $
+# $Id$
 # $Log: build_ldif.pl,v $
 # Revision 19991216.11  2003/06/12 21:38:30  dkernen
 #

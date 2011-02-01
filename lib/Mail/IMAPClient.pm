@@ -1,17 +1,18 @@
 
 # _{name} methods are undocumented and meant to be private.
 
+require 5.008_001;
+
 use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.25';
+our $VERSION = '3.26';
 
 use Mail::IMAPClient::MessageSet;
 
 use IO::Socket qw(:crlf SOL_SOCKET SO_KEEPALIVE);
 use IO::Select ();
-use IO::File   ();
 use Carp qw(carp);    #local $SIG{__WARN__} = \&Carp::cluck; #DEBUG
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
@@ -84,10 +85,10 @@ BEGIN {
     foreach my $datum (
         qw(Authcallback Authmechanism Authuser Buffer Count Debug
         Debug_fh Domain Folder Ignoresizeerrors Keepalive
-        Maxcommandlength Maxtemperrors Password Peek Port
-        Prewritemethod Proxy Ranges Readmethod Reconnectretry
-        Server Showcredentials State Supportedflags Timeout Uid
-        User Ssl Starttls)
+        Maxappendstringlength Maxcommandlength Maxtemperrors
+        Password Peek Port Prewritemethod Proxy Ranges Readmethod
+        Reconnectretry Server Showcredentials Ssl Starttls State
+        Supportedflags Timeout Uid User)
       )
     {
         no strict 'refs';
@@ -252,19 +253,20 @@ sub _remove_doubles(@) {
 sub new {
     my $class = shift;
     my $self  = {
-        LastError        => "",
-        Uid              => 1,
-        Count            => 0,
-        Fast_io          => 1,
-        Clear            => 5,
-        Keepalive        => 0,
-        Maxcommandlength => 1000,
-        Maxtemperrors    => undef,
-        State            => Unconnected,
-        Authmechanism    => 'LOGIN',
-        Port             => 143,
-        Timeout          => 600,
-        History          => {},
+        LastError             => "",
+        Uid                   => 1,
+        Count                 => 0,
+        Fast_io               => 1,
+        Clear                 => 2,
+        Keepalive             => 0,
+        Maxappendstringlength => 1024**2,
+        Maxcommandlength      => 1000,
+        Maxtemperrors         => undef,
+        State                 => Unconnected,
+        Authmechanism         => 'LOGIN',
+        Port                  => 143,
+        Timeout               => 600,
+        History               => {},
     };
     while (@_) {
         my $k = ucfirst lc shift;
@@ -457,7 +459,7 @@ sub login {
 }
 
 sub noop {
-    my ( $self, $user ) = @_;
+    my ($self) = @_;
     $self->_imap_command("NOOP") ? $self->Results : undef;
 }
 
@@ -728,10 +730,8 @@ sub message_string {
     my $peek = $self->Peek      ? '.PEEK'        : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
 
-    $self->fetch( $msg, $cmd )
-      or return undef;
-
-    my $string = $self->_transaction_literals;
+    my $string;
+    $self->message_to_file( \$string, $msg );
 
     unless ( $self->Ignoresizeerrors ) {    # Check size with expected size
         my $expected_size = $self->size($msg);
@@ -773,47 +773,40 @@ sub bodypart_string {
     $self->_transaction_literals;
 }
 
+# message_to_file( $self, $file, @msgs )
 sub message_to_file {
-    my $self = shift;
-    my $fh   = shift;
-    my $msgs = join ',', @_;
+    my ( $self, $file, @msgs ) = @_;
 
-    my $handle;
-    if ( ref $fh ) { $handle = $fh }
+    # $file can be a name or a scalar reference (for in memory file)
+    # avoid IO::File bug handling scalar refs in perl <= 5.8.8?
+    # - buggy: $fh = IO::File->new( $file, 'r' )
+    my $fh;
+    if ( ref $file and ref $file ne "SCALAR" ) {
+        $fh = $file;
+    }
     else {
-        $handle = IO::File->new(">>$fh");
-        unless ( defined($handle) ) {
-            $self->LastError("Unable to open $fh: $!");
+        open( $fh, ">>", $file );
+        unless ( defined($fh) ) {
+            $self->LastError("Unable to open file '$file': $!");
             return undef;
         }
-        binmode $handle;    # For those of you who need something like this...
     }
 
-    my $clear = $self->Clear;
-    $self->Clear($clear)
-      if $self->Count >= $clear && $clear > 0;
+    binmode($fh);
 
-    return undef unless defined $self->imap4rev1;
-    my $peek = $self->Peek      ? '.PEEK'        : '';
-    my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
-
-    my $uid    = $self->Uid ? "UID " : "";
-    my $trans  = $self->Count( $self->Count + 1 );
-    my $string = "$trans ${uid}FETCH $msgs $cmd";
-
-    $self->_record( $trans, [ 0, "INPUT", $string ] );
-
-    my $feedback = $self->_send_line($string);
-    unless ($feedback) {
-        $self->LastError( "Error sending '$string': " . $self->LastError );
+    unless (@msgs) {
+        $self->LastError("message_to_file: NO messages specified!");
         return undef;
     }
 
-    # look for "<tag> (OK|BAD|NO)"
-    my $code = $self->_get_response( { outref => $handle }, $trans )
-      or return undef;
+    my $peek = $self->Peek ? '.PEEK' : '';
+    $peek = sprintf( $self->imap4rev1 ? "BODY%s\[]" : "RFC822%s", $peek );
 
-    return $code eq 'OK' ? $self : undef;
+    my @args = ( join( ",", @msgs ), $peek );
+
+    return $self->_imap_uid_command( { outref => $fh }, "FETCH" => @args )
+      ? $self
+      : undef;
 }
 
 sub message_uid {
@@ -826,305 +819,72 @@ sub message_uid {
     return undef;
 }
 
-#???? this code is very clumsy, and currently probably broken.
-#  Why not use a pipe???
-#  Is a quadratic slowdown not much simpler and better???
-#  Shouldn't the slowdowns extend over multiple messages?
-#  --> create clean read and write methods
-
+# cleaned up and simplified but see TODO in code...
 sub migrate {
     my ( $self, $peer, $msgs, $folder ) = @_;
-    my $toSock = $peer->Socket, my $fromSock = $self->Socket;
-    my $bufferSize = $self->Buffer || 4096;
-
-    local $SIG{PIPE} = 'IGNORE';    # avoid SIGPIPE on syswrite, handle as error
 
     unless ( $peer and $peer->IsConnected ) {
-        $self->LastError( "Invalid or unconnected peer "
+        $self->LastError( ( $peer ? "Invalid" : "Unconnected" )
+            . " target "
               . ref($self)
-              . " object used as target for migrate. $@" );
+              . " object in migrate()"
+              . ( $peer ? ( ": " . $peer->LastError ) : "" ) );
         return undef;
     }
 
+    $folder = $self->Folder unless ( defined $folder );
     unless ($folder) {
-        unless ( $folder = $self->Folder ) {
-            $self->LastError("No folder selected on source mailbox.");
-            return undef;
-        }
-
-        unless ( $peer->exists($folder) || $peer->create($folder) ) {
-            $self->LastError( "Unable to create folder '$folder' on target "
-                  . "mailbox: "
-                  . $peer->LastError );
-            return undef;
-        }
+        $self->LastError("No folder selected on source mailbox.");
+        return undef;
     }
 
-    defined $msgs or $msgs = "ALL";
-    $msgs = $self->search("ALL")
-      if uc $msgs eq 'ALL';
-    return undef unless defined $msgs;
+    my $dfolder = $folder;
+    unless ( $peer->exists($dfolder) or $peer->create($dfolder) ) {
+        $self->LastError( "Create folder '$dfolder' on target host failed: "
+              . $peer->LastError );
+        return undef;
+    }
 
-    my $range = $self->Range($msgs);
-    my $clear = $self->Clear;
+    if ( !defined $msgs or uc($msgs) eq "ALL" ) {
+        $msgs = $self->search("ALL") or return undef;
+    }
 
-    $self->_debug("Migrating the following msgs from $folder: $range");
-  MSG:
+    # message size and (internal) date
+    my @headers = qw(RFC822.SIZE INTERNALDATE FLAGS);
+    my $range   = $self->Range($msgs);
+
+    $self->_debug("Messages to migrate from '$folder': $range");
+
     foreach my $mid ( $range->unfold ) {
-        $self->_debug("Migrating message $mid in folder $folder");
 
-        my $leftSoFar = my $size = $self->size($mid);
-        return undef unless defined $size;
+        # fetch size internaldate and flags of original message
+        # - TODO: add flags here...
+        my $minfo = $self->fetch_hash( $mid, @headers )
+          or return undef;
 
-        # fetch internaldate and flags of original message:
-        my $intDate = $self->internaldate($mid);
-        return undef unless defined $intDate;
+        my ( $size, $date ) = @{ $minfo->{$mid} }{@headers};
+        return undef unless ( defined $size and defined $date );
+
+        $self->_debug("Copy message $mid (sz=$size,dt=$date) from '$folder'");
 
         my @flags = grep !/\\Recent/i, $self->flags($mid);
         my $flags = join ' ', $peer->supported_flags(@flags);
 
-        # set up transaction numbers for from and to connections:
-        my $trans  = $self->Count( $self->Count + 1 );
-        my $ptrans = $peer->Count( $peer->Count + 1 );
+        # TODO: - use File::Temp tempfile if $msg > bufferSize?
+        # read message to $msg
+        my $msg;
+        $self->message_to_file( \$msg, $mid )
+          or return undef;
 
-        # If msg size is less than buffersize then do whole msg in one
-        # transaction:
-        if ( $size <= $bufferSize ) {
-            my $new_mid =
-              $peer->append_string( $folder, $self->message_string($mid),
-                $flags, $intDate );
+        my $newid = $self->append_file( $dfolder, \$msg, undef, $flags, $date );
 
-            unless ( defined $new_mid ) {
-                $self->LastError( "Unable to append to $folder "
-                      . "on target mailbox. "
-                      . $peer->LastError );
-                return undef;
-            }
-
-            $self->_debug( "Copied message $mid in folder $folder to "
-                  . $peer->User . '@'
-                  . $peer->Server
-                  . ". New message UID is $new_mid" )
-              if $self->Debug;
-
-            $peer->_debug( "Copied message $mid in folder $folder from "
-                  . $self->User . '@'
-                  . $self->Server
-                  . ". New message UID is $new_mid" )
-              if $peer->Debug;
-
-            next MSG;
-        }
-
-        # otherwise break it up into digestible pieces:
-        return undef unless defined $self->imap4rev1;
-        my ( $cmd, $extract_size );
-        if ( $self->imap4rev1 ) {
-            $cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
-            $extract_size = sub { $_[0] =~ /\(.*BODY\[\]<\d+> \{(\d+)\}/i; $1 };
-        }
-        else {
-            $cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822';
-            $extract_size = sub { $_[0] =~ /\(RFC822\[\]<\d+> \{(\d+)\}/i; $1 };
-        }
-
-        # Now let's warn the peer that there's a message coming:
-        my $pstring =
-            "$ptrans APPEND "
-          . $self->Massage($folder)
-          . ( length $flags ? " ($flags)" : '' )
-          . qq( "$intDate" {$size});
-
-        $self->_debug("About to issue APPEND command to peer for msg $mid");
-
-        $peer->_record( $ptrans, [ 0, "INPUT", $pstring ] );
-        unless ( $peer->_send_line($pstring) ) {
-            $self->LastError( "Error sending '$pstring': " . $self->LastError );
+        unless ( defined $newid ) {
+            $self->LastError(
+                "Append to '$dfolder' on target failed: " . $peer->LastError );
             return undef;
         }
 
-        # Get the "+ Go ahead" response:
-        my $code;
-        until ( defined $code ) {
-            my $readSoFar  = 0;
-            my $fromBuffer = '';
-            $readSoFar += sysread( $toSock, $fromBuffer, 1, $readSoFar ) || 0
-              until $fromBuffer =~ /$CRLF/o;
-
-            $code =
-                $fromBuffer =~ /^\+/                  ? 'OK'
-              : $fromBuffer =~ /^\d+\s+(BAD|NO|OK)\b/ ? $1
-              :                                         undef;
-
-            $peer->_debug("$folder: received $fromBuffer from server");
-
-            if ( $fromBuffer =~ /^(\*\s+BYE.*?)$CR?$LF/oi ) {
-                $self->State(Unconnected);
-                $self->LastError($1);
-                return undef;
-            }
-
-            # ... and log it in the history buffers
-            $self->_record(
-                $trans,
-                [
-                    0,
-                    "OUTPUT",
-"Mail::IMAPClient migrating message $mid to $peer->User\@$peer->Server"
-                ]
-            );
-            $peer->_record( $ptrans, [ 0, "OUTPUT", $fromBuffer ] );
-        }
-
-        if ( $code ne 'OK' ) {
-            $self->_debug("Error writing to target host: $@");
-            next MIGMSG;
-        }
-
-        # Here is where we start sticking in UID if that parameter
-        # is turned on:
-        my $string = ( $self->Uid ? "UID " : "" ) . "FETCH $mid $cmd";
-
-        # Clean up history buffer if necessary:
-        $self->Clear($clear)
-          if $self->Count >= $clear && $clear > 0;
-
-        # position will tell us how far from beginning of msg the
-        # next IMAP FETCH should start (1st time start at offset zero):
-        my $position   = 0;
-        my $chunkCount = 0;
-        my $readSoFar  = 0;
-        while ( $leftSoFar > 0 ) {
-            my $take = min $leftSoFar, $bufferSize;
-            my $newstring = "$trans $string<$position.$take>";
-
-            $self->_record( $trans, [ 0, "INPUT", $newstring ] );
-            $self->_debug("Issuing migration command: $newstring");
-
-            unless ( $self->_send_line($newstring) ) {
-                $self->LastError( "Error sending '$newstring' to source IMAP: "
-                      . $self->LastError );
-                return undef;
-            }
-
-            my $chunk;
-            my $fromBuffer = "";
-            until ( $chunk = $extract_size->($fromBuffer) ) {
-                $fromBuffer = '';
-                sysread( $fromSock, $fromBuffer, 1, length $fromBuffer )
-                  until $fromBuffer =~ /$CRLF$/o;
-
-                $self->_record( $trans, [ 0, "OUTPUT", $fromBuffer ] );
-
-                if ( $fromBuffer =~ /^$trans\s+(?:NO|BAD)/ ) {
-                    $self->LastError($fromBuffer);
-                    next MIGMSG;
-                }
-                elsif ( $fromBuffer =~ /^$trans\s+OK/ ) {
-                    $self->LastError( "Unexpected good return code "
-                          . "from source host: $fromBuffer" );
-                    next MIGMSG;
-                }
-            }
-
-            $fromBuffer = "";
-            while ( $readSoFar < $chunk ) {
-                $readSoFar +=
-                  sysread( $fromSock, $fromBuffer, $chunk - $readSoFar,
-                    $readSoFar )
-                  || 0;
-            }
-
-            my $wroteSoFar = 0;
-            my $temperrs   = 0;
-            my $waittime   = .02;
-            my $maxwrite   = 0;
-            my $maxagain   = $self->Maxtemperrors;
-            undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
-            my @previous_writes;
-
-            while ( $wroteSoFar < $chunk ) {
-                while ( $wroteSoFar < $readSoFar ) {
-                    my $ret =
-                      syswrite( $toSock, $fromBuffer, $chunk - $wroteSoFar,
-                        $wroteSoFar );
-
-                    if ( defined $ret ) {
-                        $wroteSoFar += $ret;
-                        $maxwrite = max $maxwrite, $ret;
-                        $temperrs = 0;
-                    }
-
-                    if ( $! == EPIPE or $! == ECONNRESET ) {
-                        $self->State(Unconnected);
-                        $self->LastError("Write failed '$!'");
-                        return undef;
-                    }
-
-                    if ( $! == EAGAIN || $ret == 0 ) {
-                        if ( defined $maxagain && $temperrs++ > $maxagain ) {
-                            $self->LastError("Persistent error '$!'");
-                            return undef;
-                        }
-
-                        $waittime = $self->_optimal_sleep( $maxwrite, $waittime,
-                            \@previous_writes );
-                        next;
-                    }
-
-                    $self->State(Unconnected)
-                      if ( $! == EPIPE or $! == ECONNRESET );
-                    $self->LastError("Write failed '$!'");
-                    return;    # no luck
-                }
-
-                $peer->_debug(
-                    "Chunk $chunkCount: wrote $wroteSoFar (of $chunk)");
-            }
-        }
-
-        $position += $readSoFar;
-        $leftSoFar -= $readSoFar;
-        my $fromBuffer = "";
-
-        # Finish up reading the server fetch response from the source system:
-        # look for "<trans> (OK|BAD|NO)"
-        $self->_debug("Reading from source: expecting 'OK' response");
-        $code = $self->_get_response($trans) or return undef;
-        return undef unless $code eq 'OK';
-
-        # Now let's send a CRLF to the peer to signal end of APPEND cmd:
-        unless ( $peer->_send_bytes( \$CRLF ) ) {
-            $self->LastError( "Error appending CRLF: " . $self->LastError );
-            return undef;
-        }
-
-        # Finally, let's get the new message's UID from the peer:
-        # look for "<tag> (OK|BAD|NO)"
-        $peer->_debug("Reading from target: expect new uid in response");
-        $code = $peer->_get_response($ptrans) or return undef;
-
-        my $new_mid = "unknown";
-        if ( $code eq 'OK' ) {
-            my $data = join '', $self->Results;
-
-            # look for something like return size or self if no size found:
-            # <tag> OK [APPENDUID <uid> <size>] APPEND completed
-            my $ret = $data =~ m#\s+(\d+)\]# ? $1 : undef;
-            $new_mid = $ret;
-        }
-
-        if ( $self->Debug ) {
-            $self->_debug( "Copied message $mid in folder $folder to "
-                  . $peer->User . '@'
-                  . $peer->Server
-                  . ". New Message UID is $new_mid" );
-
-            $peer->_debug( "Copied message $mid in folder $folder from "
-                  . $self->User . '@'
-                  . $self->Server
-                  . ". New Message UID is $new_mid" );
-        }
+        $self->_debug("Copied UID $mid in '$folder' to target UID $newid");
     }
 
     return $self;
@@ -1195,7 +955,7 @@ sub body_string {
       until ( $popped && $popped =~ /^\)$CRLF$/o )
       || !grep /^\)$CRLF$/o, @$ref;
 
-    if ( $head =~ /BODY\[TEXT\]\s*$/i ) {            # Next line is a literal
+    if ( $head =~ /BODY\[TEXT\]\s*$/i ) {    # Next line is a literal
         $string .= shift @$ref while @$ref;
         $self->_debug("String is now $string")
           if $self->Debug;
@@ -1273,9 +1033,10 @@ sub done {
     return $self->Results;
 }
 
+# tag_and_run( $self, $string, $good )
 sub tag_and_run {
-    my ( $self, $string, $good ) = @_;
-    $self->_imap_command( $string, $good ) or return undef;
+    my $self = shift;
+    $self->_imap_command(@_) or return undef;
     return $self->Results;
 }
 
@@ -1365,11 +1126,14 @@ sub _imap_command {
 #   addcrlf => 0|1  - suppress adding CRLF to $string
 #   addtag  => 0|1  - suppress adding $tag to $string
 #   tag     => $tag - use this $tag instead of incrementing $self->Count
+#   outref  => ...  - see _get_response()
 sub _imap_command_do {
     my $self   = shift;
     my $opt    = ref( $_[0] ) eq "HASH" ? shift : {};
     my $string = shift or return undef;
     my $good   = shift;
+
+    my @gropt = ( $opt->{outref} ? { outref => $opt->{outref} } : () );
 
     $opt->{addcrlf} = 1 unless exists $opt->{addcrlf};
     $opt->{addtag}  = 1 unless exists $opt->{addtag};
@@ -1403,7 +1167,7 @@ sub _imap_command_do {
     }
 
     # look for "<tag> (OK|BAD|NO|$good)" (or "+..." if $good is '+')
-    my $code = $self->_get_response( $tag, $good ) or return undef;
+    my $code = $self->_get_response( @gropt, $tag, $good ) or return undef;
 
     if ( $code eq 'OK' ) {
         return $self;
@@ -1428,7 +1192,9 @@ sub _get_response {
     # tag can be a ref (compiled regex) or we quote it or default to \S+
     my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
     my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
-    my @readopt = defined( $opt->{outref} ) ? ( $opt->{outref} ) : ();
+
+    my $outref = $opt->{outref};
+    my @readopt = defined($outref) ? ($outref) : ();
 
     my ( $count, $out, $code, $byemsg ) = ( $self->Count, [], undef, undef );
     until ( defined($code) ) {
@@ -1467,10 +1233,15 @@ sub _get_response {
         $code =~ s/$CR?$LF?$//o;
         $code = uc($code) unless ( $good and $code eq $good );
 
-        # on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
+        # RFC 3501 7.1.5: $code on successful LOGOUT is OK not BYE
+        # sometimes we may fail to wait long enough to read a tagged
+        # OK so don't be strict about setting an error on LOGOUT!
         if ( $code eq 'BYE' ) {
             $self->State(Unconnected);
-            $self->LastError($byemsg) if $byemsg;
+            if ($byemsg) {
+                $self->LastError($byemsg)
+                  unless ( $good and $code eq $good );
+            }
         }
     }
     elsif ( !$self->LastError ) {
@@ -1482,10 +1253,13 @@ sub _get_response {
 }
 
 sub _imap_uid_command {
-    my ( $self, $cmd ) = ( shift, shift );
+    my $self = shift;
+    my @opt  = ref( $_[0] ) eq "HASH" ? (shift) : ();
+    my $cmd  = shift;
+
     my $args = @_ ? join( " ", '', @_ ) : '';
     my $uid = $self->Uid ? 'UID ' : '';
-    $self->_imap_command("$uid$cmd$args");
+    $self->_imap_command( @opt, "$uid$cmd$args" );
 }
 
 sub run {
@@ -1519,7 +1293,7 @@ sub _record {
 
 # _send_line handles literal data and supports the Prewritemethod
 sub _send_line {
-    my ( $self, $string, $suppress ) = ( shift, shift, shift );
+    my ( $self, $string, $suppress ) = @_;
 
     $string =~ s/$CR?$LF?$/$CRLF/o
       unless $suppress;
@@ -1595,22 +1369,21 @@ sub _send_bytes($) {
 }
 
 # _read_line: read one line from the socket
-
-# It is also re-implemented in: message_to_file
 #
-# $output = $self->_read_line($literal_callback, $output_callback)
-#    Both input arguments are optional, but if supplied must either
+# $output = $self->_read_line($literal_callback)
+#    literal_callback is optional, but if supplied it must be either
 #    be a filehandle, coderef, or undef.
 #
-#    Returned argument is a reference to an array of arrays, ie:
+#    Returns a reference to an array of arrays, i.e.:
 #    $output = [
-#            [ $index, 'OUTPUT'|'LITERAL', $output_line ] ,
-#            [ $index, 'OUTPUT'|'LITERAL', $output_line ] ,
-#            ...     # etc,
-#    ];
+#        [ $index, 'OUTPUT|LITERAL', $output_line ],
+#        [ $index, 'OUTPUT|LITERAL', $output_line ],
+#        ...
+#    \];
 
+# BUG?: make memory more efficient
 sub _read_line {
-    my ( $self, $literal_callback, $output_callback ) = @_;
+    my ( $self, $literal_callback ) = @_;
 
     my $socket = $self->Socket;
     unless ( $self->IsConnected && $socket ) {
@@ -1622,7 +1395,23 @@ sub _read_line {
     my $oBuffer = [];
     my $index   = $self->_next_index;
     my $timeout = $self->Timeout;
-    my $readlen = $self->{Buffer} || 4096;
+    my $readlen = $self->Buffer || 4096;
+    my $transno = $self->Transaction;
+
+    my $literal_cbtype = "";
+    if ($literal_callback) {
+        if ( UNIVERSAL::isa( $literal_callback, "GLOB" ) ) {
+            $literal_cbtype = "GLOB";
+        }
+        elsif ( UNIVERSAL::isa( $literal_callback, "CODE" ) ) {
+            $literal_cbtype = "CODE";
+        }
+        else {
+            $self->LastError( "'$literal_callback' is an "
+                  . "invalid callback; must be a filehandle or CODE" );
+            return undef;
+        }
+    }
 
     my $temperrs = 0;
     my $maxagain = $self->Maxtemperrors;
@@ -1636,7 +1425,6 @@ sub _read_line {
           && !length $iBuffer    # and the input buffer has been MT'ed:
       )
     {
-        my $transno = $self->Transaction;
 
         if ($timeout) {
             my $rc = $self->_read_more( $socket, $timeout );
@@ -1717,11 +1505,12 @@ sub _read_line {
                 $litstring = $iBuffer;
                 $iBuffer   = '';
 
+                my $litreadb = length($litstring);
                 my $temperrs = 0;
                 my $maxagain = $self->Maxtemperrors;
                 undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
 
-                while ( $expected_size > length $litstring ) {
+                while ( $expected_size > $litreadb ) {
                     if ($timeout) {
                         my $rc = $self->_read_more( $socket, $timeout );
                         return undef unless ( $rc > 0 );
@@ -1730,11 +1519,11 @@ sub _read_line {
                         CORE::select( undef, undef, undef, 0.025 );
                     }
 
-                    my $ret = $self->_sysread(
-                        $socket, \$litstring,
-                        $expected_size - length $litstring,
-                        length $litstring
-                    );
+                    # $litstring is emptied when $literal_cbtype is GLOB
+                    my $ret =
+                      $self->_sysread( $socket, \$litstring,
+                        $expected_size - $litreadb,
+                        length($litstring) );
 
                     if ($timeout) {
                         if ( defined $ret ) {
@@ -1760,15 +1549,23 @@ sub _read_line {
                     }
 
                     # EOF: note IO::Socket::SSL does not support eof()
-                    if ( defined $ret && $ret == 0 ) {
+                    if ( defined $ret and $ret == 0 ) {
                         $emsg = "socket closed while reading data from server";
                         $self->State(Unconnected);
                     }
+                    elsif ( defined $ret and $ret > 0 ) {
+                        $litreadb += $ret;
+
+                        # conserve memory when using literal_callback GLOB
+                        if ( $literal_cbtype eq "GLOB" ) {
+                            print $literal_callback $litstring;
+                            $litstring = "" unless ($emsg);
+                        }
+                    }
 
                     $self->_debug( "Received ret="
-                          . ( defined($ret) ? "$ret " : "<undef> " )
-                          . length($litstring)
-                          . " of $expected_size" );
+                          . ( defined($ret) ? $ret : "<undef>" )
+                          . " $litreadb of $expected_size" );
 
                     # save errors and return
                     if ($emsg) {
@@ -1790,29 +1587,27 @@ sub _read_line {
                 }
             }
 
-            if ( !$literal_callback ) { ; }
-            elsif ( UNIVERSAL::isa( $literal_callback, 'GLOB' ) ) {
-                print $literal_callback $litstring;
-                $litstring = "";
-            }
-            elsif ( UNIVERSAL::isa( $literal_callback, 'CODE' ) ) {
-                $literal_callback->($litstring)
-                  if defined $litstring;
-            }
-            else {
-                $self->LastError( "'$literal_callback' is an "
-                      . "invalid callback; must be a filehandle or CODE" );
+            if ( defined $litstring ) {
+                if ( $literal_cbtype eq "GLOB" ) {
+                    print $literal_callback $litstring;
+                }
+                elsif ( $literal_cbtype eq "CODE" ) {
+                    $literal_callback->($litstring);
+                }
             }
 
-            push @$oBuffer, [ $index++, 'LITERAL', $litstring ];
+            push @$oBuffer, [ $index++, 'LITERAL', $litstring ]
+              if ( $literal_cbtype ne "GLOB" );
         }
     }
 
-    $self->_debug( "Read: " . join "", map { "\t" . $_->[DATA] } @$oBuffer );
+    $self->_debug( "Read: " . join "", map { "\t" . $_->[DATA] } @$oBuffer )
+      if ( $self->Debug );
+
     @$oBuffer ? $oBuffer : undef;
 }
 
-sub _sysread($$$$) {
+sub _sysread {
     my ( $self, $fh, $buf, $len, $off ) = @_;
     my $rm = $self->Readmethod;
     $rm ? $rm->(@_) : sysread( $fh, $$buf, $len, $off );
@@ -1892,7 +1687,6 @@ sub Results(;$) {
     return wantarray ? @a : \@a;
 }
 
-# Don't know what it does, but used a few times.
 sub _transaction_literals() {
     my $self = shift;
     join '', map { $_->[DATA] }
@@ -1902,15 +1696,27 @@ sub _transaction_literals() {
 sub Escaped_results {
     my ( $self, $trans ) = @_;
     my @a;
-    foreach my $line ( grep defined, $self->Results($trans) ) {
+    my $prevwasliteral = 0;
+    foreach my $line ( grep defined, $self->_transaction($trans) ) {
+        my $data = $line->[DATA];
+
+        # literal is appended to previous data
         if ( $self->_is_literal($line) ) {
-            $line->[DATA] =~ s/([\\\(\)"$CRLF])/\\$1/og;
-            push @a, qq("$line->[DATA]");
+            $data =~ s/([\\\(\)"$CRLF])/\\$1/og;
+            $a[-1] .= qq( "$data");
+            $prevwasliteral = 1;
         }
-        else { push @a, $line->[DATA] }
+        else {
+            if ($prevwasliteral) {
+                $a[-1] .= $data;
+            }
+            else {
+                push( @a, $data );
+            }
+            $prevwasliteral = 0;
+        }
     }
 
-    shift @a;    # remove cmd
     return wantarray ? @a : \@a;
 }
 
@@ -1922,7 +1728,7 @@ sub Unescape {
 
 sub logout {
     my $self = shift;
-    my $rc   = $self->_imap_command("LOGOUT");
+    my $rc = $self->_imap_command( "LOGOUT", "BYE" );
     $self->_disconnect;
     return $rc;
 }
@@ -2085,9 +1891,12 @@ sub get_envelope {
     $bs;
 }
 
-# fetch( [$seq_set|ALL], @msg_data_items )
+# fetch( [{option},] [$seq_set|ALL], @msg_data_items )
+# options:
+#   escaped => 0|1  # return Results or Escaped_results
 sub fetch {
     my $self = shift;
+    my $opt  = ref( $_[0] ) eq "HASH" ? shift : {};
     my $what = shift || "ALL";
 
     my $take = $what;
@@ -2106,7 +1915,7 @@ sub fetch {
         my $seq = $seq_set->[$x];
         $self->_imap_uid_command( FETCH => $seq, @fetch_att, @_ )
           or return undef;
-        my $res = $self->Results;
+        my $res = $opt->{escaped} ? $self->Escaped_results : $self->Results;
 
         # only keep last command and last response (* OK ...)
         $cmd = shift(@$res);
@@ -2157,6 +1966,7 @@ sub _split_sequence {
 }
 
 # fetch_hash( [$seq_set|ALL], @msg_data_items, [\%msg_by_ids] )
+# - TODO: make more efficient use of memory on large fetch results
 sub fetch_hash {
     my $self  = shift;
     my $uids  = ref $_[-1] ? pop @_ : {};
@@ -2185,15 +1995,16 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
     my %words = map { uc($_) => 1 } @words;
 
-    my $output = $self->fetch( $msgs, "($what)" ) or return undef;
+    my $output = $self->fetch( { escaped => 1 }, $msgs, "($what)" )
+      or return undef;
 
     while ( my $l = shift @$output ) {
         next if $l !~ m/^\*\s(\d+)\sFETCH\s\(/g;
         my ( $mid, $entry ) = ( $1, {} );
         my ( $key, $value );
       ATTR:
-        while ( $l !~ m/\G\s*\)\s*$/gc ) {
-            if ( $l =~ m/\G\s*([\w\d\.]+(?:\[[^\]]*\])?)\s*/gc ) {
+        while ( $l and $l !~ m/\G\s*\)\s*$/gc ) {
+            if ( $l =~ m/\G\s*([^\s\[]+(?:\[[^\]]*\])?)\s*/gc ) {
                 $key = uc($1);
             }
             elsif ( !defined $key ) {
@@ -2202,7 +2013,6 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                 $self->LastError("Invalid item name in FETCH response: $l");
                 return undef;
             }
-
             if ( $l =~ m/\G\s*$/gc ) {
                 $value         = shift @$output;
                 $entry->{$key} = $value;
@@ -2235,7 +2045,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                         $value .= $stuff;
                     }
                 }
-                m/\G\s*/gc;
+                $l =~ m/\G\s*/gc;
             }
             else {
                 $self->LastError("Invalid item value in FETCH response: $l");
@@ -2887,43 +2697,69 @@ sub selectable {
     defined $info ? not( grep /NoSelect/i, @$info ) : undef;
 }
 
+# append( $self, $folder, $text [, $optmsg] )
+# - conserve memory and use $_[0] to avoid copying $text (it may be huge!)
+# - BUG?: should deprecate this method in favor of append_string
 sub append {
     my $self   = shift;
     my $folder = shift;
-    my $text   = @_ > 1 ? join( $CRLF, @_ ) : shift;
 
-    $self->append_string( $folder, $text );
+    # $message_string is whatever is left in @_
+    $self->append_string( $folder, ( @_ > 1 ? join( $CRLF, @_ ) : $_[0] ) );
 }
 
+sub _clean_flags {
+    my ( $self, $flags ) = @_;
+    $flags =~ s/^\s+//;
+    $flags =~ s/\s+$//;
+    $flags = "($flags)" if $flags !~ /^\(.*\)$/;
+    return $flags;
+}
+
+# RFC 3501: date-day-fixed = (SP DIGIT) / 2DIGIT
+sub _clean_date {
+    my ( $self, $date ) = @_;
+    $date =~ s/^\s+// if $date !~ /^\s\d/;
+    $date =~ s/\s+$//;
+    $date = qq("$date") if $date !~ /^"/;
+    return $date;
+}
+
+sub _append_command {
+    my ( $self, $folder, $flags, $date, $length ) = @_;
+    return join( " ",
+        "APPEND $folder",
+        ( $flags ? $flags : () ),
+        ( $date  ? $date  : () ),
+        "{" . $length . "}",
+    );
+}
+
+# append_string( $self, $folder, $text, $flags, $date )
+# - conserve memory and use $_[2] to avoid copying $text (it may be huge!)
 sub append_string($$$;$$) {
-    my $self   = shift;
-    my $folder = $self->Massage(shift);
-    my ( $text, $flags, $date ) = @_;
-    defined $text or $text = '';
+    my ( $self, $folder, $flags, $date ) = @_[ 0, 1, 3, 4 ];
 
-    if ( defined $flags ) {
-        $flags =~ s/^\s+//g;
-        $flags =~ s/\s+$//g;
-        $flags = "($flags)" if $flags !~ /^\(.*\)$/;
+    #my $text = $_[2]; # conserve memory and use $_[2] instead!
+    my $maxl = $self->Maxappendstringlength;
+
+    # on "large" strings use append_file to conserve memory
+    if ( $_[2] and $maxl and length( $_[2] ) > $maxl ) {
+        $self->_debug("append_string: using in memory file");
+        return $self->append_file( $folder, \( $_[2] ), undef, $flags, $date );
     }
 
-    if ( defined $date ) {
-        $date =~ s/^\s+//g;
-        $date =~ s/\s+$//g;
-        $date = qq("$date") if $date !~ /^"/;
-    }
+    my $text = defined( $_[2] ) ? $_[2] : '';
 
+    $folder = $self->Massage($folder);
+    $flags  = $self->_clean_flags($flags) if ( defined $flags );
+    $date   = $self->_clean_date($date) if ( defined $date );
     $text =~ s/\r?\n/$CRLF/og;
 
-    my $command =
-        "APPEND $folder "
-      . ( $flags ? "$flags " : "" )
-      . ( $date  ? "$date "  : "" ) . "{"
-      . length($text)
-      . "}$CRLF";
+    my $cmd = $self->_append_command( $folder, $flags, $date, length($text) );
+    $cmd .= $CRLF . $text . $CRLF;
 
-    $command .= $text . $CRLF;
-    $self->_imap_command( { addcrlf => 0 }, $command ) or return undef;
+    $self->_imap_command( { addcrlf => 0 }, $cmd ) or return undef;
 
     my $data = join '', $self->Results;
 
@@ -2934,12 +2770,10 @@ sub append_string($$$;$$) {
     return $ret;
 }
 
+# BUG?: not much/any savings on cygwin perl 5.10 when using in memory file
+# BUG?: we do not retry if sending data fails after getting the OK to send
 sub append_file {
-    my ( $self, $folder, $file, $control, $flags, $use_filetime ) = @_;
-    my $mfolder = $self->Massage($folder);
-
-    $flags ||= '';
-    my $fflags = $flags =~ m/^\(.*\)$/ ? $flags : "($flags)";
+    my ( $self, $folder, $file, $control, $flags, $date ) = @_;
 
     my @err;
     push( @err, "folder not specified" )
@@ -2949,14 +2783,18 @@ sub append_file {
     if ( !defined($file) ) {
         push( @err, "file not specified" );
     }
-    elsif ( ref($file) ) {
+    elsif ( ref($file) and ref($file) ne "SCALAR" ) {
         $fh = $file;    # let the caller pass in their own file handle directly
     }
-    elsif ( !-f $file ) {
+    elsif ( !ref($file) and !-f $file ) {
         push( @err, "file '$file' not found" );
     }
     else {
-        $fh = IO::File->new( $file, 'r' )
+
+        # $file can be a name or a scalar reference (for in memory file)
+        # avoid IO::File bug handling scalar refs in perl <= 5.8.8?
+        # - buggy: $fh = IO::File->new( $file, 'r' )
+        open( $fh, "<", $file )
           or push( @err, "Unable to open file '$file': $!" );
     }
 
@@ -2967,10 +2805,13 @@ sub append_file {
 
     binmode($fh);
 
-    my $date;
-    if ( $fh and $use_filetime ) {
-        my $f = $self->Rfc2060_datetime( ( stat($fh) )[9] );
-        $date = qq("$f");
+    $folder = $self->Massage($folder)     if ( defined $folder );
+    $flags  = $self->_clean_flags($flags) if ( defined $flags );
+
+    # allow the date to be specified or even use mtime on file
+    if ($date) {
+        $date = $self->Rfc3501_datetime( ( stat($fh) )[9] ) if ( $date eq "1" );
+        $date = $self->_clean_date($date);
     }
 
     # BUG? seems wasteful to do this always, provide a "fast path" option?
@@ -2984,18 +2825,12 @@ sub append_file {
         seek( $fh, 0, 0 );
     }
 
-    my $string = "APPEND $mfolder";
-    $string .= " $fflags" if ( $fflags ne "" );
-    $string .= " $date"   if ( defined($date) );
-    $string .= " {$length}";
-
-    my $rc = $self->_imap_command( $string, '+' );
+    my $cmd = $self->_append_command( $folder, $flags, $date, $length );
+    my $rc = $self->_imap_command( $cmd, '+' );
     unless ($rc) {
-        $self->LastError( "Error sending '$string': " . $self->LastError );
+        $self->LastError( "Error sending '$cmd': " . $self->LastError );
         return undef;
     }
-
-    my $count = $self->Count;
 
     # Now send the message itself
     my ( $buffer, $buflen ) = ( "", 0 );
@@ -3023,14 +2858,6 @@ sub append_file {
         # reduce buffer to desired size
         $buffer = substr( $buffer, 0, APPEND_BUFFER_SIZE );
 
-        $self->_record(
-            $count,
-            [
-                $self->_next_index($count), "INPUT",
-                '{' . length($buffer) . " bytes from $file}"
-            ]
-        );
-
         my $bytes_written = $self->_send_bytes( \$buffer );
         unless ($bytes_written) {
             $self->LastError( "Error appending message: " . $self->LastError );
@@ -3050,7 +2877,7 @@ sub append_file {
 
     # Now for the crucial test: Did the append work or not?
     # look for "<tag> (OK|BAD|NO)"
-    my $code = $self->_get_response($count) or return undef;
+    my $code = $self->_get_response( $self->Count ) or return undef;
 
     if ( $code eq 'OK' ) {
         my $data = join '', $self->Results;

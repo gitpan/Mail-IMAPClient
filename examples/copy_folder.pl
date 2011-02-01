@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-#$Id: //depot/main/ZimbraPS/Mail-IMAPClient/examples/copy_folder.pl#1 $
+#$Id$
 ++$|;
 use Getopt::Std;
 use Mail::IMAPClient;

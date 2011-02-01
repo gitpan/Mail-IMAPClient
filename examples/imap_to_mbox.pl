@@ -6,7 +6,7 @@
 # DESC: Reads a users IMAP folders, and converts them to mbox
 #       Good for an interim switch-over from say, Exchange to Cyrus IMAP.
 
-# $Header: //depot/main/ZimbraPS/Mail-IMAPClient/examples/imap_to_mbox.pl#1 $
+# $Header$
 
 # History:
 # --------
