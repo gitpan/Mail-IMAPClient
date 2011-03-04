@@ -94,7 +94,13 @@ CRAM-MD5 requires the L<Digest::HMAC_MD5> module.
 
 =item PLAIN (SASL)
 
-PLAIN (SASL) authentication requires the use of the L</Proxy> parameter.
+PLAIN (SASL) authentication allows the optional use of the L</Proxy>
+parameter.  RFC 4616 documents this syntax for SASL PLAIN:
+
+  message = [authzid] UTF8NUL authcid UTF8NUL passwd
+
+When L</Proxy> is defined, L</User> is used as 'authzid' and L</Proxy>
+is used as 'authcid'.  Otherwise, L</User> is used as 'authcid'.
 
 =item NTLM
 
@@ -1056,16 +1062,14 @@ This would result in L<Data::Dumper> output similar to the following:
               }
      };
 
-By itself this method may be useful for, say, speeding up programs that
-want the size of every message in a folder.  It issues one command and
-receives one (possibly long!) response from the server.  However, it's
-true power lies in the as-yet-unwritten methods that will rely on this
-method to deliver even more powerful result hashes.  Look for more new
-function in later releases.
+By itself this method may be useful for tasks like obtaining the size
+of every message in a folder.  It issues one command and receives one
+(possibly long!) response from the server.
 
-This method is new with version 2.2.3 and is thus still experimental.
-If you decide to try this method and run into problems, please see the
-section on L</REPORTING BUGS>.
+If the fetch request causes the server to return data in a
+parenthesized list, the data within the parenthesized list may be
+escaped via the Escape() method. Use the Unescape() method to get the
+raw values back in this case.
 
 =head2 flags
 
@@ -1308,7 +1312,8 @@ Example:
     or die "Could not internaldate: $@\n";
 
 B<internaldate> accepts one argument, a message id (or UID if the
-L</Uid> parameter is true), and returns that message's internal date.
+L</Uid> parameter is true), and returns that message's internal date
+or undef if the call fails or internal date is not returned.
 
 =head2 get_bodystructure
 

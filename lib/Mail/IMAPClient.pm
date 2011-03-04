@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.27';
+our $VERSION = '3.28';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1708,7 +1708,7 @@ sub Escaped_results {
 
         # literal is appended to previous data
         if ( $self->_is_literal($line) ) {
-            $data =~ s/([\\\(\)"$CRLF])/\\$1/og;
+            $data = $self->Escape($data);
             $a[-1] .= qq( "$data");
             $prevwasliteral = 1;
         }
@@ -1726,10 +1726,16 @@ sub Escaped_results {
     return wantarray ? @a : \@a;
 }
 
+sub Escape {
+    my $data = $_[1];
+    $data =~ s/([\\\"])/\\$1/og;
+    return $data;
+}
+
 sub Unescape {
-    my $whatever = $_[1];
-    $whatever =~ s/\\([\\\(\)"$CRLF])/$1/og;
-    $whatever;
+    my $data = $_[1];
+    $data =~ s/\\([\\\"])/$1/og;
+    return $data;
 }
 
 sub logout {
@@ -2001,7 +2007,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
     my %words = map { uc($_) => 1 } @words;
 
-    my $output = $self->fetch( { escaped => 1 }, $msgs, "($what)" )
+    my $output = $self->fetch( $msgs, "($what)" )
       or return undef;
 
     while ( my $l = shift @$output ) {
@@ -2025,7 +2031,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                 $l             = shift @$output;
                 next ATTR;
             }
-            elsif ( $l =~ m/\G(?:"([^"]+)"|([^()\s]+))\s*/gc ) {
+            elsif ( $l =~ m/\G(?:"(.*?)(?:(?<!\\)")|([^()\s]+))\s*/gc ) {
                 $value = defined $1 ? $1 : $2;
                 $entry->{$key} = $value;
                 next ATTR;
@@ -2049,6 +2055,13 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                     }
                     else {
                         $value .= $stuff;
+                    }
+
+                    # consume literal data if any
+                    if ( $l =~ m/\G\s*$/gc and scalar(@$output) ) {
+                        my $elit = $self->Escape( shift @$output );
+                        $l = shift @$output;
+                        $value .= ( length($value) ? " " : "" ) . qq{"$elit"};
                     }
                 }
                 $l =~ m/\G\s*/gc;
@@ -2207,13 +2220,13 @@ sub flags {
     $msg->cat(@_) if @_;
 
     # Send command
-    $self->fetch( $msg, "FLAGS" ) or return undef;
+    my $ref = $self->fetch( $msg, "FLAGS" ) or return undef;
 
     my $u_f     = $self->Uid;
     my $flagset = {};
 
     # Parse results, setting entry in result hash for each line
-    foreach my $line ( $self->Results ) {
+    foreach my $line (@$ref) {
         $self->_debug("flags: line = '$line'");
         if (
             $line =~ /\* \s+ (\d+) \s+ FETCH \s+    # * nnn FETCH
@@ -2661,10 +2674,8 @@ sub internaldate {
     my ( $self, $msg ) = @_;
     $self->_imap_uid_command( FETCH => $msg, 'INTERNALDATE' )
       or return undef;
-    my $internalDate = join '', $self->History;
-    $internalDate =~ s/^.*INTERNALDATE "//si;
-    $internalDate =~ s/\".*$//s;
-    $internalDate;
+    my $hist = join '', $self->History;
+    return $hist =~ /\bINTERNALDATE "([^"]*)"/i ? $1 : undef;
 }
 
 sub is_parent {
@@ -2973,13 +2984,14 @@ sub authenticate {
     elsif ( $scheme eq 'PLAIN' ) {    # PLAIN SASL
         $response ||= sub {
             my ( $code, $client ) = @_;
-            encode_base64(
-                $client->User
-                  . chr(0)
-                  . $client->Proxy
-                  . chr(0)
-                  . $client->Password,
-                ''
+            encode_base64(            # [authname] user password
+                join(
+                    chr(0),
+                    defined $client->Proxy
+                    ? ( $client->User, $client->Proxy )
+                    : ( "", $client->User ),
+                    defined $client->Password ? $client->Password : "",
+                ),
             );
         };
     }
