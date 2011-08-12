@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.28';
+our $VERSION = '3.29';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -87,7 +87,7 @@ BEGIN {
         Debug_fh Domain Folder Ignoresizeerrors Keepalive
         Maxappendstringlength Maxcommandlength Maxtemperrors
         Password Peek Port Prewritemethod Proxy Ranges Readmethod
-        Reconnectretry Server Showcredentials Ssl Starttls State
+        Reconnectretry Server Showcredentials Ssl Starttls
         Supportedflags Timeout Uid User)
       )
     {
@@ -256,7 +256,6 @@ sub new {
         LastError             => "",
         Uid                   => 1,
         Count                 => 0,
-        Fast_io               => 1,
         Clear                 => 2,
         Keepalive             => 0,
         Maxappendstringlength => 1024**2,
@@ -274,6 +273,12 @@ sub new {
         $self->{$k} = $v if defined $v;
     }
     bless $self, ref($class) || $class;
+
+    # Fast_io is enabled by default when not given a socket
+    unless ( exists $self->{Fast_io} || $self->{Socket} || $self->{Rawsocket} )
+    {
+        $self->{Fast_io} = 1;
+    }
 
     if ( my $sup = $self->{Supportedflags} ) {    # unpack into case-less HASH
         my %sup = map { m/^\\?(\S+)/ ? lc $1 : () } @$sup;
@@ -455,7 +460,7 @@ sub login {
       or return undef;
 
     $self->State(Authenticated);
-    $self;
+    return $self;
 }
 
 sub noop {
@@ -557,7 +562,7 @@ sub _folders_or_subscribed {
         {
             my @list;
             if ($what) {
-                my $sep = $self->separator($what);
+                my $sep = $self->separator($what) || $self->separator(undef);
                 last unless defined $sep;
 
                 my $whatsub = $what =~ m/\Q${sep}\E$/ ? "$what*" : "$what$sep*";
@@ -566,8 +571,10 @@ sub _folders_or_subscribed {
                 shift @$tref;    # remove command
                 push @list, @$tref;
 
-                my $exists = $self->exists($what) or last;
-                if ($exists) {
+                # BUG?: this behavior has been around since 2.x, why?
+                my $cansel = $self->selectable($what);
+                last unless defined $cansel;
+                if ($cansel) {
                     $tref = $self->$method( undef, $what ) or last;
                     shift @$tref;    # remove command
                     push @list, @$tref;
@@ -1756,7 +1763,7 @@ sub _disconnect {
         local ($@);    # avoid stomping on global $@
         eval { $sock->close };
     }
-    $self;
+    return $self;
 }
 
 # LIST/XLIST/LSUB Response
@@ -2710,8 +2717,8 @@ sub is_parent {
 
 sub selectable {
     my ( $self, $f ) = @_;
-    my $info = $self->list( "", $f );
-    defined $info ? not( grep /NoSelect/i, @$info ) : undef;
+    my $info = $self->list( "", $f ) or return undef;
+    return not( grep /\b\\Noselect\b/i, @$info );
 }
 
 # append( $self, $folder, $text [, $optmsg] )
@@ -3248,6 +3255,19 @@ sub unseen_count {
 
     $r =~ s/\D//g;
     return $r;
+}
+
+sub State($) {
+    my ( $self, $state ) = @_;
+
+    if ( defined $state ) {
+        $self->{State} = $state;
+
+        # discard cached capability info after authentication
+        delete $self->{CAPABILITY} if ( $state == Authenticated );
+    }
+
+    return defined( $self->{State} ) ? $self->{State} : Unconnected;
 }
 
 sub Status          { shift->State }
